@@ -4,13 +4,6 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import AdmZip from 'adm-zip'
 import { parseMerchExcel, skuToMerchFields, ParsedSKU } from '@/lib/parse-merch-excel'
 
-// Admin client bypasses RLS for storage uploads
-const adminSupabase = createAdminClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-)
-
 function normalise(s: string) {
   return s.toLowerCase().replace(/\s+/g, ' ').trim()
 }
@@ -33,6 +26,13 @@ function aggregateSkus(skus: ParsedSKU[]) {
 }
 
 export async function POST(req: NextRequest) {
+  // Service role key is only available at runtime, not during Next.js build
+  const adminSupabase = createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  )
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

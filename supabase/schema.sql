@@ -334,3 +334,98 @@ create policy "unlock_update" on stage_unlock_requests for update using (
 -- ============================================================
 
 -- insert into storage.buckets (id, name, public) values ('product-files', 'product-files', false);
+
+-- ============================================================
+-- TRANSACTIONAL RPC FUNCTIONS
+-- ============================================================
+
+-- Function to advance a product stage and log the activity in a single transaction
+create or replace function advance_product_stage(
+  p_product_id uuid,
+  p_next_stage workflow_stage,
+  p_user_id uuid,
+  p_action text,
+  p_department text
+) returns void as $$
+declare
+  v_current_stage workflow_stage;
+  v_role user_role;
+begin
+  -- Verify the calling user is the one specified
+  if auth.uid() <> p_user_id then
+    raise exception 'Unauthorized user ID';
+  end if;
+
+  -- Fetch user role
+  select role into v_role from profiles where id = p_user_id;
+
+  -- Fetch current stage of the product
+  select workflow_stage into v_current_stage from products where id = p_product_id;
+
+  -- Check if user is admin, or is the owner of the current stage
+  if v_role <> 'admin' then
+    if v_current_stage = 'draft' and v_role <> 'design' then
+      raise exception 'Only design team or admin can advance from draft';
+    elsif v_current_stage = 'design_completed' and v_role <> 'merchandising' then
+      raise exception 'Only merchandising team or admin can advance from design_completed';
+    elsif v_current_stage = 'merchandising_completed' and v_role <> 'bom' then
+      raise exception 'Only BOM team or admin can advance from merchandising_completed';
+    elsif v_current_stage = 'bom_finalized' and v_role <> 'marketing' then
+      raise exception 'Only marketing team or admin can advance from bom_finalized';
+    elsif v_current_stage = 'marketing_ready' and v_role <> 'sales' then
+      raise exception 'Only sales team or admin can advance from marketing_ready';
+    elsif v_current_stage = 'sales_priced' or v_current_stage = 'product_live' then
+      raise exception 'Only admin can advance from this stage';
+    end if;
+  end if;
+
+  -- Update product stage
+  update products
+  set workflow_stage = p_next_stage,
+      updated_by = p_user_id,
+      updated_at = now()
+  where id = p_product_id;
+
+  -- Insert activity log
+  insert into activity_logs (product_id, user_id, action, department)
+  values (p_product_id, p_user_id, p_action, p_department);
+end;
+$$ language plpgsql security definer;
+
+-- Function to unlock/revert a product stage and log the activity in a single transaction
+create or replace function unlock_product_stage(
+  p_product_id uuid,
+  p_prev_stage workflow_stage,
+  p_user_id uuid,
+  p_action text,
+  p_department text
+) returns void as $$
+declare
+  v_role user_role;
+begin
+  -- Verify the calling user is the one specified
+  if auth.uid() <> p_user_id then
+    raise exception 'Unauthorized user ID';
+  end if;
+
+  -- Fetch user role
+  select role into v_role from profiles where id = p_user_id;
+
+  -- Only admin can unlock stages directly
+  if v_role <> 'admin' then
+    raise exception 'Only admin can unlock stages directly';
+  end if;
+
+  -- Update product stage
+  update products
+  set workflow_stage = p_prev_stage,
+      updated_by = p_user_id,
+      updated_at = now()
+  where id = p_product_id;
+
+  -- Insert activity log
+  insert into activity_logs (product_id, user_id, action, department)
+  values (p_product_id, p_user_id, p_action, p_department);
+end;
+$$ language plpgsql security definer;
+

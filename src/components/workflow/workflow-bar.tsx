@@ -8,15 +8,23 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
-import { WORKFLOW_STAGES, STAGE_LABELS, STAGE_OWNER_ROLE, type WorkflowStage, type Product, type Profile } from '@/lib/types'
+import { WORKFLOW_STAGES, STAGE_LABELS, STAGE_OWNER_ROLE, type WorkflowStage, type Product, type Profile, type DesignData, type MerchandisingData, type BomData, type MarketingData, type SalesData } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 interface WorkflowBarProps {
   product: Product
   profile: Profile
+  designData: DesignData | null
+  merchandisingData: MerchandisingData | null
+  bomData: BomData | null
+  marketingData: MarketingData | null
+  salesData: SalesData | null
 }
 
-export function WorkflowBar({ product, profile }: WorkflowBarProps) {
+export function WorkflowBar({
+  product, profile, designData, merchandisingData,
+  bomData, marketingData, salesData,
+}: WorkflowBarProps) {
   const router = useRouter()
   const [advancing, setAdvancing] = useState(false)
   const [unlockOpen, setUnlockOpen] = useState(false)
@@ -25,8 +33,31 @@ export function WorkflowBar({ product, profile }: WorkflowBarProps) {
 
   const currentIndex = WORKFLOW_STAGES.indexOf(product.workflow_stage as WorkflowStage)
   const isAdmin = profile.role === 'admin'
+
+  // Validation: Check if the current stage has been marked as complete
+  const isCurrentStageComplete = () => {
+    switch (product.workflow_stage as WorkflowStage) {
+      case 'draft':
+        return designData?.is_completed || false
+      case 'design_completed':
+        return merchandisingData?.is_completed || false
+      case 'merchandising_completed':
+        return bomData?.is_completed || false
+      case 'bom_finalized':
+        return marketingData?.is_completed || false
+      case 'marketing_ready':
+        return salesData?.is_completed || false
+      default:
+        return true // sales_priced or product_live
+    }
+  }
+
+  const currentStageCompleted = isCurrentStageComplete()
+
   const currentStageOwner = STAGE_OWNER_ROLE[product.workflow_stage as WorkflowStage]
-  const canAdvance = isAdmin || profile.role === currentStageOwner
+  const isOwner = profile.role === currentStageOwner
+  // Admins can bypass incomplete stages, owners must complete the stage first
+  const canAdvance = (isAdmin || isOwner) && (currentStageCompleted || isAdmin)
   const isLive = product.workflow_stage === 'product_live'
 
   async function advanceStage() {
@@ -35,18 +66,37 @@ export function WorkflowBar({ product, profile }: WorkflowBarProps) {
 
     const supabase = createClient()
     const nextStage = WORKFLOW_STAGES[currentIndex + 1]
+    const actionText = `advanced stage to "${STAGE_LABELS[nextStage]}"`
 
-    await supabase.from('products').update({
-      workflow_stage: nextStage,
-      updated_by: profile.id,
-    }).eq('id', product.id)
-
-    await supabase.from('activity_logs').insert({
-      product_id: product.id,
-      user_id: profile.id,
-      action: `advanced stage to "${STAGE_LABELS[nextStage]}"`,
-      department: profile.role,
+    // Attempt RPC transaction
+    const { error: rpcError } = await supabase.rpc('advance_product_stage', {
+      p_product_id: product.id,
+      p_next_stage: nextStage,
+      p_user_id: profile.id,
+      p_action: actionText,
+      p_department: profile.role
     })
+
+    if (rpcError) {
+      console.warn('RPC advance failed, falling back to client-side updates:', rpcError.message)
+      // Fallback: Perform separate updates
+      const { error: updateError } = await supabase
+        .from('products')
+        .update({
+          workflow_stage: nextStage,
+          updated_by: profile.id,
+        })
+        .eq('id', product.id)
+
+      if (!updateError) {
+        await supabase.from('activity_logs').insert({
+          product_id: product.id,
+          user_id: profile.id,
+          action: actionText,
+          department: profile.role,
+        })
+      }
+    }
 
     router.refresh()
     setAdvancing(false)
@@ -59,17 +109,37 @@ export function WorkflowBar({ product, profile }: WorkflowBarProps) {
     if (isAdmin) {
       // Admin can unlock directly
       const prevStage = WORKFLOW_STAGES[currentIndex - 1] || 'draft'
-      await supabase.from('products').update({
-        workflow_stage: prevStage,
-        updated_by: profile.id,
-      }).eq('id', product.id)
+      const actionText = `unlocked stage back to "${STAGE_LABELS[prevStage as WorkflowStage]}"`
 
-      await supabase.from('activity_logs').insert({
-        product_id: product.id,
-        user_id: profile.id,
-        action: `unlocked stage back to "${STAGE_LABELS[prevStage as WorkflowStage]}"`,
-        department: 'admin',
+      // Attempt RPC transaction
+      const { error: rpcError } = await supabase.rpc('unlock_product_stage', {
+        p_product_id: product.id,
+        p_prev_stage: prevStage,
+        p_user_id: profile.id,
+        p_action: actionText,
+        p_department: 'admin'
       })
+
+      if (rpcError) {
+        console.warn('RPC unlock failed, falling back to client-side updates:', rpcError.message)
+        // Fallback
+        const { error: updateError } = await supabase
+          .from('products')
+          .update({
+            workflow_stage: prevStage,
+            updated_by: profile.id,
+          })
+          .eq('id', product.id)
+
+        if (!updateError) {
+          await supabase.from('activity_logs').insert({
+            product_id: product.id,
+            user_id: profile.id,
+            action: actionText,
+            department: 'admin',
+          })
+        }
+      }
     } else {
       await supabase.from('stage_unlock_requests').insert({
         product_id: product.id,
@@ -116,29 +186,44 @@ export function WorkflowBar({ product, profile }: WorkflowBarProps) {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2">
-          {!isLive && currentIndex > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setUnlockOpen(true)}
-              className="text-orange-600 border-orange-200 hover:bg-orange-50"
-            >
-              <Unlock className="h-3.5 w-3.5" />
-              {isAdmin ? 'Unlock Stage' : 'Request Unlock'}
-            </Button>
+        <div className="flex items-center gap-3">
+          {!isLive && !currentStageCompleted && (
+            <div className="flex items-center gap-1.5 text-xs text-orange-600 bg-orange-50 border border-orange-200 px-3 py-1.5 rounded-lg font-medium">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              Pending department completion
+            </div>
           )}
-          {!isLive && canAdvance && (
-            <Button size="sm" onClick={advanceStage} disabled={advancing}>
-              {advancing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ChevronRight className="h-3.5 w-3.5" />}
-              Advance Stage
-            </Button>
-          )}
-          {isLive && (
-            <span className="flex items-center gap-1.5 text-sm font-medium text-green-600">
-              <Check className="h-4 w-4" /> Product Live
-            </span>
-          )}
+
+          <div className="flex items-center gap-2">
+            {!isLive && currentIndex > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setUnlockOpen(true)}
+                className="text-orange-600 border-orange-200 hover:bg-orange-50"
+              >
+                <Unlock className="h-3.5 w-3.5" />
+                {isAdmin ? 'Unlock Stage' : 'Request Unlock'}
+              </Button>
+            )}
+            {!isLive && (isAdmin || isOwner) && (
+              <Button
+                size="sm"
+                onClick={advanceStage}
+                disabled={advancing || !canAdvance}
+                className={cn(!canAdvance && 'opacity-50 cursor-not-allowed')}
+                title={!currentStageCompleted && !isAdmin ? 'Must mark department data as complete before advancing' : undefined}
+              >
+                {advancing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                Advance Stage
+              </Button>
+            )}
+            {isLive && (
+              <span className="flex items-center gap-1.5 text-sm font-medium text-green-600">
+                <Check className="h-4 w-4" /> Product Live
+              </span>
+            )}
+          </div>
         </div>
       </div>
 

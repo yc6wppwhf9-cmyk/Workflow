@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { Header } from '@/components/layout/header'
 import { UsersTable } from '@/components/admin/users-table'
+import { NewUserButton } from '@/components/admin/new-user-button'
 
 export default async function AdminUsersPage() {
   const supabase = await createClient()
@@ -23,7 +24,11 @@ export default async function AdminUsersPage() {
 
   return (
     <div>
-      <Header title="User Management" subtitle="Manage team members and their roles" />
+      <Header
+        title="User Management"
+        subtitle="Manage team members and their roles"
+        actions={<NewUserButton />}
+      />
       <div className="p-6">
         <UsersTable users={users || []} unlockRequests={unlockRequests || []} adminId={user!.id} />
       </div>

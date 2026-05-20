@@ -40,8 +40,11 @@ export function FilesTab({ product, profile, files: initialFiles }: FilesTabProp
       .upload(path, file)
 
     if (uploadError) {
-      // Storage not set up yet — store just the metadata reference
-      console.warn('Storage upload failed:', uploadError.message)
+      console.error('Storage upload failed:', uploadError.message)
+      alert(`Failed to upload file to storage: ${uploadError.message}. Please check if the 'product-files' bucket is created and configured in your Supabase dashboard.`)
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
     }
 
     const { data: { publicUrl } } = supabase.storage
@@ -51,7 +54,7 @@ export function FilesTab({ product, profile, files: initialFiles }: FilesTabProp
     const { data: fileRecord } = await supabase.from('product_files').insert({
       product_id: product.id,
       name: file.name,
-      file_url: uploadError ? `pending:${path}` : publicUrl,
+      file_url: publicUrl,
       file_type: file.type,
       file_size: file.size,
       department: profile.role,

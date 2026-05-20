@@ -1,0 +1,98 @@
+'use client'
+
+import * as TabsPrimitive from '@radix-ui/react-tabs'
+import { WorkflowBar } from '@/components/workflow/workflow-bar'
+import { OverviewTab } from '@/components/products/tabs/overview-tab'
+import { DesignTab } from '@/components/products/tabs/design-tab'
+import { MerchandisingTab } from '@/components/products/tabs/merchandising-tab'
+import { BomTab } from '@/components/products/tabs/bom-tab'
+import { MarketingTab } from '@/components/products/tabs/marketing-tab'
+import { SalesTab } from '@/components/products/tabs/sales-tab'
+import { FilesTab } from '@/components/products/tabs/files-tab'
+import { TimelineTab } from '@/components/products/tabs/timeline-tab'
+import { cn } from '@/lib/utils'
+import type {
+  Product, Profile, DesignData, MerchandisingData,
+  BomData, MarketingData, SalesData, ProductFile, ActivityLog,
+} from '@/lib/types'
+
+interface ProductDetailProps {
+  product: Product
+  profile: Profile
+  designData: DesignData | null
+  merchandisingData: MerchandisingData | null
+  bomData: BomData | null
+  marketingData: MarketingData | null
+  salesData: SalesData | null
+  files: ProductFile[]
+  logs: ActivityLog[]
+}
+
+const TABS = [
+  { value: 'overview', label: 'Overview' },
+  { value: 'design', label: 'Design' },
+  { value: 'merchandising', label: 'Merchandising' },
+  { value: 'bom', label: 'BOM' },
+  { value: 'marketing', label: 'Marketing' },
+  { value: 'sales', label: 'Sales' },
+  { value: 'files', label: 'Files' },
+  { value: 'timeline', label: 'Timeline' },
+]
+
+export function ProductDetail({
+  product, profile, designData, merchandisingData,
+  bomData, marketingData, salesData, files, logs,
+}: ProductDetailProps) {
+  return (
+    <div>
+      <WorkflowBar product={product} profile={profile} />
+
+      <TabsPrimitive.Root defaultValue="overview">
+        <div className="border-b border-gray-200 bg-white px-6">
+          <TabsPrimitive.List className="flex gap-0 -mb-px">
+            {TABS.map((tab) => (
+              <TabsPrimitive.Trigger
+                key={tab.value}
+                value={tab.value}
+                className={cn(
+                  'px-4 py-3 text-sm font-medium border-b-2 transition-colors',
+                  'data-[state=active]:border-blue-600 data-[state=active]:text-blue-600',
+                  'data-[state=inactive]:border-transparent data-[state=inactive]:text-gray-500 data-[state=inactive]:hover:text-gray-700'
+                )}
+              >
+                {tab.label}
+              </TabsPrimitive.Trigger>
+            ))}
+          </TabsPrimitive.List>
+        </div>
+
+        <div className="p-6">
+          <TabsPrimitive.Content value="overview">
+            <OverviewTab product={product} designData={designData} merchandisingData={merchandisingData} bomData={bomData} marketingData={marketingData} salesData={salesData} />
+          </TabsPrimitive.Content>
+          <TabsPrimitive.Content value="design">
+            <DesignTab product={product} profile={profile} data={designData} />
+          </TabsPrimitive.Content>
+          <TabsPrimitive.Content value="merchandising">
+            <MerchandisingTab product={product} profile={profile} data={merchandisingData} />
+          </TabsPrimitive.Content>
+          <TabsPrimitive.Content value="bom">
+            <BomTab product={product} profile={profile} data={bomData} />
+          </TabsPrimitive.Content>
+          <TabsPrimitive.Content value="marketing">
+            <MarketingTab product={product} profile={profile} data={marketingData} />
+          </TabsPrimitive.Content>
+          <TabsPrimitive.Content value="sales">
+            <SalesTab product={product} profile={profile} data={salesData} />
+          </TabsPrimitive.Content>
+          <TabsPrimitive.Content value="files">
+            <FilesTab product={product} profile={profile} files={files} />
+          </TabsPrimitive.Content>
+          <TabsPrimitive.Content value="timeline">
+            <TimelineTab logs={logs} />
+          </TabsPrimitive.Content>
+        </div>
+      </TabsPrimitive.Root>
+    </div>
+  )
+}

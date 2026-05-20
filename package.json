@@ -28,6 +28,7 @@
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.106.0",
     "adm-zip": "^0.5.17",
+    "xlsx": "^0.18.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "exceljs": "^4.4.0",
@@ -48,7 +49,6 @@
     "eslint-config-next": "^16.2.6",
     "postcss": "^8.5.15",
     "tailwindcss": "^4.3.0",
-    "typescript": "^6.0.3",
-    "xlsx": "^0.18.5"
+    "typescript": "^6.0.3"
   }
 }

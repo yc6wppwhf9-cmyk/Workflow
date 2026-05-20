@@ -122,10 +122,10 @@ export function SettingsPanel({ users, currentProfile }: SettingsPanelProps) {
               <div key={stage} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
                 <div>
                   <p className="text-sm font-medium">{STAGE_LABELS[stage]}</p>
-                  <p className="text-xs text-gray-400 capitalize">Owned by: {ROLE_LABELS[STAGE_OWNER_ROLE[stage]]}</p>
+                  <p className="text-xs text-gray-400 capitalize">Owned by: {ROLE_LABELS[STAGE_OWNER_ROLE[stage] ?? 'viewer']}</p>
                 </div>
                 <span className="text-xs bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full capitalize">
-                  {ROLE_LABELS[STAGE_OWNER_ROLE[stage]]}
+                  {ROLE_LABELS[STAGE_OWNER_ROLE[stage] ?? 'viewer']}
                 </span>
               </div>
             ))}

@@ -127,9 +127,12 @@ export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): Pars
         // Find which column matches the requested product name
         if (productName) {
           const pnNorm = productName.toLowerCase().replace(/\s+/g, ' ').trim()
+          const pnCompact = pnNorm.replace(/\s/g, '')
           for (let c = 1; c < rows[i].length; c++) {
             const cellNorm = normaliseStyleName(String(rows[i][c] || ''))
-            if (cellNorm.startsWith(pnNorm) || pnNorm.startsWith(cellNorm)) {
+            const cellCompact = cellNorm.replace(/\s/g, '')
+            if (cellNorm.startsWith(pnNorm) || pnNorm.startsWith(cellNorm) ||
+                cellCompact.startsWith(pnCompact) || pnCompact.startsWith(cellCompact)) {
               productColIdx = c
               break
             }
@@ -163,9 +166,12 @@ export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): Pars
 
 export function filterSkusForProduct(skus: ParsedSKU[], productName: string): ParsedSKU[] {
   const pn = productName.toLowerCase().replace(/\s+/g, ' ').trim()
+  const pnCompact = pn.replace(/\s/g, '')
   const matched = skus.filter(s => {
     const sn = normaliseStyleName(s.styleName)
-    return sn === pn || sn.startsWith(pn) || pn.startsWith(sn)
+    const snCompact = sn.replace(/\s/g, '')
+    return sn === pn || sn.startsWith(pn) || pn.startsWith(sn) ||
+      snCompact === pnCompact || snCompact.startsWith(pnCompact) || pnCompact.startsWith(snCompact)
   })
   return matched.length > 0 ? matched : skus
 }

@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { product_id, merch_fields, bom_items, colour_variants, designer_name, sample_color, summary } = body
+  const { product_id, merch_fields, colour_variants, designer_name, sample_color, summary } = body
 
   if (!product_id) return NextResponse.json({ error: 'Missing product_id' }, { status: 400 })
 
@@ -32,13 +32,6 @@ export async function POST(req: NextRequest) {
       }).eq('product_id', product_id)
     )
     fields_updated.push('dimensions', 'compartments', 'materials', 'weight', 'colour_variants')
-  }
-
-  if (bom_items?.length > 0) {
-    updates.push(
-      supabase.from('bom_data').update({ items: bom_items, updated_by: user.id }).eq('product_id', product_id)
-    )
-    fields_updated.push('bom_items')
   }
 
   if (designer_name) {

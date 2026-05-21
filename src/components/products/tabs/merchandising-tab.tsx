@@ -234,7 +234,6 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
         body: JSON.stringify({
           product_id: product.id,
           merch_fields,
-          bom_items: parsed.bomItems,
           colour_variants: colourVariants,
           designer_name: primarySku?.designerName || null,
           sample_color: colourTags.join(', ') || null,

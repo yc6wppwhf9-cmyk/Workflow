@@ -238,10 +238,5 @@ export function skuToMerchFields(sku: ParsedSKU, overrideMaterials?: string[]) {
     materials: overrideMaterials || [sku.mainMaterial, sku.material].filter(Boolean),
     volume: '',
     weight: sku.weight,
-    unique_feature: [
-      sku.uniquePurpose,
-      sku.character && `Character: ${sku.character}`,
-      sku.theme && `Theme: ${sku.theme}`,
-    ].filter(Boolean).join(', '),
   }
 }

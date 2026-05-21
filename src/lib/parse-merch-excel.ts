@@ -1,10 +1,12 @@
 import * as XLSX from 'xlsx'
 import { resolveColorName } from './color-maps'
+import { parseCuttingSheetFromWorkbook } from './parse-cutting-sheet'
 
 export interface ParsedMerchData {
   skus: ParsedSKU[]
   bomItems: ParsedBOMItem[]           // aggregated for the matched product column
   bomByStyle: Record<string, ParsedBOMItem[]>  // keyed by normalised style name
+  cuttingItems: import('./parse-cutting-sheet').CuttingSheetItem[]  // from cutting sheet tab
   images: ParsedImage[]
 }
 
@@ -173,7 +175,10 @@ export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): Pars
     }
   }
 
-  return { skus, bomItems, bomByStyle, images }
+  // ── Parse cutting sheet (any sheet with CONSMP column) ───────────────────
+  const cuttingItems = parseCuttingSheetFromWorkbook(workbook)
+
+  return { skus, bomItems, bomByStyle, cuttingItems, images }
 }
 
 export function filterSkusForProduct(skus: ParsedSKU[], productName: string): ParsedSKU[] {

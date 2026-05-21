@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { matchConsumptionToBom } from '@/lib/parse-cutting-sheet'
 
 // This route receives pre-parsed JSON from the browser.
 // The browser handles: Excel parsing, image extraction, Supabase Storage uploads.
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { product_id, merch_fields, colour_variants, designer_name, sample_color, summary } = body
+  const { product_id, merch_fields, colour_variants, designer_name, sample_color, summary, cutting_items } = body
 
   if (!product_id) return NextResponse.json({ error: 'Missing product_id' }, { status: 400 })
 
@@ -35,15 +36,17 @@ export async function POST(req: NextRequest) {
   }
 
   // Pre-populate BOM tab from the primary colour variant's INV items
-  // BOM team will add consumption values from their cutting sheet
   const primaryVariantBom = colour_variants?.[0]?.bomItems
   if (primaryVariantBom?.length > 0) {
-    const bomItems = primaryVariantBom.map((item: { inv_name: string; inv_code: string }) => ({
+    let bomItems = primaryVariantBom.map((item: { inv_name: string; inv_code: string }) => ({
       inv_name: item.inv_name,
       inv_code: item.inv_code,
       consumption: '',
       unit: '',
     }))
+    if (cutting_items?.length > 0) {
+      bomItems = matchConsumptionToBom(bomItems, cutting_items)
+    }
     updates.push(
       supabase.from('bom_data').update({ items: bomItems, updated_by: user.id }).eq('product_id', product_id)
     )

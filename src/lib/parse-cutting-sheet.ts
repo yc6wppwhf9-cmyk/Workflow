@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import type { WorkBook } from 'xlsx'
 
 export interface CuttingSheetItem {
   name: string         // section/item name from cutting sheet
@@ -6,10 +7,7 @@ export interface CuttingSheetItem {
   unit: string         // mtr / pcs etc (inferred from context)
 }
 
-export function parseCuttingSheet(buffer: ArrayBuffer): CuttingSheetItem[] {
-  const workbook = XLSX.read(buffer, { type: 'array' })
-
-  // Try first sheet or look for a sheet with CONSMP
+export function parseCuttingSheetFromWorkbook(workbook: WorkBook): CuttingSheetItem[] {
   let targetSheet = workbook.Sheets[workbook.SheetNames[0]]
   for (const name of workbook.SheetNames) {
     const rows = XLSX.utils.sheet_to_json<string[]>(workbook.Sheets[name], { header: 1, defval: '' }) as string[][]
@@ -18,8 +16,17 @@ export function parseCuttingSheet(buffer: ArrayBuffer): CuttingSheetItem[] {
       break
     }
   }
+  return parseCuttingSheetRows(
+    XLSX.utils.sheet_to_json<string[]>(targetSheet, { header: 1, defval: '' }) as string[][]
+  )
+}
 
-  const rows = XLSX.utils.sheet_to_json<string[]>(targetSheet, { header: 1, defval: '' }) as string[][]
+export function parseCuttingSheet(buffer: ArrayBuffer): CuttingSheetItem[] {
+  const workbook = XLSX.read(buffer, { type: 'array' })
+  return parseCuttingSheetFromWorkbook(workbook)
+}
+
+function parseCuttingSheetRows(rows: string[][]): CuttingSheetItem[] {
 
   // Find header row and CONSMP column index
   let consmpCol = -1

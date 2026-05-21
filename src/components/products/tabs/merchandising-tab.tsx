@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
 import { parseMerchExcel, filterSkusForProduct, aggregateMerchFields, buildColourVariants } from '@/lib/parse-merch-excel'
-import { parseCuttingSheet, matchConsumptionToBom } from '@/lib/parse-cutting-sheet'
 import type { Product, Profile, MerchandisingData } from '@/lib/types'
 
 interface MerchandisingTabProps {
@@ -74,11 +73,8 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
   const [saved, setSaved] = useState(false)
 
   const excelInputRef = useRef<HTMLInputElement>(null)
-  const cuttingInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState('')
-  const [cuttingUploading, setCuttingUploading] = useState(false)
-  const [cuttingResult, setCuttingResult] = useState<string | null>(null)
   const [uploadResult, setUploadResult] = useState<{
     skus_found: number; skus_matched: number; colors_found: string[]
     other_products_in_file: string[]; bom_items_found: number
@@ -241,6 +237,7 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
           colour_variants: colourVariants,
           designer_name: primarySku?.designerName || null,
           sample_color: colourTags.join(', ') || null,
+          cutting_items: parsed.cuttingItems,
           summary: `uploaded merchandising Excel "${file.name}" — ${relevantSkus.length} variant(s) matched, ${parsed.bomItems.length} BOM items, ${images_uploaded} images`,
         }),
       })
@@ -263,37 +260,6 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
     setUploadProgress('')
     setUploading(false)
     if (excelInputRef.current) excelInputRef.current.value = ''
-    router.refresh()
-  }
-
-  async function handleCuttingSheetUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setCuttingUploading(true)
-    setCuttingResult(null)
-    try {
-      const buffer = await file.arrayBuffer()
-      const cuttingItems = parseCuttingSheet(buffer)
-      if (cuttingItems.length === 0) {
-        setCuttingResult('No CONSMP data found in this file.')
-        setCuttingUploading(false)
-        return
-      }
-
-      const res = await fetch('/api/upload-cutting-sheet', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product_id: product.id, cutting_items: cuttingItems }),
-      })
-      const json = await res.json()
-      setCuttingResult(json.matched > 0
-        ? `Consumption filled for ${json.matched} of ${json.total} BOM items.`
-        : 'Could not match any items. Check cutting sheet format.')
-    } catch (err) {
-      setCuttingResult('Error parsing cutting sheet: ' + String(err))
-    }
-    setCuttingUploading(false)
-    if (cuttingInputRef.current) cuttingInputRef.current.value = ''
     router.refresh()
   }
 
@@ -368,33 +334,6 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
                   </p>
                 )}
               </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Cutting Sheet Upload */}
-      {canEdit && (
-        <Card className="border-blue-200 bg-blue-50">
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
-                  <FileSpreadsheet className="h-5 w-5 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-blue-900">Upload Cutting Sheet</p>
-                  <p className="text-xs text-blue-700">Reads CONSMP column and fills consumption in BOM tab automatically</p>
-                </div>
-              </div>
-              <Button size="sm" onClick={() => cuttingInputRef.current?.click()} disabled={cuttingUploading} className="bg-blue-600 hover:bg-blue-700 shrink-0">
-                {cuttingUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                {cuttingUploading ? 'Processing...' : 'Upload'}
-              </Button>
-              <input ref={cuttingInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleCuttingSheetUpload} />
-            </div>
-            {cuttingResult && (
-              <p className="mt-2 text-xs text-blue-800 font-medium pt-2 border-t border-blue-200">{cuttingResult}</p>
             )}
           </CardContent>
         </Card>

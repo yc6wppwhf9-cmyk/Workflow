@@ -15,7 +15,7 @@ interface BomTabProps {
   data: BomData | null
 }
 
-const emptyItem = (): BomItem => ({ inv_code: '', inv_name: '', quantity: '', unit: '' })
+const emptyItem = (): BomItem => ({ inv_name: '', inv_code: '', consumption: '', unit: '' })
 
 export function BomTab({ product, profile, data }: BomTabProps) {
   const router = useRouter()
@@ -31,19 +31,11 @@ export function BomTab({ product, profile, data }: BomTabProps) {
   async function handleSave() {
     setSaving(true)
     const supabase = createClient()
-
-    await supabase.from('bom_data').update({
-      items,
-      updated_by: profile.id,
-    }).eq('product_id', product.id)
-
+    await supabase.from('bom_data').update({ items, updated_by: profile.id }).eq('product_id', product.id)
     await supabase.from('activity_logs').insert({
-      product_id: product.id,
-      user_id: profile.id,
-      action: `updated BOM (${items.length} items)`,
-      department: 'bom',
+      product_id: product.id, user_id: profile.id,
+      action: `updated BOM (${items.length} items)`, department: 'bom',
     })
-
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
     setSaving(false)
@@ -53,20 +45,19 @@ export function BomTab({ product, profile, data }: BomTabProps) {
   async function markComplete() {
     setSaving(true)
     const supabase = createClient()
-    await supabase.from('bom_data').update({
-      items,
-      is_completed: !data?.is_completed,
-      updated_by: profile.id,
-    }).eq('product_id', product.id)
+    await supabase.from('bom_data').update({ items, is_completed: !data?.is_completed, updated_by: profile.id }).eq('product_id', product.id)
     setSaving(false)
     router.refresh()
   }
 
   return (
-    <div className="max-w-4xl space-y-4">
+    <div className="max-w-5xl space-y-4">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-3">
-          <CardTitle className="text-base">Bill of Materials</CardTitle>
+          <div>
+            <CardTitle className="text-base">Bill of Materials</CardTitle>
+            <p className="text-xs text-gray-400 mt-0.5">Item names and INV codes pre-filled from merchandising Excel. Add consumption from cutting sheet.</p>
+          </div>
           {data?.is_locked && (
             <span className="flex items-center gap-1.5 text-xs text-orange-600 bg-orange-50 px-2.5 py-1 rounded-full border border-orange-200">
               <Lock className="h-3 w-3" /> Stage Locked
@@ -78,51 +69,51 @@ export function BomTab({ product, profile, data }: BomTabProps) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 w-8">#</th>
-                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500">INV Code</th>
-                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500">INV Name</th>
-                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 w-24">Quantity</th>
-                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 w-24">Unit</th>
+                  <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 w-8">#</th>
+                  <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500">Item Name</th>
+                  <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500">INV Code</th>
+                  <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 w-32">Consumption</th>
+                  <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 w-24">Unit</th>
                   {canEdit && <th className="w-10" />}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {items.map((item, i) => (
                   <tr key={i} className="group">
-                    <td className="px-4 py-2 text-xs text-gray-400">{i + 1}</td>
-                    <td className="px-2 py-1.5">
-                      <Input
-                        value={item.inv_code}
-                        onChange={(e) => updateItem(i, 'inv_code', e.target.value.toUpperCase())}
-                        disabled={!canEdit}
-                        placeholder="INV-001"
-                        className="font-mono text-xs h-8"
-                      />
-                    </td>
+                    <td className="px-3 py-1.5 text-xs text-gray-400">{i + 1}</td>
                     <td className="px-2 py-1.5">
                       <Input
                         value={item.inv_name}
-                        onChange={(e) => updateItem(i, 'inv_name', e.target.value)}
+                        onChange={e => updateItem(i, 'inv_name', e.target.value)}
                         disabled={!canEdit}
-                        placeholder="Item description"
+                        placeholder="e.g. FABRIC 1 - PVC"
                         className="text-xs h-8"
                       />
                     </td>
                     <td className="px-2 py-1.5">
                       <Input
-                        value={item.quantity}
-                        onChange={(e) => updateItem(i, 'quantity', e.target.value)}
+                        value={item.inv_code}
+                        onChange={e => updateItem(i, 'inv_code', e.target.value)}
                         disabled={!canEdit}
-                        placeholder="1"
+                        placeholder="e.g. FB PVC 1680 D 480 NBL"
+                        className="font-mono text-xs h-8"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        value={item.consumption}
+                        onChange={e => updateItem(i, 'consumption', e.target.value)}
+                        disabled={!canEdit}
+                        placeholder="e.g. 0.5524"
                         className="text-xs h-8"
                       />
                     </td>
                     <td className="px-2 py-1.5">
                       <Input
                         value={item.unit}
-                        onChange={(e) => updateItem(i, 'unit', e.target.value)}
+                        onChange={e => updateItem(i, 'unit', e.target.value)}
                         disabled={!canEdit}
-                        placeholder="pcs"
+                        placeholder="mtr / pcs"
                         className="text-xs h-8"
                       />
                     </td>
@@ -142,19 +133,15 @@ export function BomTab({ product, profile, data }: BomTabProps) {
             </table>
 
             {items.length === 0 && (
-              <div className="text-center py-8 text-gray-400">
-                <p className="text-sm">No BOM items yet.{canEdit && ' Add one below.'}</p>
+              <div className="text-center py-10 text-gray-400">
+                <p className="text-sm">No BOM items yet.</p>
+                <p className="text-xs mt-1">Upload the merchandising Excel to pre-fill item names and INV codes.</p>
               </div>
             )}
           </div>
 
           {canEdit && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-3"
-              onClick={() => setItems([...items, emptyItem()])}
-            >
+            <Button variant="outline" size="sm" className="mt-3" onClick={() => setItems([...items, emptyItem()])}>
               <Plus className="h-4 w-4" /> Add Item
             </Button>
           )}

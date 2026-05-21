@@ -34,6 +34,22 @@ export async function POST(req: NextRequest) {
     fields_updated.push('dimensions', 'compartments', 'materials', 'weight', 'colour_variants')
   }
 
+  // Pre-populate BOM tab from the primary colour variant's INV items
+  // BOM team will add consumption values from their cutting sheet
+  const primaryVariantBom = colour_variants?.[0]?.bomItems
+  if (primaryVariantBom?.length > 0) {
+    const bomItems = primaryVariantBom.map((item: { inv_name: string; inv_code: string }) => ({
+      inv_name: item.inv_name,
+      inv_code: item.inv_code,
+      consumption: '',
+      unit: '',
+    }))
+    updates.push(
+      supabase.from('bom_data').update({ items: bomItems, updated_by: user.id }).eq('product_id', product_id)
+    )
+    fields_updated.push('bom_items')
+  }
+
   if (designer_name) {
     updates.push(
       supabase.from('design_data').update({

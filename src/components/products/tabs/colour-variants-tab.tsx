@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Palette, Weight, Ruler, Package, ChevronLeft, ChevronRight, X, ChevronDown, ChevronUp, List } from 'lucide-react'
+import { Palette, Weight, Ruler, Package, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { getColorHex } from '@/lib/color-maps'
 import type { ColourVariant, ProductFile } from '@/lib/types'
 
@@ -18,11 +18,9 @@ function ColorCard({
   images: ProductFile[]
 }) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
-  const [showBom, setShowBom] = useState(false)
   const hex = getColorHex(variant.colourTag)
 
   const hasSpecs = variant.weight || variant.dimensions?.length || variant.materials?.length
-  const hasBom = variant.bomItems && variant.bomItems.length > 0
 
   return (
     <>
@@ -104,43 +102,6 @@ function ColorCard({
           </div>
         )}
 
-        {/* BOM toggle */}
-        {hasBom && (
-          <div className="border-t border-gray-100">
-            <button
-              className="w-full px-4 py-2.5 flex items-center justify-between text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-              onClick={() => setShowBom(v => !v)}
-            >
-              <span className="flex items-center gap-1.5">
-                <List className="h-3.5 w-3.5 text-gray-400" />
-                BOM / Inventory ({variant.bomItems!.length} items)
-              </span>
-              {showBom ? <ChevronUp className="h-3.5 w-3.5 text-gray-400" /> : <ChevronDown className="h-3.5 w-3.5 text-gray-400" />}
-            </button>
-            {showBom && (
-              <div className="px-4 pb-3">
-                <div className="rounded-lg border border-gray-100 overflow-hidden">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-gray-100">
-                        <th className="text-left px-3 py-2 font-semibold text-gray-500">Item Name</th>
-                        <th className="text-left px-3 py-2 font-semibold text-gray-500 font-mono">INV Code</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {variant.bomItems!.map((item, i) => (
-                        <tr key={i} className="hover:bg-gray-50">
-                          <td className="px-3 py-1.5 text-gray-700">{item.inv_name}</td>
-                          <td className="px-3 py-1.5 text-gray-500 font-mono">{item.inv_code}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Lightbox */}

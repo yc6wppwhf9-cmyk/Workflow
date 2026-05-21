@@ -149,7 +149,7 @@ export interface MerchandisingData {
 export interface BomItem {
   inv_code: string
   inv_name: string
-  quantity: string
+  consumption: string
   unit: string
 }
 

@@ -112,6 +112,7 @@ export interface ColourVariant {
   seasonYear: string
   character: string
   theme: string
+  bomItems?: BomItem[]
 }
 
 export interface MerchandisingData {

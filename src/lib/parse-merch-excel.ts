@@ -3,7 +3,8 @@ import { resolveColorName } from './color-maps'
 
 export interface ParsedMerchData {
   skus: ParsedSKU[]
-  bomItems: ParsedBOMItem[]
+  bomItems: ParsedBOMItem[]           // aggregated for the matched product column
+  bomByStyle: Record<string, ParsedBOMItem[]>  // keyed by normalised style name
   images: ParsedImage[]
 }
 
@@ -113,56 +114,66 @@ export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): Pars
   }
 
   // ── Parse INV SHEET RM ────────────────────────────────────────────────────
-  // Format: row N has header [ITEM NAME, SKU1_styleName, SKU2_styleName, ...]
-  //         rows N+1... have  [material_name, code_for_SKU1, code_for_SKU2, ...]
+  // Format: row N = header [ITEM NAME, style1, style2, ...]
+  //         rows N+1... = [item_name, code_for_style1, code_for_style2, ...]
+  const bomByStyle: Record<string, ParsedBOMItem[]> = {}
   const invSheet = workbook.Sheets['INV SHEET RM']
   if (invSheet) {
     const rows = XLSX.utils.sheet_to_json<string[]>(invSheet, { header: 1, defval: '' }) as string[][]
 
     let headerRowIdx = -1
-    let productColIdx = 1  // default to first product column
-
     for (let i = 0; i < rows.length; i++) {
       if (String(rows[i]?.[0] || '').toUpperCase().includes('ITEM NAME')) {
         headerRowIdx = i
-        // Find which column matches the requested product name
-        if (productName) {
-          const pnNorm = productName.toLowerCase().replace(/\s+/g, ' ').trim()
-          const pnCompact = pnNorm.replace(/\s/g, '')
-          for (let c = 1; c < rows[i].length; c++) {
-            const cellNorm = normaliseStyleName(String(rows[i][c] || ''))
-            const cellCompact = cellNorm.replace(/\s/g, '')
-            if (cellNorm.startsWith(pnNorm) || pnNorm.startsWith(cellNorm) ||
-                cellCompact.startsWith(pnCompact) || pnCompact.startsWith(cellCompact)) {
-              productColIdx = c
-              break
-            }
-          }
-        }
         break
       }
     }
 
     if (headerRowIdx >= 0) {
-      for (let i = headerRowIdx + 1; i < rows.length; i++) {
-        const itemName = String(rows[i]?.[0] || '').trim()
-        if (!itemName) continue
+      const headerRow = rows[headerRowIdx]
 
-        const invCode = String(rows[i]?.[productColIdx] || '').trim()
-        // Skip NA, 0, empty
-        if (!invCode || invCode === '0' || invCode.toUpperCase() === 'NA') continue
+      // Collect all style columns
+      const styleColumns: Array<{ col: number; styleKey: string }> = []
+      for (let c = 1; c < headerRow.length; c++) {
+        const raw = String(headerRow[c] || '').trim()
+        if (!raw || raw === '0') continue
+        styleColumns.push({ col: c, styleKey: normaliseStyleName(raw) })
+      }
 
-        bomItems.push({
-          inv_code: invCode,
-          inv_name: itemName,
-          quantity: '1',
-          unit: 'pcs',
-        })
+      // Parse item rows into per-style BOM maps
+      for (const { col, styleKey } of styleColumns) {
+        const items: ParsedBOMItem[] = []
+        for (let i = headerRowIdx + 1; i < rows.length; i++) {
+          const itemName = String(rows[i]?.[0] || '').trim()
+          if (!itemName) continue
+          const invCode = String(rows[i]?.[col] || '').trim()
+          if (!invCode || invCode === '0' || invCode.toUpperCase() === 'NA') continue
+          items.push({ inv_code: invCode, inv_name: itemName, quantity: '1', unit: 'pcs' })
+        }
+        if (items.length > 0) bomByStyle[styleKey] = items
+      }
+
+      // Aggregate bomItems for the matched product column (for BOM tab)
+      if (productName) {
+        const pnNorm = productName.toLowerCase().replace(/\s+/g, ' ').trim()
+        const pnCompact = pnNorm.replace(/\s/g, '')
+        for (const { styleKey } of styleColumns) {
+          const compact = styleKey.replace(/\s/g, '')
+          if (styleKey.startsWith(pnNorm) || pnNorm.startsWith(styleKey) ||
+              compact.startsWith(pnCompact) || pnCompact.startsWith(compact)) {
+            bomItems.push(...(bomByStyle[styleKey] || []))
+            break
+          }
+        }
+        // If nothing matched with product name, use first column
+        if (bomItems.length === 0 && styleColumns.length > 0) {
+          bomItems.push(...(bomByStyle[styleColumns[0].styleKey] || []))
+        }
       }
     }
   }
 
-  return { skus, bomItems, images }
+  return { skus, bomItems, bomByStyle, images }
 }
 
 export function filterSkusForProduct(skus: ParsedSKU[], productName: string): ParsedSKU[] {
@@ -187,10 +198,28 @@ export function extractColorTag(styleName: string, productBaseName: string): str
   return cleaned
 }
 
-export function buildColourVariants(skus: ParsedSKU[], productName: string) {
+export function buildColourVariants(
+  skus: ParsedSKU[],
+  productName: string,
+  bomByStyle?: Record<string, ParsedBOMItem[]>,
+) {
   return skus.map(sku => {
     const rawTag = sku.color || extractColorTag(sku.styleName, productName)
     const colourTag = resolveColorName(rawTag)
+
+    // Find matching BOM for this variant by comparing normalised style names
+    let bomItems: ParsedBOMItem[] | undefined
+    if (bomByStyle) {
+      const skuKey = normaliseStyleName(sku.styleName)
+      const skuCompact = skuKey.replace(/\s/g, '')
+      for (const [styleKey, items] of Object.entries(bomByStyle)) {
+        const styleCompact = styleKey.replace(/\s/g, '')
+        if (styleKey === skuKey || styleCompact === skuCompact) {
+          bomItems = items
+          break
+        }
+      }
+    }
     const dimParts = sku.dimensions.replace(/"/g, '').split('/').map(s => s.trim())
     return {
       styleName: sku.styleName,
@@ -212,6 +241,7 @@ export function buildColourVariants(skus: ParsedSKU[], productName: string) {
       seasonYear: sku.seasonYear,
       character: sku.character,
       theme: sku.theme,
+      bomItems,
     }
   })
 }

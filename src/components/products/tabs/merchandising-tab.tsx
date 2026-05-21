@@ -119,7 +119,7 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
         .map(s => s.styleName)
         .filter((v, i, a) => a.indexOf(v) === i)
 
-      const colourVariants = buildColourVariants(relevantSkus, product.name)
+      const colourVariants = buildColourVariants(relevantSkus, product.name, parsed.bomByStyle)
       const colourTags = colourVariants.map(v => v.colourTag)
       const merch_fields = relevantSkus.length > 0 ? aggregateMerchFields(relevantSkus) : null
 

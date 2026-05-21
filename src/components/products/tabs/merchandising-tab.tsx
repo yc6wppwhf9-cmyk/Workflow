@@ -212,6 +212,17 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
         await supabase.from('product_files').insert(fileRecords)
       }
 
+      // Update local form state immediately so the UI reflects extracted data
+      if (merch_fields) {
+        setForm({
+          dimensions: merch_fields.dimensions || { length: '', width: '', height: '', unit: 'cm' },
+          compartments: merch_fields.compartments || '',
+          materials: merch_fields.materials || [],
+          volume: merch_fields.volume || '',
+          weight: merch_fields.weight || '',
+        })
+      }
+
       // ── 4. Send parsed data to server for DB updates ─────────────────────────
       setUploadProgress('Updating product data...')
       const colourSummary = colourTags.join(', ')

@@ -34,6 +34,16 @@ export function WorkflowBar({
   const currentIndex = WORKFLOW_STAGES.indexOf(product.workflow_stage as WorkflowStage)
   const isAdmin = profile.role === 'admin'
 
+  // 6 display stages — 'draft' maps to Design being in-progress (index 0)
+  const DISPLAY_STAGES = [
+    { label: 'Design',        doneAfter: 0 },  // done when currentIndex > 0 (past draft)
+    { label: 'Merchandising', doneAfter: 1 },  // done when past design_completed
+    { label: 'BOM',           doneAfter: 2 },
+    { label: 'Marketing',     doneAfter: 3 },
+    { label: 'Sales',         doneAfter: 4 },
+    { label: 'Product Live',  doneAfter: 5 },
+  ]
+
   // Validation: Check if the current stage has been marked as complete
   const isCurrentStageComplete = () => {
     switch (product.workflow_stage as WorkflowStage) {
@@ -158,15 +168,15 @@ export function WorkflowBar({
   return (
     <div className="bg-white border-b border-gray-200 px-6 py-4">
       <div className="flex items-center justify-between flex-wrap gap-4">
-        {/* Stage progress */}
+        {/* Stage progress — 6 display stages, draft maps to Design in-progress */}
         <div className="flex items-center gap-1 flex-wrap">
-          {WORKFLOW_STAGES.map((stage, i) => {
-            const isDone = i < currentIndex
-            const isCurrent = i === currentIndex
-            const isFuture = i > currentIndex
+          {DISPLAY_STAGES.map((stage, i) => {
+            const isDone = currentIndex > stage.doneAfter
+            const isCurrent = currentIndex === stage.doneAfter
+            const isFuture = currentIndex < stage.doneAfter
 
             return (
-              <div key={stage} className="flex items-center gap-1">
+              <div key={stage.label} className="flex items-center gap-1">
                 <div className={cn(
                   'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors',
                   isDone && 'bg-green-100 text-green-700',
@@ -175,10 +185,10 @@ export function WorkflowBar({
                 )}>
                   {isDone && <Check className="h-3 w-3" />}
                   {isCurrent && <div className="h-2 w-2 rounded-full bg-white" />}
-                  {STAGE_LABELS[stage]}
+                  {stage.label}
                 </div>
-                {i < WORKFLOW_STAGES.length - 1 && (
-                  <ChevronRight className={cn('h-3 w-3', i < currentIndex ? 'text-green-400' : 'text-gray-300')} />
+                {i < DISPLAY_STAGES.length - 1 && (
+                  <ChevronRight className={cn('h-3 w-3', isDone ? 'text-green-400' : 'text-gray-300')} />
                 )}
               </div>
             )

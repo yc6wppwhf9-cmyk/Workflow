@@ -11,7 +11,6 @@ import { MerchandisingTab } from '@/components/products/tabs/merchandising-tab'
 import { BomTab } from '@/components/products/tabs/bom-tab'
 import { MarketingTab } from '@/components/products/tabs/marketing-tab'
 import { SalesTab } from '@/components/products/tabs/sales-tab'
-import { FilesTab } from '@/components/products/tabs/files-tab'
 import { TimelineTab } from '@/components/products/tabs/timeline-tab'
 import { ColourVariantsTab } from '@/components/products/tabs/colour-variants-tab'
 import { cn } from '@/lib/utils'
@@ -40,7 +39,6 @@ const TABS = [
   { value: 'bom', label: 'BOM' },
   { value: 'marketing', label: 'Marketing' },
   { value: 'sales', label: 'Sales' },
-  { value: 'files', label: 'Files' },
   { value: 'timeline', label: 'Timeline' },
 ]
 
@@ -156,9 +154,6 @@ export function ProductDetail({
           </TabsPrimitive.Content>
           <TabsPrimitive.Content value="sales">
             <SalesTab product={product} profile={profile} data={salesData} />
-          </TabsPrimitive.Content>
-          <TabsPrimitive.Content value="files">
-            <FilesTab product={product} profile={profile} files={files} />
           </TabsPrimitive.Content>
           <TabsPrimitive.Content value="timeline">
             <TimelineTab logs={logs} />

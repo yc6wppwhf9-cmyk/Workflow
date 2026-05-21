@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Palette, Weight, Ruler, Package, ChevronLeft, ChevronRight, X } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { getColorHex } from '@/lib/color-maps'
 import type { ColourVariant, ProductFile } from '@/lib/types'
 
 interface ColourVariantsTabProps {
@@ -10,22 +10,16 @@ interface ColourVariantsTabProps {
   files: ProductFile[]
 }
 
-const SWATCH_COLORS = [
-  'bg-blue-500', 'bg-purple-500', 'bg-emerald-500', 'bg-orange-500',
-  'bg-pink-500', 'bg-teal-500', 'bg-red-500', 'bg-indigo-500',
-]
-
 function ColorCard({
   variant,
-  index,
   images,
 }: {
   variant: ColourVariant
-  index: number
   images: ProductFile[]
 }) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
-  const swatch = SWATCH_COLORS[index % SWATCH_COLORS.length]
+  const hex = getColorHex(variant.colourTag)
+  const isLight = isLightColor(hex)
 
   const hasSpecs = variant.weight || variant.dimensions?.length || variant.materials?.length
 
@@ -33,8 +27,8 @@ function ColorCard({
     <>
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {/* Header */}
-        <div className={cn('px-4 py-3 flex items-center gap-3', swatch.replace('bg-', 'bg-').replace('500', '50'))}>
-          <div className={cn('h-8 w-8 rounded-full shrink-0', swatch)} />
+        <div className="px-4 py-3 flex items-center gap-3" style={{ backgroundColor: hex + '22' }}>
+          <div className="h-8 w-8 rounded-full shrink-0 border border-black/10" style={{ backgroundColor: hex }} />
           <div className="min-w-0">
             <p className="text-sm font-semibold text-gray-900 truncate">{variant.colourTag}</p>
             <p className="text-xs text-gray-500 truncate">{variant.styleName}</p>
@@ -111,7 +105,7 @@ function ColorCard({
       </div>
 
       {/* Lightbox */}
-      {lightboxIndex !== null && images[lightboxIndex] && (
+      {lightboxIndex !== null && images[lightboxIndex!] && (
         <div
           className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
           onClick={() => setLightboxIndex(null)}
@@ -205,7 +199,6 @@ export function ColourVariantsTab({ variants, files }: ColourVariantsTabProps) {
           <ColorCard
             key={variant.styleName || i}
             variant={variant}
-            index={i}
             images={filesByColor.get(variant.colourTag) || []}
           />
         ))}
@@ -218,4 +211,11 @@ export function ColourVariantsTab({ variants, files }: ColourVariantsTabProps) {
       )}
     </div>
   )
+}
+
+function isLightColor(hex: string): boolean {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return (r * 299 + g * 587 + b * 114) / 1000 > 160
 }

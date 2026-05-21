@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import { resolveColorName } from './color-maps'
 
 export interface ParsedMerchData {
   skus: ParsedSKU[]
@@ -188,7 +189,8 @@ export function extractColorTag(styleName: string, productBaseName: string): str
 
 export function buildColourVariants(skus: ParsedSKU[], productName: string) {
   return skus.map(sku => {
-    const colourTag = sku.color || extractColorTag(sku.styleName, productName)
+    const rawTag = sku.color || extractColorTag(sku.styleName, productName)
+    const colourTag = resolveColorName(rawTag)
     const dimParts = sku.dimensions.replace(/"/g, '').split('/').map(s => s.trim())
     return {
       styleName: sku.styleName,

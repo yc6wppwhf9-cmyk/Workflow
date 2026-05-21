@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { Search, Package, ChevronRight, Filter } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { STAGE_LABELS, STAGE_COLORS, type WorkflowStage, type Profile } from '@/lib/types'
+import { STAGE_LABELS, STAGE_COLORS, CATEGORY_LABELS, type WorkflowStage, type ProductCategory, type Profile } from '@/lib/types'
 import { formatDate } from '@/lib/utils'
 
 interface ProductRow {
@@ -63,13 +63,13 @@ export function ProductsTable({ products, profile }: ProductsTableProps) {
           </SelectContent>
         </Select>
         <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-          <SelectTrigger className="w-full sm:w-[160px]">
+          <SelectTrigger className="w-full sm:w-[180px]">
             <SelectValue placeholder="All categories" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Categories</SelectItem>
-            {['bag', 'luggage', 'backpack', 'wallet', 'accessory', 'other'].map((c) => (
-              <SelectItem key={c} value={c} className="capitalize">{c}</SelectItem>
+            {(Object.entries(CATEGORY_LABELS) as [ProductCategory, string][]).map(([v, l]) => (
+              <SelectItem key={v} value={v}>{l}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -102,7 +102,7 @@ export function ProductsTable({ products, profile }: ProductsTableProps) {
                 </td>
                 <td className="px-4 py-3.5 text-gray-500 font-mono text-xs">{p.sku}</td>
                 <td className="px-4 py-3.5">
-                  <span className="capitalize text-gray-600">{p.category}</span>
+                  <span className="text-gray-600">{CATEGORY_LABELS[p.category as ProductCategory] || p.category}</span>
                 </td>
                 <td className="px-4 py-3.5">
                   <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${STAGE_COLORS[p.workflow_stage as WorkflowStage]}`}>

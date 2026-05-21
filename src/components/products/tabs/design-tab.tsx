@@ -8,7 +8,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createClient } from '@/lib/supabase/client'
+import { CATEGORY_LABELS, BRANDS, CHANNELS, type ProductCategory, type Brand } from '@/lib/types'
 import type { Product, Profile, DesignData } from '@/lib/types'
 
 interface DesignTabProps {
@@ -28,6 +30,9 @@ export function DesignTab({ product, profile, data }: DesignTabProps) {
     color_skus: data?.color_skus || [] as string[],
     unique_feature: data?.unique_feature || '',
   })
+  // Product-level fields editable from design tab
+  const [category, setCategory] = useState<ProductCategory | ''>(product.category || '')
+  const [brand, setBrand] = useState<Brand | ''>(product.brand || '')
   const [newSku, setNewSku] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -36,10 +41,17 @@ export function DesignTab({ product, profile, data }: DesignTabProps) {
     setSaving(true)
     const supabase = createClient()
 
-    await supabase.from('design_data').update({
-      ...form,
-      updated_by: profile.id,
-    }).eq('product_id', product.id)
+    await Promise.all([
+      supabase.from('design_data').update({
+        ...form,
+        updated_by: profile.id,
+      }).eq('product_id', product.id),
+      supabase.from('products').update({
+        ...(category && { category }),
+        ...(brand && { brand }),
+        updated_by: profile.id,
+      }).eq('id', product.id),
+    ])
 
     await supabase.from('activity_logs').insert({
       product_id: product.id,
@@ -87,16 +99,44 @@ export function DesignTab({ product, profile, data }: DesignTabProps) {
           )}
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          {/* Category · Brand · Channel */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <Label>Category</Label>
+              <Select value={category} onValueChange={(v) => setCategory(v as ProductCategory)} disabled={!canEdit}>
+                <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                <SelectContent>
+                  {(Object.entries(CATEGORY_LABELS) as [ProductCategory, string][]).map(([v, l]) => (
+                    <SelectItem key={v} value={v}>{l}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Brand</Label>
+              <Select value={brand} onValueChange={(v) => setBrand(v as Brand)} disabled={!canEdit}>
+                <SelectTrigger><SelectValue placeholder="Select brand" /></SelectTrigger>
+                <SelectContent>
+                  {BRANDS.map((b) => (
+                    <SelectItem key={b} value={b}>{b}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-1.5">
               <Label>Channel</Label>
-              <Input
-                placeholder="e.g. Retail, Online, Export"
-                value={form.channel}
-                onChange={(e) => setForm({ ...form, channel: e.target.value })}
-                disabled={!canEdit}
-              />
+              <Select value={form.channel} onValueChange={(v) => setForm({ ...form, channel: v })} disabled={!canEdit}>
+                <SelectTrigger><SelectValue placeholder="Select channel" /></SelectTrigger>
+                <SelectContent>
+                  {CHANNELS.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Designer Name</Label>
               <Input

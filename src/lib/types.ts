@@ -9,7 +9,50 @@ export type WorkflowStage =
   | 'sales_priced'
   | 'product_live'
 
-export type ProductCategory = 'bag' | 'luggage' | 'backpack' | 'wallet' | 'accessory' | 'other'
+export type ProductCategory =
+  | 'junior-backpacks'
+  | 'campus-backpacks'
+  | 'business-backpacks'
+  | 'trekking-backpacks'
+  | 'luggage'
+  | 'accessories'
+  | 'vegan-backpacks'
+  | 'duffle'
+  | 'duffle-wheeler'
+  | 'duffle-trolley'
+
+export const CATEGORY_LABELS: Record<ProductCategory, string> = {
+  'junior-backpacks':   'Junior Backpacks',
+  'campus-backpacks':   'Campus Backpacks',
+  'business-backpacks': 'Business Backpacks',
+  'trekking-backpacks': 'Trekking Backpacks',
+  'luggage':            'Luggage',
+  'accessories':        'Accessories',
+  'vegan-backpacks':    'Vegan Backpacks',
+  'duffle':             'Duffle',
+  'duffle-wheeler':     'Duffle Wheeler',
+  'duffle-trolley':     'Duffle Trolley',
+}
+
+export type Brand =
+  | 'PRIORITY'
+  | 'TRAWORLD'
+  | 'PRIORITY JUNIOR'
+  | 'HOPP'
+  | 'OXEMBERG'
+  | 'BABYHUG'
+  | 'PLAYNATION'
+  | 'BONFINO'
+  | 'LEVELNXT'
+  | 'FABERCASTELL'
+
+export const BRANDS: Brand[] = [
+  'PRIORITY', 'TRAWORLD', 'PRIORITY JUNIOR', 'HOPP', 'OXEMBERG',
+  'BABYHUG', 'PLAYNATION', 'BONFINO', 'LEVELNXT', 'FABERCASTELL',
+]
+
+export const CHANNELS = ['GT', 'MT', 'ECOM'] as const
+export type Channel = typeof CHANNELS[number]
 
 export interface Profile {
   id: string
@@ -28,6 +71,7 @@ export interface Product {
   name: string
   sku: string
   category: ProductCategory
+  brand: Brand | null
   description: string | null
   workflow_stage: WorkflowStage
   is_locked: boolean

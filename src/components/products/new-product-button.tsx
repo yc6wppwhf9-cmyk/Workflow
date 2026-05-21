@@ -10,26 +10,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { createClient } from '@/lib/supabase/client'
-import type { Profile, ProductCategory } from '@/lib/types'
+import { CATEGORY_LABELS, BRANDS, type Profile, type ProductCategory, type Brand } from '@/lib/types'
 
 interface NewProductButtonProps {
   profile: Profile
 }
 
-const CATEGORIES: { value: ProductCategory; label: string }[] = [
-  { value: 'bag', label: 'Bag' },
-  { value: 'luggage', label: 'Luggage' },
-  { value: 'backpack', label: 'Backpack' },
-  { value: 'wallet', label: 'Wallet' },
-  { value: 'accessory', label: 'Accessory' },
-  { value: 'other', label: 'Other' },
-]
-
 export function NewProductButton({ profile }: NewProductButtonProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [form, setForm] = useState({ name: '', sku: '', category: 'bag' as ProductCategory, description: '' })
+  const [form, setForm] = useState({
+    name: '', sku: '',
+    category: 'junior-backpacks' as ProductCategory,
+    brand: '' as Brand | '',
+    description: '',
+  })
   const router = useRouter()
 
   if (!['admin', 'design'].includes(profile.role)) return null
@@ -61,7 +57,7 @@ export function NewProductButton({ profile }: NewProductButtonProps) {
     })
 
     setOpen(false)
-    setForm({ name: '', sku: '', category: 'bag', description: '' })
+    setForm({ name: '', sku: '', category: 'junior-backpacks', brand: '', description: '' })
     router.push(`/products/${data.id}`)
     router.refresh()
   }
@@ -99,18 +95,29 @@ export function NewProductButton({ profile }: NewProductButtonProps) {
                 required
               />
             </div>
-            <div className="space-y-1.5">
-              <Label>Category *</Label>
-              <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v as ProductCategory })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORIES.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Category *</Label>
+                <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v as ProductCategory })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {(Object.entries(CATEGORY_LABELS) as [ProductCategory, string][]).map(([v, l]) => (
+                      <SelectItem key={v} value={v}>{l}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Brand</Label>
+                <Select value={form.brand} onValueChange={(v) => setForm({ ...form, brand: v as Brand })}>
+                  <SelectTrigger><SelectValue placeholder="Select brand" /></SelectTrigger>
+                  <SelectContent>
+                    {BRANDS.map((b) => (
+                      <SelectItem key={b} value={b}>{b}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="description">Description</Label>

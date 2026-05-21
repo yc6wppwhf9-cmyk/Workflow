@@ -2,7 +2,6 @@
 -- PLM System — Full Database Schema
 -- ============================================================
 
--- Enable UUID extension
 create extension if not exists "uuid-ossp";
 
 -- ============================================================
@@ -21,10 +20,6 @@ create type workflow_stage as enum (
   'marketing_ready',
   'sales_priced',
   'product_live'
-);
-
-create type product_category as enum (
-  'bag', 'luggage', 'backpack', 'wallet', 'accessory', 'other'
 );
 
 -- ============================================================
@@ -51,7 +46,8 @@ create table products (
   id              uuid primary key default uuid_generate_v4(),
   name            text not null,
   sku             text unique not null,
-  category        product_category not null default 'bag',
+  category        text not null default 'junior-backpacks',  -- free text, validated in app
+  brand           text,
   description     text,
   workflow_stage  workflow_stage not null default 'draft',
   is_locked       boolean not null default false,
@@ -85,17 +81,36 @@ create table design_data (
 -- ============================================================
 
 create table merchandising_data (
-  id              uuid primary key default uuid_generate_v4(),
-  product_id      uuid not null references products(id) on delete cascade,
-  dimensions      jsonb,       -- { length, width, height, unit }
-  compartments    text,
-  materials       text[],
-  volume          text,
-  weight          text,
-  is_completed    boolean not null default false,
-  is_locked       boolean not null default false,
-  updated_by      uuid references profiles(id),
-  updated_at      timestamptz not null default now(),
+  id                  uuid primary key default uuid_generate_v4(),
+  product_id          uuid not null references products(id) on delete cascade,
+  -- Physical specs
+  dimensions          jsonb,    -- { length, width, height, unit }
+  compartments        text,
+  materials           text[],
+  volume              text,
+  weight              text,
+  -- Detail fields (from ATTRIBUTES FORMAT sheet)
+  color_code          text,
+  height              text,
+  number_of_zips      text,
+  pocket_compartments text,
+  main_compartments   text,
+  unique_purpose      text,
+  laptop_compartment  text,
+  rain_cover          text,
+  back_padded         text,
+  season_year         text,
+  bottle_slot         text,
+  character_name      text,
+  theme               text,
+  main_material       text,
+  material_spec       text,
+  -- Colour variants (from Excel upload, includes per-variant BOM)
+  colour_variants     jsonb default '[]'::jsonb,
+  is_completed        boolean not null default false,
+  is_locked           boolean not null default false,
+  updated_by          uuid references profiles(id),
+  updated_at          timestamptz not null default now(),
   unique(product_id)
 );
 
@@ -106,7 +121,7 @@ create table merchandising_data (
 create table bom_data (
   id              uuid primary key default uuid_generate_v4(),
   product_id      uuid not null references products(id) on delete cascade,
-  items           jsonb[],     -- [{ inv_code, inv_name, quantity, unit }]
+  items           jsonb,   -- [{ inv_code, inv_name, quantity, unit }]
   is_completed    boolean not null default false,
   is_locked       boolean not null default false,
   updated_by      uuid references profiles(id),
@@ -164,6 +179,7 @@ create table product_files (
   file_size     bigint,
   department    user_role,
   uploaded_by   uuid references profiles(id),
+  colour_tag    text,    -- links image to a specific colour variant
   created_at    timestamptz not null default now()
 );
 
@@ -271,16 +287,16 @@ alter table product_files enable row level security;
 alter table activity_logs enable row level security;
 alter table stage_unlock_requests enable row level security;
 
--- Profiles: users can read all, only update own
+-- Profiles
 create policy "profiles_select" on profiles for select using (true);
 create policy "profiles_update_own" on profiles for update using (auth.uid() = id);
 
--- Products: all authenticated users can read
+-- Products
 create policy "products_select" on products for select using (auth.role() = 'authenticated');
 create policy "products_insert" on products for insert with check (auth.role() = 'authenticated');
 create policy "products_update" on products for update using (auth.role() = 'authenticated');
 
--- Design data: design team and admin can edit
+-- Design data
 create policy "design_select" on design_data for select using (auth.role() = 'authenticated');
 create policy "design_update" on design_data for update using (
   exists (select 1 from profiles where id = auth.uid() and role in ('admin', 'design'))
@@ -310,7 +326,7 @@ create policy "sales_update" on sales_data for update using (
   exists (select 1 from profiles where id = auth.uid() and role in ('admin', 'sales'))
 );
 
--- Files: all can read, upload own department
+-- Files
 create policy "files_select" on product_files for select using (auth.role() = 'authenticated');
 create policy "files_insert" on product_files for insert with check (auth.role() = 'authenticated');
 create policy "files_delete" on product_files for delete using (
@@ -318,7 +334,7 @@ create policy "files_delete" on product_files for delete using (
   exists (select 1 from profiles where id = auth.uid() and role = 'admin')
 );
 
--- Activity logs: read all, insert own
+-- Activity logs
 create policy "logs_select" on activity_logs for select using (auth.role() = 'authenticated');
 create policy "logs_insert" on activity_logs for insert with check (auth.role() = 'authenticated');
 
@@ -330,16 +346,28 @@ create policy "unlock_update" on stage_unlock_requests for update using (
 );
 
 -- ============================================================
--- STORAGE BUCKET (run after enabling Storage in dashboard)
+-- STORAGE BUCKET
 -- ============================================================
 
--- insert into storage.buckets (id, name, public) values ('product-files', 'product-files', false);
+insert into storage.buckets (id, name, public)
+values ('product-files', 'product-files', true)
+on conflict (id) do nothing;
+
+create policy "product_files_upload" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'product-files');
+
+create policy "product_files_update" on storage.objects
+  for update to authenticated
+  using (bucket_id = 'product-files');
+
+create policy "product_files_read" on storage.objects
+  for select using (bucket_id = 'product-files');
 
 -- ============================================================
 -- TRANSACTIONAL RPC FUNCTIONS
 -- ============================================================
 
--- Function to advance a product stage and log the activity in a single transaction
 create or replace function advance_product_stage(
   p_product_id uuid,
   p_next_stage workflow_stage,
@@ -351,18 +379,13 @@ declare
   v_current_stage workflow_stage;
   v_role user_role;
 begin
-  -- Verify the calling user is the one specified
   if auth.uid() <> p_user_id then
     raise exception 'Unauthorized user ID';
   end if;
 
-  -- Fetch user role
   select role into v_role from profiles where id = p_user_id;
-
-  -- Fetch current stage of the product
   select workflow_stage into v_current_stage from products where id = p_product_id;
 
-  -- Check if user is admin, or is the owner of the current stage
   if v_role <> 'admin' then
     if v_current_stage = 'draft' and v_role <> 'design' then
       raise exception 'Only design team or admin can advance from draft';
@@ -379,20 +402,15 @@ begin
     end if;
   end if;
 
-  -- Update product stage
   update products
-  set workflow_stage = p_next_stage,
-      updated_by = p_user_id,
-      updated_at = now()
+  set workflow_stage = p_next_stage, updated_by = p_user_id, updated_at = now()
   where id = p_product_id;
 
-  -- Insert activity log
   insert into activity_logs (product_id, user_id, action, department)
   values (p_product_id, p_user_id, p_action, p_department);
 end;
 $$ language plpgsql security definer;
 
--- Function to unlock/revert a product stage and log the activity in a single transaction
 create or replace function unlock_product_stage(
   p_product_id uuid,
   p_prev_stage workflow_stage,
@@ -403,29 +421,21 @@ create or replace function unlock_product_stage(
 declare
   v_role user_role;
 begin
-  -- Verify the calling user is the one specified
   if auth.uid() <> p_user_id then
     raise exception 'Unauthorized user ID';
   end if;
 
-  -- Fetch user role
   select role into v_role from profiles where id = p_user_id;
 
-  -- Only admin can unlock stages directly
   if v_role <> 'admin' then
     raise exception 'Only admin can unlock stages directly';
   end if;
 
-  -- Update product stage
   update products
-  set workflow_stage = p_prev_stage,
-      updated_by = p_user_id,
-      updated_at = now()
+  set workflow_stage = p_prev_stage, updated_by = p_user_id, updated_at = now()
   where id = p_product_id;
 
-  -- Insert activity log
   insert into activity_logs (product_id, user_id, action, department)
   values (p_product_id, p_user_id, p_action, p_department);
 end;
 $$ language plpgsql security definer;
-

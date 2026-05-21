@@ -53,6 +53,23 @@ export interface DesignData {
   updated_at: string
 }
 
+export interface ColourVariant {
+  styleName: string
+  colourTag: string
+  color: string
+  weight: string
+  dimensions: { length?: string; width?: string; height?: string; unit?: string }
+  materials: string[]
+  mainCompartment: string
+  pocketCompartment: string
+  bottleSlot: string
+  laptopCompartment: string
+  uniquePurpose: string
+  seasonYear: string
+  character: string
+  theme: string
+}
+
 export interface MerchandisingData {
   id: string
   product_id: string
@@ -61,6 +78,7 @@ export interface MerchandisingData {
   materials: string[] | null
   volume: string | null
   weight: string | null
+  colour_variants: ColourVariant[] | null
   is_completed: boolean
   is_locked: boolean
   updated_by: string | null
@@ -120,6 +138,7 @@ export interface ProductFile {
   file_size: number | null
   department: UserRole | null
   uploaded_by: string | null
+  colour_tag: string | null
   created_at: string
   uploader?: Profile
 }

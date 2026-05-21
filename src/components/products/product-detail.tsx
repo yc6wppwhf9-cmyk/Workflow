@@ -13,6 +13,7 @@ import { MarketingTab } from '@/components/products/tabs/marketing-tab'
 import { SalesTab } from '@/components/products/tabs/sales-tab'
 import { FilesTab } from '@/components/products/tabs/files-tab'
 import { TimelineTab } from '@/components/products/tabs/timeline-tab'
+import { ColourVariantsTab } from '@/components/products/tabs/colour-variants-tab'
 import { cn } from '@/lib/utils'
 import type {
   Product, Profile, DesignData, MerchandisingData,
@@ -35,6 +36,7 @@ const TABS = [
   { value: 'overview', label: 'Overview' },
   { value: 'design', label: 'Design' },
   { value: 'merchandising', label: 'Merchandising' },
+  { value: 'colours', label: 'Colours' },
   { value: 'bom', label: 'BOM' },
   { value: 'marketing', label: 'Marketing' },
   { value: 'sales', label: 'Sales' },
@@ -139,6 +141,12 @@ export function ProductDetail({
           </TabsPrimitive.Content>
           <TabsPrimitive.Content value="merchandising">
             <MerchandisingTab product={product} profile={profile} data={merchandisingData} />
+          </TabsPrimitive.Content>
+          <TabsPrimitive.Content value="colours">
+            <ColourVariantsTab
+              variants={merchandisingData?.colour_variants || []}
+              files={files}
+            />
           </TabsPrimitive.Content>
           <TabsPrimitive.Content value="bom">
             <BomTab product={product} profile={profile} data={bomData} />

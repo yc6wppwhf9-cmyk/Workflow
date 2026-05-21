@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { createClient } from '@/lib/supabase/client'
+import { parseMerchExcel, filterSkusForProduct, aggregateMerchFields, buildColourVariants, extractColorTag } from '@/lib/parse-merch-excel'
 import type { Product, Profile, MerchandisingData } from '@/lib/types'
 
 interface MerchandisingTabProps {
@@ -35,6 +36,7 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
   // Excel upload state
   const excelInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState('')
   const [uploadResult, setUploadResult] = useState<{
     skus_found: number
     skus_matched: number
@@ -74,26 +76,181 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
     setUploading(true)
     setUploadResult(null)
 
-    const fd = new FormData()
-    fd.append('file', file)
-    fd.append('product_id', product.id)
-    fd.append('product_name', product.name)
+    const errors: string[] = []
+    let images_uploaded = 0
 
-    const res = await fetch('/api/upload-merch-excel', { method: 'POST', body: fd })
-    const json = await res.json()
+    try {
+      // ── 1. Parse Excel in the browser (no server upload needed) ─────────────
+      setUploadProgress('Parsing Excel...')
+      const arrayBuffer = await file.arrayBuffer()
+      const parsed = parseMerchExcel(arrayBuffer, product.name)
 
-    if (json.success) {
-      setUploadResult(json.results)
-      router.refresh()
-    } else {
+      const relevantSkus = filterSkusForProduct(parsed.skus, product.name)
+      const otherProducts = parsed.skus
+        .filter(s => !relevantSkus.includes(s))
+        .map(s => s.styleName)
+        .filter((v, i, a) => a.indexOf(v) === i)
+
+      const colourVariants = buildColourVariants(relevantSkus, product.name)
+      const colourTags = colourVariants.map(v => v.colourTag)
+      const merch_fields = relevantSkus.length > 0 ? aggregateMerchFields(relevantSkus) : null
+      const primarySku = relevantSkus[0]
+
+      // ── 2. Extract images + colour mapping via JSZip ─────────────────────────
+      setUploadProgress('Extracting images...')
+      type ImgEntry = { name: string; bytes: Uint8Array; mimeType: string; colourTag: string | null }
+      const imagesToUpload: ImgEntry[] = []
+
+      try {
+        const { default: JSZip } = await import('jszip')
+        const zip = await JSZip.loadAsync(arrayBuffer)
+
+        // Find drawing with the most images (DETAILS PICS sheet)
+        let bestDrawing = ''
+        let bestRels = ''
+        let bestCount = 0
+        for (let i = 1; i <= 10; i++) {
+          const relsFile = zip.file(`xl/drawings/_rels/drawing${i}.xml.rels`)
+          if (!relsFile) break
+          const relsText = await relsFile.async('string')
+          const count = (relsText.match(/Target="\.\.\/media\//g) || []).length
+          if (count > bestCount) { bestCount = count; bestDrawing = `xl/drawings/drawing${i}.xml`; bestRels = `xl/drawings/_rels/drawing${i}.xml.rels` }
+        }
+
+        // Build rId → filename map
+        const rIdToFile: Record<string, string> = {}
+        if (bestRels) {
+          const relsText = await zip.file(bestRels)!.async('string')
+          for (const m of relsText.matchAll(/Id="(rId\d+)"[^>]*Target="\.\.\/media\/(image\d+\.\w+)"/g)) {
+            rIdToFile[m[1]] = m[2]
+          }
+        }
+
+        // Parse image row positions from drawing XML
+        const imageColourMap = new Map<string, string>()
+        if (bestDrawing) {
+          const drawingText = await zip.file(bestDrawing)!.async('string')
+          const anchors = [...drawingText.matchAll(/<xdr:twoCellAnchor[^>]*>([\s\S]*?)<\/xdr:twoCellAnchor>/g)]
+          const positions: Array<{ row: number; file: string }> = []
+          for (const anchor of anchors) {
+            const rowMatch = anchor[1].match(/<xdr:from>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/)
+            const rIdMatch = anchor[1].match(/r:embed="(rId\d+)"/)
+            if (rowMatch && rIdMatch) {
+              const f = rIdToFile[rIdMatch[1]]
+              if (f) positions.push({ row: parseInt(rowMatch[1]), file: f })
+            }
+          }
+          const uniqueRows = [...new Set(positions.map(p => p.row))].sort((a, b) => a - b)
+          for (const pos of positions) {
+            const idx = uniqueRows.indexOf(pos.row)
+            if (idx < colourTags.length) imageColourMap.set(pos.file, colourTags[idx])
+          }
+        }
+
+        // Collect relevant images (those in imageColourMap, or all if no map)
+        const mediaFiles = Object.keys(zip.files).filter(p =>
+          p.startsWith('xl/media/') && /\.(png|jpg|jpeg|gif|bmp)$/i.test(p)
+        )
+        const filesToUpload = imageColourMap.size > 0
+          ? mediaFiles.filter(p => imageColourMap.has(p.split('/').pop() || ''))
+          : mediaFiles
+
+        for (const path of filesToUpload) {
+          const bytes = await zip.file(path)!.async('uint8array')
+          const name = path.split('/').pop()!
+          const ext = name.split('.').pop()?.toLowerCase() || 'jpg'
+          const mimeType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`
+          const colourTag = imageColourMap.get(name) || null
+          imagesToUpload.push({ name, bytes, mimeType, colourTag })
+        }
+      } catch (imgErr) {
+        errors.push('Image extraction failed: ' + String(imgErr))
+      }
+
+      // ── 3. Upload images browser → Supabase Storage ──────────────────────────
+      const supabase = createClient()
+      const ts = Date.now()
+      const fileRecords: Array<{
+        product_id: string; name: string; file_url: string; file_type: string
+        file_size: number; department: string; uploaded_by: string; colour_tag: string | null
+      }> = []
+
+      for (let i = 0; i < imagesToUpload.length; i++) {
+        const img = imagesToUpload[i]
+        setUploadProgress(`Uploading images (${i + 1}/${imagesToUpload.length})...`)
+        const storagePath = `${product.id}/merch_${ts}_${i}_${img.name}`
+        const { error: uploadError } = await supabase.storage
+          .from('product-files')
+          .upload(storagePath, img.bytes, { contentType: img.mimeType, upsert: true })
+        if (uploadError) { errors.push(`Image failed: ${img.name}`); continue }
+        const { data: { publicUrl } } = supabase.storage.from('product-files').getPublicUrl(storagePath)
+        fileRecords.push({
+          product_id: product.id, name: img.name, file_url: publicUrl,
+          file_type: img.mimeType, file_size: img.bytes.length,
+          department: 'merchandising', uploaded_by: profile.id, colour_tag: img.colourTag,
+        })
+        images_uploaded++
+      }
+
+      // Upload the Excel file itself
+      setUploadProgress('Saving records...')
+      const excelPath = `${product.id}/merch_excel_${ts}_${file.name}`
+      const { error: excelErr } = await supabase.storage.from('product-files')
+        .upload(excelPath, arrayBuffer, {
+          contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', upsert: true,
+        })
+      if (!excelErr) {
+        const { data: { publicUrl } } = supabase.storage.from('product-files').getPublicUrl(excelPath)
+        fileRecords.push({
+          product_id: product.id, name: file.name, file_url: publicUrl,
+          file_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          file_size: file.size, department: 'merchandising', uploaded_by: profile.id, colour_tag: null,
+        })
+      }
+
+      if (fileRecords.length > 0) {
+        await supabase.from('product_files').insert(fileRecords)
+      }
+
+      // ── 4. Send parsed data to server for DB updates ─────────────────────────
+      setUploadProgress('Updating product data...')
+      const colourSummary = colourTags.join(', ')
+      await fetch('/api/upload-merch-excel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_id: product.id,
+          merch_fields,
+          bom_items: parsed.bomItems,
+          colour_variants: colourVariants,
+          designer_name: primarySku?.designerName || null,
+          sample_color: colourTags.join(', ') || null,
+          summary: `uploaded merchandising Excel "${file.name}" — ${relevantSkus.length} variant(s) matched (${colourSummary}), ${parsed.bomItems.length} BOM items, ${images_uploaded} images`,
+        }),
+      })
+
+      setUploadResult({
+        skus_found: parsed.skus.length,
+        skus_matched: relevantSkus.length,
+        colors_found: colourTags,
+        other_products_in_file: otherProducts,
+        bom_items_found: parsed.bomItems.length,
+        images_uploaded,
+        fields_updated: merch_fields ? ['dimensions', 'compartments', 'materials', 'weight', 'colour_variants'] : [],
+        errors,
+      })
+    } catch (err) {
       setUploadResult({
         skus_found: 0, skus_matched: 0, colors_found: [], other_products_in_file: [],
-        bom_items_found: 0, images_uploaded: 0, fields_updated: [], errors: [json.error || 'Upload failed'],
+        bom_items_found: 0, images_uploaded, fields_updated: [],
+        errors: ['Unexpected error: ' + String(err)],
       })
     }
 
+    setUploadProgress('')
     setUploading(false)
     if (excelInputRef.current) excelInputRef.current.value = ''
+    router.refresh()
   }
 
   async function markComplete() {
@@ -125,15 +282,20 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
                   <p className="text-xs text-green-700">Extracts specs, BOM &amp; images — matches variants of <span className="font-medium">{product.name}</span> automatically</p>
                 </div>
               </div>
-              <Button
-                size="sm"
-                onClick={() => excelInputRef.current?.click()}
-                disabled={uploading}
-                className="bg-green-600 hover:bg-green-700 shrink-0"
-              >
-                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                {uploading ? 'Processing...' : 'Upload Excel'}
-              </Button>
+              <div className="flex flex-col items-end gap-1 shrink-0">
+                <Button
+                  size="sm"
+                  onClick={() => excelInputRef.current?.click()}
+                  disabled={uploading}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  {uploading ? 'Uploading...' : 'Upload Excel'}
+                </Button>
+                {uploadProgress && (
+                  <p className="text-xs text-green-700 font-medium">{uploadProgress}</p>
+                )}
+              </div>
               <input
                 ref={excelInputRef}
                 type="file"

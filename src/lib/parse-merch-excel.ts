@@ -41,22 +41,22 @@ export interface ParsedImage {
   extension: string
 }
 
-export function parseMerchExcel(buffer: ArrayBuffer): ParsedMerchData {
+// Strip "FC * " / "FC*" style prefixes then normalise whitespace
+export function normaliseStyleName(s: string) {
+  return s.replace(/^[A-Z0-9]+\s*\*\s*/i, '').toLowerCase().replace(/\s+/g, ' ').trim()
+}
+
+export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): ParsedMerchData {
   const workbook = XLSX.read(buffer, { type: 'array', cellStyles: true })
 
   const skus: ParsedSKU[] = []
-  const bomItems: ParsedBOMItem[] = []
+  let bomItems: ParsedBOMItem[] = []
   const images: ParsedImage[] = []
 
-  // ── Parse ATTRIBUTES FORMAT sheet ────────────────────────
+  // ── Parse ATTRIBUTES FORMAT sheet ─────────────────────────────────────────
   const attrSheet = workbook.Sheets['ATTRIBUTES FORMAT']
   if (attrSheet) {
     const rows = XLSX.utils.sheet_to_json<string[]>(attrSheet, { header: 1, defval: '' }) as string[][]
-
-    // Each SKU occupies 3 columns (label, value, empty), repeating across
-    // Find number of SKU columns
-    const headerRow = rows[0] || []
-    const skuCount = Math.ceil(headerRow.filter((_, i) => i % 3 === 0 && headerRow[i]).length)
 
     const fieldMap: Record<string, keyof ParsedSKU> = {
       'WEIGHT (GM)': 'weight',
@@ -81,12 +81,13 @@ export function parseMerchExcel(buffer: ArrayBuffer): ParsedMerchData {
       'DESIGNER NAME': 'designerName',
     }
 
-    // Count valid SKU columns (every 3rd column starting at 0)
+    // Each SKU occupies 3 columns (label, value, empty)
     const numColumns = Math.floor((rows[0]?.length || 0) / 3)
 
     for (let col = 0; col < numColumns; col++) {
       const baseCol = col * 3
       const styleName = String(rows[0]?.[baseCol] || '').trim()
+      // Skip empty or placeholder columns (value 0)
       if (!styleName || styleName === '0') continue
 
       const sku: ParsedSKU = {
@@ -98,9 +99,9 @@ export function parseMerchExcel(buffer: ArrayBuffer): ParsedMerchData {
       }
 
       for (let row = 1; row < rows.length; row++) {
-        const label = String(rows[row]?.[baseCol] || '').trim().toUpperCase()
+        const label = String(rows[row]?.[baseCol] || '').trim()
         const value = String(rows[row]?.[baseCol + 1] || '').trim()
-        const field = fieldMap[label] || fieldMap[String(rows[row]?.[baseCol] || '').trim()]
+        const field = fieldMap[label] || fieldMap[label.toUpperCase()]
         if (field && value && value !== '0') {
           sku[field] = value
         }
@@ -110,28 +111,45 @@ export function parseMerchExcel(buffer: ArrayBuffer): ParsedMerchData {
     }
   }
 
-  // ── Parse INV SHEET RM for BOM items ─────────────────────
+  // ── Parse INV SHEET RM ────────────────────────────────────────────────────
+  // Format: row N has header [ITEM NAME, SKU1_styleName, SKU2_styleName, ...]
+  //         rows N+1... have  [material_name, code_for_SKU1, code_for_SKU2, ...]
   const invSheet = workbook.Sheets['INV SHEET RM']
   if (invSheet) {
     const rows = XLSX.utils.sheet_to_json<string[]>(invSheet, { header: 1, defval: '' }) as string[][]
 
-    // Find the header row (contains "ITEM NAME")
-    let dataStartRow = -1
+    let headerRowIdx = -1
+    let productColIdx = 1  // default to first product column
+
     for (let i = 0; i < rows.length; i++) {
       if (String(rows[i]?.[0] || '').toUpperCase().includes('ITEM NAME')) {
-        dataStartRow = i + 1
+        headerRowIdx = i
+        // Find which column matches the requested product name
+        if (productName) {
+          const pnNorm = productName.toLowerCase().replace(/\s+/g, ' ').trim()
+          for (let c = 1; c < rows[i].length; c++) {
+            const cellNorm = normaliseStyleName(String(rows[i][c] || ''))
+            if (cellNorm.startsWith(pnNorm) || pnNorm.startsWith(cellNorm)) {
+              productColIdx = c
+              break
+            }
+          }
+        }
         break
       }
     }
 
-    if (dataStartRow > 0) {
-      for (let i = dataStartRow; i < rows.length; i++) {
+    if (headerRowIdx >= 0) {
+      for (let i = headerRowIdx + 1; i < rows.length; i++) {
         const itemName = String(rows[i]?.[0] || '').trim()
-        const invCode = String(rows[i]?.[1] || '').trim()
-        if (!itemName || !invCode || invCode === '0') continue
+        if (!itemName) continue
+
+        const invCode = String(rows[i]?.[productColIdx] || '').trim()
+        // Skip NA, 0, empty
+        if (!invCode || invCode === '0' || invCode.toUpperCase() === 'NA') continue
 
         bomItems.push({
-          inv_code: invCode.split(' ')[0] || invCode,
+          inv_code: invCode,
           inv_name: itemName,
           quantity: '1',
           unit: 'pcs',
@@ -140,22 +158,61 @@ export function parseMerchExcel(buffer: ArrayBuffer): ParsedMerchData {
     }
   }
 
-  // ── Extract embedded images from xlsx binary ──────────────
-  // xlsx files are ZIP archives — images are in xl/media/
-  try {
-    const uint8 = new Uint8Array(buffer)
-    // Find PK signature (ZIP)
-    if (uint8[0] === 0x50 && uint8[1] === 0x4B) {
-      // We'll handle image extraction server-side via the upload API
-      // Mark that images exist for the API to process
-    }
-  } catch (_) {}
-
   return { skus, bomItems, images }
 }
 
-export function skuToMerchFields(sku: ParsedSKU) {
-  // Parse dimension string like "16\"/ 12\"/ 08\""
+export function filterSkusForProduct(skus: ParsedSKU[], productName: string): ParsedSKU[] {
+  const pn = productName.toLowerCase().replace(/\s+/g, ' ').trim()
+  const matched = skus.filter(s => {
+    const sn = normaliseStyleName(s.styleName)
+    return sn === pn || sn.startsWith(pn) || pn.startsWith(sn)
+  })
+  return matched.length > 0 ? matched : skus
+}
+
+export function extractColorTag(styleName: string, productBaseName: string): string {
+  const cleaned = styleName.replace(/^[A-Z0-9]+\s*\*\s*/i, '').trim()
+  const base = productBaseName.trim()
+  if (cleaned.toLowerCase().startsWith(base.toLowerCase())) {
+    const color = cleaned.slice(base.length).trim()
+    if (color) return color
+  }
+  return cleaned
+}
+
+export function buildColourVariants(skus: ParsedSKU[], productName: string) {
+  return skus.map(sku => {
+    const colourTag = sku.color || extractColorTag(sku.styleName, productName)
+    const dimParts = sku.dimensions.replace(/"/g, '').split('/').map(s => s.trim())
+    return {
+      styleName: sku.styleName,
+      colourTag,
+      color: sku.color,
+      weight: sku.weight,
+      dimensions: {
+        length: dimParts[0] || '',
+        width: dimParts[1] || '',
+        height: dimParts[2] || sku.height || '',
+        unit: 'inches',
+      },
+      materials: [sku.mainMaterial, sku.material].filter(Boolean),
+      mainCompartment: sku.mainCompartment,
+      pocketCompartment: sku.pocketCompartment,
+      bottleSlot: sku.bottleSlot,
+      laptopCompartment: sku.laptopCompartment,
+      uniquePurpose: sku.uniquePurpose,
+      seasonYear: sku.seasonYear,
+      character: sku.character,
+      theme: sku.theme,
+    }
+  })
+}
+
+export function aggregateMerchFields(skus: ParsedSKU[]) {
+  return skuToMerchFields(skus[0], [...new Set(skus.flatMap(s => [s.mainMaterial, s.material].filter(Boolean)))])
+}
+
+export function skuToMerchFields(sku: ParsedSKU, overrideMaterials?: string[]) {
   const dimParts = sku.dimensions.replace(/"/g, '').split('/').map(s => s.trim())
 
   return {
@@ -172,7 +229,7 @@ export function skuToMerchFields(sku: ParsedSKU) {
       sku.laptopCompartment && `Laptop: ${sku.laptopCompartment}`,
       sku.rainCover && sku.rainCover !== 'NA' && `Rain cover: ${sku.rainCover}`,
     ].filter(Boolean).join(' | '),
-    materials: [sku.mainMaterial, sku.material].filter(Boolean),
+    materials: overrideMaterials || [sku.mainMaterial, sku.material].filter(Boolean),
     volume: '',
     weight: sku.weight,
     unique_feature: [

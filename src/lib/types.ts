@@ -123,6 +123,22 @@ export interface MerchandisingData {
   volume: string | null
   weight: string | null
   colour_variants: ColourVariant[] | null
+  // Per-variant fields (aggregated from primary variant)
+  color_code: string | null
+  height: string | null
+  number_of_zips: string | null
+  pocket_compartments: string | null
+  main_compartments: string | null
+  unique_purpose: string | null
+  laptop_compartment: string | null
+  rain_cover: string | null
+  back_padded: string | null
+  season_year: string | null
+  bottle_slot: string | null
+  character_name: string | null
+  theme: string | null
+  main_material: string | null
+  material_spec: string | null
   is_completed: boolean
   is_locked: boolean
   updated_by: string | null

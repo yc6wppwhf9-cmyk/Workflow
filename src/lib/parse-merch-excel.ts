@@ -219,24 +219,40 @@ export function aggregateMerchFields(skus: ParsedSKU[]) {
 }
 
 export function skuToMerchFields(sku: ParsedSKU, overrideMaterials?: string[]) {
+  // HEIGHT (In) in the Excel = L dimension
   const dimParts = sku.dimensions.replace(/"/g, '').split('/').map(s => s.trim())
+  const length = dimParts[0] || sku.height.replace(/"/g, '').trim() || ''
 
   return {
     dimensions: {
-      length: dimParts[0] || '',
+      length,
       width: dimParts[1] || '',
-      height: dimParts[2] || sku.height || '',
+      height: dimParts[2] || '',  // D (depth) in L W D
       unit: 'inches',
     },
     compartments: [
-      sku.mainCompartment && `Main compartments: ${sku.mainCompartment}`,
-      sku.pocketCompartment && `Pocket compartments: ${sku.pocketCompartment}`,
-      sku.bottleSlot && `Bottle slots: ${sku.bottleSlot}`,
-      sku.laptopCompartment && `Laptop: ${sku.laptopCompartment}`,
-      sku.rainCover && sku.rainCover !== 'NA' && `Rain cover: ${sku.rainCover}`,
+      sku.mainCompartment && `Main: ${sku.mainCompartment}`,
+      sku.pocketCompartment && `Pocket: ${sku.pocketCompartment}`,
+      sku.bottleSlot && `Bottle: ${sku.bottleSlot}`,
+      sku.laptopCompartment && sku.laptopCompartment !== 'NA' && `Laptop: ${sku.laptopCompartment}`,
     ].filter(Boolean).join(' | '),
     materials: overrideMaterials || [sku.mainMaterial, sku.material].filter(Boolean),
     volume: '',
-    weight: sku.weight,
+    weight: sku.weight.replace(/gm$/i, '').trim(),
+    // Detail fields
+    color_code: sku.color !== 'NA' ? sku.color : '',
+    number_of_zips: sku.numberOfZips !== 'NA' ? sku.numberOfZips : '',
+    pocket_compartments: sku.pocketCompartment !== 'NA' ? sku.pocketCompartment : '',
+    main_compartments: sku.mainCompartment !== 'NA' ? sku.mainCompartment : '',
+    unique_purpose: sku.uniquePurpose !== 'NA' ? sku.uniquePurpose : '',
+    laptop_compartment: sku.laptopCompartment !== 'NA' ? sku.laptopCompartment : '',
+    rain_cover: sku.rainCover !== 'NA' ? sku.rainCover : '',
+    back_padded: sku.backPadded !== 'NA' ? sku.backPadded : '',
+    season_year: sku.seasonYear !== 'NA' ? sku.seasonYear : '',
+    bottle_slot: sku.bottleSlot !== 'NA' ? sku.bottleSlot : '',
+    character_name: sku.character !== 'NA' ? sku.character : '',
+    theme: sku.theme !== 'NA' ? sku.theme : '',
+    main_material: sku.mainMaterial !== 'NA' ? sku.mainMaterial : '',
+    material_spec: sku.material !== 'NA' ? sku.material : '',
   }
 }

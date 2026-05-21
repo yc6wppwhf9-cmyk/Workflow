@@ -17,40 +17,72 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { product_id, merch_fields, colour_variants, designer_name, sample_color, summary, cutting_items } = body
+  const { product_id, merch_fields, colour_variants, designer_name, sample_color, summary, cutting_items, extracted_product_name } = body
 
   if (!product_id) return NextResponse.json({ error: 'Missing product_id' }, { status: 400 })
+
+  // Check if attribute data already exists (determines Attribute vs Production version)
+  const { data: existingMerch } = await supabase
+    .from('merchandising_data')
+    .select('weight')
+    .eq('product_id', product_id)
+    .single()
+
+  const isReupload = !!existingMerch?.weight
+  const version_saved: 'attribute' | 'production' = isReupload ? 'production' : 'attribute'
 
   const updates: PromiseLike<unknown>[] = []
   const fields_updated: string[] = []
 
   if (merch_fields) {
-    updates.push(
-      supabase.from('merchandising_data').update({
-        ...merch_fields,
-        colour_variants: colour_variants || [],
-        updated_by: user.id,
-      }).eq('product_id', product_id)
-    )
-    fields_updated.push('dimensions', 'compartments', 'materials', 'weight', 'colour_variants')
+    if (isReupload) {
+      // Save revised data as production version, keep attribute untouched
+      updates.push(
+        supabase.from('merchandising_data').update({
+          production_fields: { ...merch_fields, colour_variants: colour_variants || [] },
+          updated_by: user.id,
+        }).eq('product_id', product_id)
+      )
+      fields_updated.push('production_fields')
+    } else {
+      // First upload — save as attribute version
+      updates.push(
+        supabase.from('merchandising_data').update({
+          ...merch_fields,
+          colour_variants: colour_variants || [],
+          updated_by: user.id,
+        }).eq('product_id', product_id)
+      )
+      fields_updated.push('dimensions', 'compartments', 'materials', 'weight', 'colour_variants')
+    }
   }
 
-  // Pre-populate BOM tab from the primary colour variant's INV items
-  const primaryVariantBom = colour_variants?.[0]?.bomItems
-  if (primaryVariantBom?.length > 0) {
-    let bomItems = primaryVariantBom.map((item: { inv_name: string; inv_code: string }) => ({
-      inv_name: item.inv_name,
-      inv_code: item.inv_code,
-      consumption: '',
-      unit: '',
-    }))
-    if (cutting_items?.length > 0) {
-      bomItems = matchConsumptionToBom(bomItems, cutting_items)
-    }
+  // Update product name from Excel style names (first upload only, or if name looks like a SKU placeholder)
+  if (extracted_product_name && !isReupload) {
     updates.push(
-      supabase.from('bom_data').update({ items: bomItems, updated_by: user.id }).eq('product_id', product_id)
+      supabase.from('products').update({ name: extracted_product_name, updated_by: user.id }).eq('id', product_id)
     )
-    fields_updated.push('bom_items')
+    fields_updated.push('product_name')
+  }
+
+  // Pre-populate BOM tab from the primary colour variant's INV items (attribute upload only)
+  if (!isReupload) {
+    const primaryVariantBom = colour_variants?.[0]?.bomItems
+    if (primaryVariantBom?.length > 0) {
+      let bomItems = primaryVariantBom.map((item: { inv_name: string; inv_code: string }) => ({
+        inv_name: item.inv_name,
+        inv_code: item.inv_code,
+        consumption: '',
+        unit: '',
+      }))
+      if (cutting_items?.length > 0) {
+        bomItems = matchConsumptionToBom(bomItems, cutting_items)
+      }
+      updates.push(
+        supabase.from('bom_data').update({ items: bomItems, updated_by: user.id }).eq('product_id', product_id)
+      )
+      fields_updated.push('bom_items')
+    }
   }
 
   if (designer_name) {
@@ -67,9 +99,9 @@ export async function POST(req: NextRequest) {
   await supabase.from('activity_logs').insert({
     product_id,
     user_id: user.id,
-    action: summary || `uploaded merchandising Excel`,
+    action: summary || `uploaded merchandising Excel (${version_saved})`,
     department: 'merchandising',
   })
 
-  return NextResponse.json({ success: true, fields_updated })
+  return NextResponse.json({ success: true, fields_updated, version_saved })
 }

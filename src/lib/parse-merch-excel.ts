@@ -203,6 +203,19 @@ export function extractColorTag(styleName: string, productBaseName: string): str
   return cleaned
 }
 
+export function extractProductBaseName(skus: ParsedSKU[]): string {
+  if (skus.length === 0) return ''
+  const names = skus.map(s => s.styleName.replace(/^[A-Z0-9]+\s*\*\s*/i, '').trim())
+  if (names.length === 1) return names[0]
+  let prefix = names[0]
+  for (const name of names.slice(1)) {
+    let i = 0
+    while (i < prefix.length && i < name.length && prefix[i].toLowerCase() === name[i].toLowerCase()) i++
+    prefix = prefix.slice(0, i)
+  }
+  return prefix.trim()
+}
+
 export function buildColourVariants(
   skus: ParsedSKU[],
   productName: string,

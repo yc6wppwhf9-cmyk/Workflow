@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
-import { parseMerchExcel, filterSkusForProduct, aggregateMerchFields, buildColourVariants } from '@/lib/parse-merch-excel'
+import { parseMerchExcel, filterSkusForProduct, aggregateMerchFields, buildColourVariants, extractProductBaseName } from '@/lib/parse-merch-excel'
 import type { Product, Profile, MerchandisingData } from '@/lib/types'
 
 interface MerchandisingTabProps {
@@ -67,7 +67,14 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
   const router = useRouter()
   const canEdit = !data?.is_locked && ['admin', 'merchandising'].includes(profile.role)
 
-  const [form, setForm] = useState<FormState>(() => initForm(data))
+  const [activeVersion, setActiveVersion] = useState<'attribute' | 'production'>('attribute')
+  const [attrForm, setAttrForm] = useState<FormState>(() => initForm(data))
+  const [prodForm, setProdForm] = useState<FormState>(() =>
+    data?.production_fields ? initForm(data.production_fields as unknown as Parameters<typeof initForm>[0]) : initForm(null)
+  )
+  const hasProd = !!data?.production_fields
+  const form = activeVersion === 'attribute' ? attrForm : prodForm
+  const setForm = activeVersion === 'attribute' ? setAttrForm : setProdForm
   const [newMaterial, setNewMaterial] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -79,6 +86,7 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
     skus_found: number; skus_matched: number; colors_found: string[]
     other_products_in_file: string[]; bom_items_found: number
     images_uploaded: number; fields_updated: string[]; errors: string[]
+    version_saved?: 'attribute' | 'production'
   } | null>(null)
 
   function set(field: keyof FormState, value: unknown) {
@@ -88,10 +96,19 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
   async function handleSave() {
     setSaving(true)
     const supabase = createClient()
-    await supabase.from('merchandising_data').update({ ...form, updated_by: profile.id }).eq('product_id', product.id)
+    // If attribute already has data, any manual edit goes to production version
+    const attributeAlreadySet = !!(data?.weight)
+    const savesToProduction = activeVersion === 'production' || attributeAlreadySet
+    if (savesToProduction) {
+      await supabase.from('merchandising_data').update({ production_fields: form, updated_by: profile.id }).eq('product_id', product.id)
+      setProdForm({ ...form })
+      setActiveVersion('production')
+    } else {
+      await supabase.from('merchandising_data').update({ ...attrForm, updated_by: profile.id }).eq('product_id', product.id)
+    }
     await supabase.from('activity_logs').insert({
       product_id: product.id, user_id: profile.id,
-      action: 'updated merchandising data', department: 'merchandising',
+      action: `updated merchandising data (${savesToProduction ? 'production' : 'attribute'})`, department: 'merchandising',
     })
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
@@ -122,6 +139,7 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
       const colourVariants = buildColourVariants(relevantSkus, product.name, parsed.bomByStyle)
       const colourTags = colourVariants.map(v => v.colourTag)
       const merch_fields = relevantSkus.length > 0 ? aggregateMerchFields(relevantSkus) : null
+      const extracted_product_name = extractProductBaseName(relevantSkus)
 
       setUploadProgress('Extracting images...')
       type ImgEntry = { name: string; bytes: Uint8Array; mimeType: string; colourTag: string | null }
@@ -224,11 +242,9 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
 
       if (fileRecords.length > 0) await supabase.from('product_files').insert(fileRecords)
 
-      if (merch_fields) setForm({ ...initForm(null), ...merch_fields } as FormState)
-
       setUploadProgress('Updating product data...')
       const primarySku = relevantSkus[0]
-      await fetch('/api/upload-merch-excel', {
+      const apiRes = await fetch('/api/upload-merch-excel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -238,16 +254,30 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
           designer_name: primarySku?.designerName || null,
           sample_color: colourTags.join(', ') || null,
           cutting_items: parsed.cuttingItems,
+          extracted_product_name: extracted_product_name || null,
           summary: `uploaded merchandising Excel "${file.name}" — ${relevantSkus.length} variant(s) matched, ${parsed.bomItems.length} BOM items, ${images_uploaded} images`,
         }),
       })
+      const apiJson = await apiRes.json()
+      const version_saved: 'attribute' | 'production' = apiJson.version_saved || 'attribute'
+
+      if (merch_fields) {
+        const newForm = { ...initForm(null), ...merch_fields } as FormState
+        if (version_saved === 'production') {
+          setProdForm(newForm)
+          setActiveVersion('production')
+        } else {
+          setAttrForm(newForm)
+          setActiveVersion('attribute')
+        }
+      }
 
       setUploadResult({
         skus_found: parsed.skus.length, skus_matched: relevantSkus.length,
         colors_found: colourTags, other_products_in_file: otherProducts,
         bom_items_found: parsed.bomItems.length, images_uploaded,
         fields_updated: merch_fields ? ['dimensions', 'weight', 'compartments', 'materials', 'colour_variants', '+ all specs'] : [],
-        errors,
+        errors, version_saved,
       })
     } catch (err) {
       setUploadResult({
@@ -318,7 +348,9 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
                   <div className="flex items-start gap-2 text-green-800">
                     <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0 text-green-600" />
                     <div className="text-xs space-y-0.5">
-                      <p className="font-semibold">Import successful!</p>
+                      <p className="font-semibold">
+                        {uploadResult.version_saved === 'production' ? 'Production version created!' : 'Attribute data imported!'}
+                      </p>
                       <p>{uploadResult.skus_matched} of {uploadResult.skus_found} SKU(s) matched · Colors: {uploadResult.colors_found.join(', ')}</p>
                       <p>{uploadResult.bom_items_found} BOM items · {uploadResult.images_uploaded} images uploaded</p>
                     </div>
@@ -340,8 +372,22 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
       )}
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-3">
-          <CardTitle className="text-base">Merchandising Details</CardTitle>
+        <CardHeader className="flex flex-row items-center justify-between pb-0">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setActiveVersion('attribute')}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeVersion === 'attribute' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Attribute
+            </button>
+            <button
+              onClick={() => hasProd && setActiveVersion('production')}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${!hasProd ? 'text-gray-300 cursor-not-allowed' : activeVersion === 'production' ? 'bg-amber-100 text-amber-700' : 'text-gray-500 hover:text-gray-700'}`}
+              title={!hasProd ? 'No production version yet — re-upload the Excel to create one' : undefined}
+            >
+              Production
+            </button>
+          </div>
           {data?.is_locked && (
             <span className="flex items-center gap-1.5 text-xs text-orange-600 bg-orange-50 px-2.5 py-1 rounded-full border border-orange-200">
               <Lock className="h-3 w-3" /> Stage Locked

@@ -59,7 +59,7 @@ export function NewProductButton({ profile }: NewProductButtonProps) {
     const { data: product, error: productErr } = await supabase
       .from('products')
       .insert({
-        name: form.name,
+        name: form.name.trim() || form.sku,
         sku: form.sku,
         category: form.category,
         ...(form.brand && { brand: form.brand }),
@@ -126,13 +126,12 @@ export function NewProductButton({ profile }: NewProductButtonProps) {
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Product</p>
               <div className="grid grid-cols-2 gap-3 mb-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="name">Product Name *</Label>
+                  <Label htmlFor="name">Product Name</Label>
                   <Input
                     id="name"
-                    placeholder="e.g. Explorer 28L Backpack"
+                    placeholder="Leave blank — will be set from the merchandising Excel"
                     value={form.name}
                     onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                    required
                   />
                 </div>
                 <div className="space-y-1.5">

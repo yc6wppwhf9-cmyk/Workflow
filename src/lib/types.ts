@@ -140,6 +140,7 @@ export interface MerchandisingData {
   theme: string | null
   main_material: string | null
   material_spec: string | null
+  production_fields: Record<string, unknown> | null
   is_completed: boolean
   is_locked: boolean
   updated_by: string | null

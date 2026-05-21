@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Lock, Save, Plus, X } from 'lucide-react'
+import { Loader2, Lock, Save, Plus, X, Upload, ExternalLink, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,15 +11,16 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createClient } from '@/lib/supabase/client'
 import { CATEGORY_LABELS, BRANDS, CHANNELS, type ProductCategory, type Brand } from '@/lib/types'
-import type { Product, Profile, DesignData } from '@/lib/types'
+import type { Product, Profile, DesignData, ProductFile } from '@/lib/types'
 
 interface DesignTabProps {
   product: Product
   profile: Profile
   data: DesignData | null
+  files: ProductFile[]
 }
 
-export function DesignTab({ product, profile, data }: DesignTabProps) {
+export function DesignTab({ product, profile, data, files }: DesignTabProps) {
   const router = useRouter()
   const canEdit = !data?.is_locked && ['admin', 'design'].includes(profile.role)
 
@@ -30,12 +31,17 @@ export function DesignTab({ product, profile, data }: DesignTabProps) {
     color_skus: data?.color_skus || [] as string[],
     unique_feature: data?.unique_feature || '',
   })
-  // Product-level fields editable from design tab
   const [category, setCategory] = useState<ProductCategory | ''>(product.category || '')
   const [brand, setBrand] = useState<Brand | ''>(product.brand || '')
   const [newSku, setNewSku] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+
+  const illustrationRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadingName, setUploadingName] = useState('')
+
+  const designFiles = files.filter(f => f.department === 'design' && f.file_type?.startsWith('image/'))
 
   async function handleSave() {
     setSaving(true)
@@ -87,8 +93,119 @@ export function DesignTab({ product, profile, data }: DesignTabProps) {
     router.refresh()
   }
 
+  async function handleIllustrationUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const selectedFiles = Array.from(e.target.files || [])
+    if (selectedFiles.length === 0) return
+
+    setUploading(true)
+    const supabase = createClient()
+    const ts = Date.now()
+
+    for (let i = 0; i < selectedFiles.length; i++) {
+      const file = selectedFiles[i]
+      setUploadingName(file.name)
+      const storagePath = `${product.id}/design_${ts}_${i}_${file.name}`
+      const { error } = await supabase.storage.from('product-files').upload(storagePath, file, { upsert: true })
+      if (!error) {
+        const { data: { publicUrl } } = supabase.storage.from('product-files').getPublicUrl(storagePath)
+        await supabase.from('product_files').insert({
+          product_id: product.id,
+          name: file.name,
+          file_url: publicUrl,
+          file_type: file.type,
+          file_size: file.size,
+          department: 'design',
+          uploaded_by: profile.id,
+        })
+      }
+    }
+
+    await supabase.from('activity_logs').insert({
+      product_id: product.id, user_id: profile.id,
+      action: `uploaded ${selectedFiles.length} illustration(s)`, department: 'design',
+    })
+
+    setUploading(false)
+    setUploadingName('')
+    if (illustrationRef.current) illustrationRef.current.value = ''
+    router.refresh()
+  }
+
+  async function deleteFile(file: ProductFile) {
+    const supabase = createClient()
+    const urlParts = file.file_url.split('/product-files/')
+    if (urlParts[1]) {
+      await supabase.storage.from('product-files').remove([decodeURIComponent(urlParts[1])])
+    }
+    await supabase.from('product_files').delete().eq('id', file.id)
+    router.refresh()
+  }
+
   return (
     <div className="max-w-2xl space-y-4">
+
+      {/* Illustrations */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-3">
+          <CardTitle className="text-base">Illustrations</CardTitle>
+          {canEdit && (
+            <Button size="sm" variant="outline" onClick={() => illustrationRef.current?.click()} disabled={uploading}>
+              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              {uploading ? uploadingName || 'Uploading...' : 'Upload'}
+            </Button>
+          )}
+          <input ref={illustrationRef} type="file" accept="image/*" multiple className="hidden" onChange={handleIllustrationUpload} />
+        </CardHeader>
+        <CardContent>
+          {designFiles.length === 0 ? (
+            <div
+              className={`border-2 border-dashed rounded-xl py-10 text-center ${canEdit ? 'border-gray-200 cursor-pointer hover:border-purple-300 hover:bg-purple-50 transition-colors' : 'border-gray-100'}`}
+              onClick={() => canEdit && illustrationRef.current?.click()}
+            >
+              <Upload className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+              <p className="text-sm text-gray-500 font-medium">Upload design illustrations</p>
+              <p className="text-xs text-gray-400 mt-1">JPG, PNG, GIF, WEBP supported</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="grid grid-cols-3 gap-2">
+                {designFiles.map(file => (
+                  <div key={file.id} className="relative group rounded-lg overflow-hidden border border-gray-200 aspect-video bg-gray-50">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={file.file_url} alt={file.name} className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
+                      <a href={file.file_url} target="_blank" rel="noopener noreferrer"
+                        className="h-7 w-7 rounded-full bg-white flex items-center justify-center hover:bg-gray-100"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <ExternalLink className="h-3.5 w-3.5 text-gray-700" />
+                      </a>
+                      {canEdit && (
+                        <button
+                          className="h-7 w-7 rounded-full bg-white flex items-center justify-center hover:bg-red-50"
+                          onClick={() => deleteFile(file)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                        </button>
+                      )}
+                    </div>
+                    <p className="absolute bottom-0 left-0 right-0 px-2 py-1 text-xs text-white bg-black/50 truncate opacity-0 group-hover:opacity-100 transition-opacity">{file.name}</p>
+                  </div>
+                ))}
+              </div>
+              {canEdit && (
+                <button
+                  onClick={() => illustrationRef.current?.click()}
+                  className="w-full py-2 border border-dashed border-gray-200 rounded-lg text-xs text-gray-400 hover:text-purple-500 hover:border-purple-300 transition-colors"
+                >
+                  + Add more illustrations
+                </button>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="text-base">Design Details</CardTitle>

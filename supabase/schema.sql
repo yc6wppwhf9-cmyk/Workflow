@@ -107,6 +107,8 @@ create table merchandising_data (
   material_spec       text,
   -- Colour variants (from Excel upload, includes per-variant BOM)
   colour_variants     jsonb default '[]'::jsonb,
+  -- Revised Excel upload stored separately; first upload = attribute, re-upload = production
+  production_fields   jsonb,
   is_completed        boolean not null default false,
   is_locked           boolean not null default false,
   updated_by          uuid references profiles(id),

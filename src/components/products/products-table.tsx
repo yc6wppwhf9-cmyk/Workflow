@@ -30,9 +30,12 @@ export function ProductsTable({ products, profile }: ProductsTableProps) {
   const [stageFilter, setStageFilter] = useState<string>('all')
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
 
+  const getDesign = (p: ProductRow) => { const r = p.design_data; return Array.isArray(r) ? r[0] : r }
+  const getBom = (p: ProductRow) => { const r = p.bom_data; return Array.isArray(r) ? r[0] : r }
+
   const filtered = products.filter((p) => {
-    const design = p.design_data?.[0]
-    const bom = p.bom_data?.[0]
+    const design = getDesign(p)
+    const bom = getBom(p)
     const haystack = [
       p.name,
       p.sku,
@@ -102,8 +105,8 @@ export function ProductsTable({ products, profile }: ProductsTableProps) {
           </thead>
           <tbody className="divide-y divide-gray-100">
             {filtered.map((p) => {
-              const design = p.design_data?.[0]
-              const bom = p.bom_data?.[0]
+              const design = getDesign(p)
+              const bom = getBom(p)
               const colourSkus = design?.color_skus || []
               return (
                 <tr key={p.id} className="hover:bg-gray-50 transition-colors group">

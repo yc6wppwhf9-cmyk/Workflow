@@ -26,15 +26,8 @@ export default async function DashboardPage() {
     supabase.from('products').select('*', { count: 'exact', head: true }),
     supabase.from('products').select('*', { count: 'exact', head: true }).eq('workflow_stage', 'product_live'),
     supabase.from('products').select('*', { count: 'exact', head: true }).not('workflow_stage', 'in', '(draft,product_live)'),
-    supabase.from('products').select(`
-      id, name, sku, workflow_stage,
-      bom_data(fg_inv_code),
-      design_data(designer_name)
-    `).order('created_at', { ascending: false }).limit(6),
-    supabase.from('products').select(`
-      id, name, sku,
-      bom_data!inner(fg_inv_code)
-    `).not('bom_data.fg_inv_code', 'is', null).order('created_at', { ascending: false }).limit(20),
+    supabase.from('products').select('id, name, sku, workflow_stage, created_at, design_data(designer_name), bom_data(fg_inv_code)').order('created_at', { ascending: false }).limit(6),
+    supabase.from('bom_data').select('fg_inv_code, product:products(id, name, sku)').not('fg_inv_code', 'is', null).limit(20),
     supabase.from('activity_logs').select('*, user:profiles(full_name), product:products(name, sku)').order('created_at', { ascending: false }).limit(8),
     supabase.from('design_data').select('*', { count: 'exact', head: true }).eq('is_completed', true),
     supabase.from('merchandising_data').select('*', { count: 'exact', head: true }).eq('is_completed', true),
@@ -127,19 +120,20 @@ export default async function DashboardPage() {
             <CardContent>
               <div className="space-y-2">
                 {fgInvProducts && fgInvProducts.length > 0 ? (
-                  fgInvProducts.map((p) => {
-                    const bom = (p.bom_data as { fg_inv_code?: string | null }[] | null)?.[0]
+                  fgInvProducts.map((row, i) => {
+                    const product = (Array.isArray(row.product) ? row.product[0] : row.product) as { id: string; name?: string; sku?: string } | null
+                    if (!product) return null
                     return (
                       <Link
-                        key={p.id}
-                        href={`/products/${p.id}`}
+                        key={i}
+                        href={`/products/${product.id}`}
                         className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-gray-50 transition-colors group"
                       >
                         <p className="text-sm text-gray-700 truncate group-hover:text-blue-600">
-                          {p.name || p.sku}
+                          {product.name || product.sku}
                         </p>
                         <span className="text-xs font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded shrink-0 ml-2">
-                          {bom?.fg_inv_code}
+                          {row.fg_inv_code}
                         </span>
                       </Link>
                     )

@@ -1,7 +1,5 @@
-import { Check, X } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { STAGE_LABELS, STAGE_COLORS, CATEGORY_LABELS, type WorkflowStage, type ProductCategory, type Product, type DesignData, type MerchandisingData, type BomData, type MarketingData, type SalesData, type ProductFile } from '@/lib/types'
-import { formatDate } from '@/lib/utils'
+import { CATEGORY_LABELS, type ProductCategory, type Product, type DesignData, type MerchandisingData, type BomData, type MarketingData, type SalesData, type ProductFile } from '@/lib/types'
 
 interface OverviewTabProps {
   product: Product
@@ -13,18 +11,6 @@ interface OverviewTabProps {
   files: ProductFile[]
 }
 
-function CompletionRow({ label, completed }: { label: string; completed: boolean }) {
-  return (
-    <div className="flex items-center justify-between py-2.5 border-b border-gray-50 last:border-0">
-      <span className="text-sm text-gray-700">{label}</span>
-      {completed
-        ? <span className="flex items-center gap-1 text-xs text-green-600 font-medium"><Check className="h-3.5 w-3.5" /> Complete</span>
-        : <span className="flex items-center gap-1 text-xs text-gray-400"><X className="h-3.5 w-3.5" /> Pending</span>
-      }
-    </div>
-  )
-}
-
 function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
@@ -34,7 +20,7 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
   )
 }
 
-export function OverviewTab({ product, designData, merchandisingData, bomData, marketingData, salesData, files }: OverviewTabProps) {
+export function OverviewTab({ product, designData, bomData, files }: OverviewTabProps) {
   const colourSkus = designData?.color_skus || []
 
   // Group merch images by colour_tag
@@ -48,85 +34,58 @@ export function OverviewTab({ product, designData, merchandisingData, bomData, m
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* Product Info */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-base">Product Information</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+      {/* Product Info */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Product Information</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-8 gap-y-4">
 
-              <InfoRow label="Product Name">
-                <p className="text-sm font-semibold text-gray-900">{product.name}</p>
-              </InfoRow>
+            <InfoRow label="Product Name">
+              <p className="text-sm font-semibold text-gray-900">{product.name}</p>
+            </InfoRow>
 
-              <InfoRow label="Designer Name">
-                <p className="text-sm font-medium text-gray-900">{designData?.designer_name || '—'}</p>
-              </InfoRow>
+            <InfoRow label="Designer Name">
+              <p className="text-sm font-medium text-gray-900">{designData?.designer_name || '—'}</p>
+            </InfoRow>
 
-              <InfoRow label="Category">
-                <p className="text-sm font-medium text-gray-900">
-                  {CATEGORY_LABELS[product.category as ProductCategory] || product.category}
-                </p>
-              </InfoRow>
+            <InfoRow label="Category">
+              <p className="text-sm font-medium text-gray-900">
+                {CATEGORY_LABELS[product.category as ProductCategory] || product.category}
+              </p>
+            </InfoRow>
 
-              <InfoRow label="FG INV Code">
-                <p className="text-sm font-mono font-medium text-gray-900">{bomData?.fg_inv_code || '—'}</p>
-              </InfoRow>
+            <InfoRow label="FG INV Code">
+              <p className="text-sm font-mono font-medium text-gray-900">{bomData?.fg_inv_code || '—'}</p>
+            </InfoRow>
 
-              <InfoRow label="Channel">
-                <p className="text-sm font-medium text-gray-900">{designData?.channel || '—'}</p>
-              </InfoRow>
+            <InfoRow label="Channel">
+              <p className="text-sm font-medium text-gray-900">{designData?.channel || '—'}</p>
+            </InfoRow>
 
-              <InfoRow label="Current Stage">
-                <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${STAGE_COLORS[product.workflow_stage as WorkflowStage]}`}>
-                  {STAGE_LABELS[product.workflow_stage as WorkflowStage]}
-                </span>
-              </InfoRow>
+            <InfoRow label="Brand">
+              <p className="text-sm font-medium text-gray-900">{product.brand || '—'}</p>
+            </InfoRow>
 
-              <InfoRow label="Brand">
-                <p className="text-sm font-medium text-gray-900">{product.brand || '—'}</p>
-              </InfoRow>
+          </div>
 
-              <InfoRow label="Created">
-                <p className="text-sm font-medium text-gray-900">{formatDate(product.created_at)}</p>
-              </InfoRow>
-
-            </div>
-
-            {/* Colour SKUs */}
-            <div>
-              <p className="text-xs text-gray-500 mb-2">Colour SKUs</p>
-              {colourSkus.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {colourSkus.map((sku, i) => (
-                    <span key={i} className="text-xs font-mono bg-gray-100 text-gray-700 px-2.5 py-1 rounded-full">{sku}</span>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-gray-400">—</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Department Status */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Department Status</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <CompletionRow label="Design" completed={designData?.is_completed || false} />
-            <CompletionRow label="Merchandising" completed={merchandisingData?.is_completed || false} />
-            <CompletionRow label="BOM" completed={bomData?.is_completed || false} />
-            <CompletionRow label="Marketing" completed={marketingData?.is_completed || false} />
-            <CompletionRow label="Sales" completed={salesData?.is_completed || false} />
-          </CardContent>
-        </Card>
-
-      </div>
+          {/* Colour SKUs */}
+          <div>
+            <p className="text-xs text-gray-500 mb-2">Colour SKUs</p>
+            {colourSkus.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {colourSkus.map((sku, i) => (
+                  <span key={i} className="text-xs font-mono bg-gray-100 text-gray-700 px-2.5 py-1 rounded-full">{sku}</span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400">—</p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Colour-wise product images */}
       {Object.keys(colourGroups).length > 0 && (

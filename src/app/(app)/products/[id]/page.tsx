@@ -41,7 +41,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
     <div>
       <Header
         title={product.name}
-        subtitle={`SKU: ${product.sku} · ${product.category}${bomData?.fg_inv_code ? ` · FG INV: ${bomData.fg_inv_code}` : ''}`}
+        subtitle={bomData?.fg_inv_code ? `FG INV: ${bomData.fg_inv_code}` : undefined}
       />
       <ProductDetail
         product={product}

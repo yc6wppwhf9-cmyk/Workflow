@@ -115,34 +115,41 @@ export default async function DashboardPage() {
             </Link>
           </CardHeader>
           <CardContent>
-            <div className="space-y-1">
-              {recentProducts?.map((p) => {
-                const bomRaw = p.bom_data as { fg_inv_code?: string | null }[] | { fg_inv_code?: string | null } | null
-                const bom = Array.isArray(bomRaw) ? bomRaw[0] : bomRaw
-                return (
-                  <Link
-                    key={p.id}
-                    href={`/products/${p.id}`}
-                    className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors group"
-                  >
-                    <p className="text-sm font-medium text-gray-900 group-hover:text-blue-600 truncate">
-                      {p.name || p.sku}
-                    </p>
-                    {bom?.fg_inv_code && (
-                      <span className="text-xs font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded shrink-0 ml-3">
-                        {bom.fg_inv_code}
-                      </span>
-                    )}
-                  </Link>
-                )
-              })}
-              {(!recentProducts || recentProducts.length === 0) && (
-                <p className="text-sm text-gray-400 text-center py-6">
-                  No products yet.{' '}
-                  <Link href="/products" className="text-blue-600 hover:underline">Create one</Link>
-                </p>
-              )}
-            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left pb-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">Product Name</th>
+                  <th className="text-right pb-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">FG INV</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {recentProducts?.map((p) => {
+                  const bomRaw = p.bom_data as { fg_inv_code?: string | null }[] | { fg_inv_code?: string | null } | null
+                  const bom = Array.isArray(bomRaw) ? bomRaw[0] : bomRaw
+                  return (
+                    <tr key={p.id} className="group hover:bg-gray-50 transition-colors">
+                      <td className="py-3">
+                        <Link href={`/products/${p.id}`} className="font-medium text-gray-900 group-hover:text-blue-600">
+                          {p.name || p.sku}
+                        </Link>
+                      </td>
+                      <td className="py-3 text-right">
+                        {bom?.fg_inv_code
+                          ? <span className="text-xs font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded">{bom.fg_inv_code}</span>
+                          : <span className="text-gray-300 text-xs">—</span>
+                        }
+                      </td>
+                    </tr>
+                  )
+                })}
+                {(!recentProducts || recentProducts.length === 0) && (
+                  <tr><td colSpan={2} className="text-center py-6 text-sm text-gray-400">
+                    No products yet.{' '}
+                    <Link href="/products" className="text-blue-600 hover:underline">Create one</Link>
+                  </td></tr>
+                )}
+              </tbody>
+            </table>
           </CardContent>
         </Card>
 

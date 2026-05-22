@@ -274,6 +274,7 @@ export function DesignTab({ product, profile, data, files }: DesignTabProps) {
             </div>
           </div>
 
+
           <div className="space-y-1.5">
             <Label>Color SKUs</Label>
             <div className="flex flex-wrap gap-2 mb-2">

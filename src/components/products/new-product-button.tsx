@@ -19,7 +19,6 @@ interface NewProductButtonProps {
 const EMPTY_FORM = {
   // Product fields
   name: '',
-  sku: '',
   category: 'junior-backpacks' as ProductCategory,
   brand: '' as Brand | '',
   // Design fields
@@ -59,8 +58,10 @@ export function NewProductButton({ profile }: NewProductButtonProps) {
     const { data: product, error: productErr } = await supabase
       .from('products')
       .insert({
-        name: form.name.trim() || form.sku,
-        sku: form.sku,
+        name: form.name.trim() || 'New Product',
+        sku: form.name.trim()
+          ? form.name.trim().toUpperCase().replace(/\s+/g, '-').substring(0, 20)
+          : `PROD-${Date.now().toString(36).toUpperCase()}`,
         category: form.category,
         ...(form.brand && { brand: form.brand }),
         created_by: profile.id,
@@ -124,7 +125,7 @@ export function NewProductButton({ profile }: NewProductButtonProps) {
             {/* Product identity */}
             <div>
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Product</p>
-              <div className="grid grid-cols-2 gap-3 mb-3">
+              <div className="mb-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="name">Product Name</Label>
                   <Input
@@ -132,16 +133,6 @@ export function NewProductButton({ profile }: NewProductButtonProps) {
                     placeholder="Leave blank — will be set from the merchandising Excel"
                     value={form.name}
                     onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="sku">SKU *</Label>
-                  <Input
-                    id="sku"
-                    placeholder="e.g. EXP-28L-BLK"
-                    value={form.sku}
-                    onChange={e => setForm(f => ({ ...f, sku: e.target.value.toUpperCase() }))}
-                    required
                   />
                 </div>
               </div>

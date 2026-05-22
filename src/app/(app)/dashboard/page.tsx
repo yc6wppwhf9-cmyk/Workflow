@@ -26,7 +26,7 @@ export default async function DashboardPage() {
     supabase.from('products').select('*', { count: 'exact', head: true }),
     supabase.from('products').select('*', { count: 'exact', head: true }).eq('workflow_stage', 'product_live'),
     supabase.from('products').select('*', { count: 'exact', head: true }).not('workflow_stage', 'in', '(draft,product_live)'),
-    supabase.from('products').select('id, name, sku, workflow_stage, created_at, design_data(designer_name), bom_data(fg_inv_code)').order('created_at', { ascending: false }).limit(6),
+    supabase.from('products').select('id, name, sku, workflow_stage, created_at, bom_data(fg_inv_code)').order('created_at', { ascending: false }).limit(6),
     supabase.from('bom_data').select('fg_inv_code, product:products(id, name, sku)').not('fg_inv_code', 'is', null).limit(20),
     supabase.from('activity_logs').select('*, user:profiles(full_name), product:products(name, sku)').order('created_at', { ascending: false }).limit(8),
     supabase.from('design_data').select('*', { count: 'exact', head: true }).eq('is_completed', true),
@@ -157,36 +157,20 @@ export default async function DashboardPage() {
               <div className="space-y-1">
                 {recentProducts?.map((p) => {
                   const bom = (p.bom_data as { fg_inv_code?: string | null }[] | null)?.[0]
-                  const design = (p.design_data as { designer_name?: string | null }[] | null)?.[0]
                   return (
                     <Link
                       key={p.id}
                       href={`/products/${p.id}`}
                       className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors group"
                     >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="h-9 w-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
-                          <Package className="h-4 w-4 text-blue-600" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-900 group-hover:text-blue-600 truncate">
-                            {p.name || p.sku}
-                          </p>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            {design?.designer_name && (
-                              <span className="text-xs text-gray-400 truncate">{design.designer_name}</span>
-                            )}
-                            {bom?.fg_inv_code && (
-                              <span className="text-xs font-mono bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded shrink-0">
-                                {bom.fg_inv_code}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <span className={`text-xs px-2 py-1 rounded-full font-medium shrink-0 ml-3 ${STAGE_COLORS[p.workflow_stage as WorkflowStage]}`}>
-                        {STAGE_LABELS[p.workflow_stage as WorkflowStage]}
-                      </span>
+                      <p className="text-sm font-medium text-gray-900 group-hover:text-blue-600 truncate">
+                        {p.name || p.sku}
+                      </p>
+                      {bom?.fg_inv_code && (
+                        <span className="text-xs font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded shrink-0 ml-3">
+                          {bom.fg_inv_code}
+                        </span>
+                      )}
                     </Link>
                   )
                 })}

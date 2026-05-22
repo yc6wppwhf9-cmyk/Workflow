@@ -22,7 +22,9 @@ interface DesignTabProps {
 
 export function DesignTab({ product, profile, data, files }: DesignTabProps) {
   const router = useRouter()
-  const canEdit = !data?.is_locked && (!data?.is_completed || profile.role === 'admin') && ['admin', 'design'].includes(profile.role)
+  const isRoleAllowed = ['admin', 'design'].includes(profile.role)
+  const canEditFields = !data?.is_locked && !data?.is_completed && isRoleAllowed
+  const showActions = !data?.is_locked && isRoleAllowed
 
   const [form, setForm] = useState({
     channel: data?.channel || '',
@@ -66,10 +68,9 @@ export function DesignTab({ product, profile, data, files }: DesignTabProps) {
       department: 'design',
     })
 
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
     setSaving(false)
-    router.refresh()
+    setSaved(true)
+    setTimeout(() => { setSaved(false); router.refresh() }, 2000)
   }
 
   async function markComplete() {
@@ -148,7 +149,7 @@ export function DesignTab({ product, profile, data, files }: DesignTabProps) {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="text-base">Illustrations</CardTitle>
-          {canEdit && (
+          {canEditFields && (
             <Button size="sm" variant="outline" onClick={() => illustrationRef.current?.click()} disabled={uploading}>
               {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
               {uploading ? uploadingName || 'Uploading...' : 'Upload'}
@@ -159,8 +160,8 @@ export function DesignTab({ product, profile, data, files }: DesignTabProps) {
         <CardContent>
           {designFiles.length === 0 ? (
             <div
-              className={`border-2 border-dashed rounded-xl py-10 text-center ${canEdit ? 'border-gray-200 cursor-pointer hover:border-purple-300 hover:bg-purple-50 transition-colors' : 'border-gray-100'}`}
-              onClick={() => canEdit && illustrationRef.current?.click()}
+              className={`border-2 border-dashed rounded-xl py-10 text-center ${canEditFields ? 'border-gray-200 cursor-pointer hover:border-purple-300 hover:bg-purple-50 transition-colors' : 'border-gray-100'}`}
+              onClick={() => canEditFields && illustrationRef.current?.click()}
             >
               <Upload className="h-8 w-8 text-gray-300 mx-auto mb-2" />
               <p className="text-sm text-gray-500 font-medium">Upload design illustrations</p>
@@ -180,7 +181,7 @@ export function DesignTab({ product, profile, data, files }: DesignTabProps) {
                       >
                         <ExternalLink className="h-3.5 w-3.5 text-gray-700" />
                       </a>
-                      {canEdit && (
+                      {canEditFields && (
                         <button
                           className="h-7 w-7 rounded-full bg-white flex items-center justify-center hover:bg-red-50"
                           onClick={() => deleteFile(file)}
@@ -193,7 +194,7 @@ export function DesignTab({ product, profile, data, files }: DesignTabProps) {
                   </div>
                 ))}
               </div>
-              {canEdit && (
+              {canEditFields && (
                 <button
                   onClick={() => illustrationRef.current?.click()}
                   className="w-full py-2 border border-dashed border-gray-200 rounded-lg text-xs text-gray-400 hover:text-purple-500 hover:border-purple-300 transition-colors"
@@ -220,7 +221,7 @@ export function DesignTab({ product, profile, data, files }: DesignTabProps) {
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1.5">
               <Label>Category</Label>
-              <Select value={category} onValueChange={(v) => setCategory(v as ProductCategory)} disabled={!canEdit}>
+              <Select value={category} onValueChange={(v) => setCategory(v as ProductCategory)} disabled={!canEditFields}>
                 <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
                 <SelectContent>
                   {(Object.entries(CATEGORY_LABELS) as [ProductCategory, string][]).map(([v, l]) => (
@@ -231,7 +232,7 @@ export function DesignTab({ product, profile, data, files }: DesignTabProps) {
             </div>
             <div className="space-y-1.5">
               <Label>Brand</Label>
-              <Select value={brand} onValueChange={(v) => setBrand(v as Brand)} disabled={!canEdit}>
+              <Select value={brand} onValueChange={(v) => setBrand(v as Brand)} disabled={!canEditFields}>
                 <SelectTrigger><SelectValue placeholder="Select brand" /></SelectTrigger>
                 <SelectContent>
                   {BRANDS.map((b) => (
@@ -242,7 +243,7 @@ export function DesignTab({ product, profile, data, files }: DesignTabProps) {
             </div>
             <div className="space-y-1.5">
               <Label>Channel</Label>
-              <Select value={form.channel} onValueChange={(v) => setForm({ ...form, channel: v })} disabled={!canEdit}>
+              <Select value={form.channel} onValueChange={(v) => setForm({ ...form, channel: v })} disabled={!canEditFields}>
                 <SelectTrigger><SelectValue placeholder="Select channel" /></SelectTrigger>
                 <SelectContent>
                   {CHANNELS.map((c) => (
@@ -260,7 +261,7 @@ export function DesignTab({ product, profile, data, files }: DesignTabProps) {
                 placeholder="Designer's name"
                 value={form.designer_name}
                 onChange={(e) => setForm({ ...form, designer_name: e.target.value })}
-                disabled={!canEdit}
+                disabled={!canEditFields}
               />
             </div>
             <div className="space-y-1.5">
@@ -269,7 +270,7 @@ export function DesignTab({ product, profile, data, files }: DesignTabProps) {
                 placeholder="e.g. Midnight Black"
                 value={form.sample_color}
                 onChange={(e) => setForm({ ...form, sample_color: e.target.value })}
-                disabled={!canEdit}
+                disabled={!canEditFields}
               />
             </div>
           </div>
@@ -281,7 +282,7 @@ export function DesignTab({ product, profile, data, files }: DesignTabProps) {
               {form.color_skus.map((sku, i) => (
                 <span key={i} className="flex items-center gap-1 bg-gray-100 text-gray-700 text-xs px-2.5 py-1 rounded-full font-mono">
                   {sku}
-                  {canEdit && (
+                  {canEditFields && (
                     <button onClick={() => setForm({ ...form, color_skus: form.color_skus.filter((_, j) => j !== i) })}>
                       <X className="h-3 w-3 hover:text-red-500" />
                     </button>
@@ -289,7 +290,7 @@ export function DesignTab({ product, profile, data, files }: DesignTabProps) {
                 </span>
               ))}
             </div>
-            {canEdit && (
+            {canEditFields && (
               <div className="flex gap-2">
                 <Input
                   placeholder="Add SKU..."
@@ -326,21 +327,23 @@ export function DesignTab({ product, profile, data, files }: DesignTabProps) {
               placeholder="Describe the unique selling point or feature..."
               value={form.unique_feature}
               onChange={(e) => setForm({ ...form, unique_feature: e.target.value })}
-              disabled={!canEdit}
+              disabled={!canEditFields}
               rows={3}
             />
           </div>
 
-          {canEdit && (
+          {saved && (
+            <p className="text-sm text-green-600 bg-green-50 border border-green-200 rounded-lg px-3 py-2">Changes saved.</p>
+          )}
+          {showActions && (
             <div className="flex items-center gap-3 pt-2">
-              <Button onClick={handleSave} disabled={saving}>
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                {saved ? 'Saved!' : 'Save Changes'}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={markComplete}
-                disabled={saving}
+              {canEditFields && (
+                <Button onClick={handleSave} disabled={saving}>
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  Save Changes
+                </Button>
+              )}
+              <Button variant="outline" onClick={markComplete} disabled={saving}
                 className={data?.is_completed ? 'text-orange-600 border-orange-200' : 'text-green-600 border-green-200'}
               >
                 {data?.is_completed ? 'Mark Incomplete' : 'Mark Complete'}

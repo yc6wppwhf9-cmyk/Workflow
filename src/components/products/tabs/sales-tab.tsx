@@ -22,7 +22,9 @@ const LAUNCH_STATUSES = ['Planned', 'In Progress', 'Launched', 'Paused', 'Discon
 
 export function SalesTab({ product, profile, data }: SalesTabProps) {
   const router = useRouter()
-  const canEdit = !data?.is_locked && (!data?.is_completed || profile.role === 'admin') && ['admin', 'sales'].includes(profile.role)
+  const isRoleAllowed = ['admin', 'sales'].includes(profile.role)
+  const canEditFields = !data?.is_locked && !data?.is_completed && isRoleAllowed
+  const showActions = !data?.is_locked && isRoleAllowed
 
   const [form, setForm] = useState({
     mrp: data?.mrp?.toString() || '',
@@ -56,10 +58,9 @@ export function SalesTab({ product, profile, data }: SalesTabProps) {
       department: 'sales',
     })
 
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
     setSaving(false)
-    router.refresh()
+    setSaved(true)
+    setTimeout(() => { setSaved(false); router.refresh() }, 2000)
   }
 
   async function markComplete() {
@@ -97,7 +98,7 @@ export function SalesTab({ product, profile, data }: SalesTabProps) {
                 placeholder="0.00"
                 value={form.mrp}
                 onChange={(e) => setForm({ ...form, mrp: e.target.value })}
-                disabled={!canEdit}
+                disabled={!canEditFields}
               />
             </div>
             <div className="space-y-1.5">
@@ -107,7 +108,7 @@ export function SalesTab({ product, profile, data }: SalesTabProps) {
                 placeholder="0.00"
                 value={form.dealer_pricing}
                 onChange={(e) => setForm({ ...form, dealer_pricing: e.target.value })}
-                disabled={!canEdit}
+                disabled={!canEditFields}
               />
             </div>
           </div>
@@ -127,7 +128,7 @@ export function SalesTab({ product, profile, data }: SalesTabProps) {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Launch Status</Label>
-              <Select value={form.launch_status} onValueChange={(v) => setForm({ ...form, launch_status: v })} disabled={!canEdit}>
+              <Select value={form.launch_status} onValueChange={(v) => setForm({ ...form, launch_status: v })} disabled={!canEditFields}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select status..." />
                 </SelectTrigger>
@@ -144,17 +145,22 @@ export function SalesTab({ product, profile, data }: SalesTabProps) {
                 type="date"
                 value={form.launch_date}
                 onChange={(e) => setForm({ ...form, launch_date: e.target.value })}
-                disabled={!canEdit}
+                disabled={!canEditFields}
               />
             </div>
           </div>
 
-          {canEdit && (
+          {saved && (
+            <p className="text-sm text-green-600 bg-green-50 border border-green-200 rounded-lg px-3 py-2">Changes saved.</p>
+          )}
+          {showActions && (
             <div className="flex items-center gap-3 pt-2">
-              <Button onClick={handleSave} disabled={saving}>
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                {saved ? 'Saved!' : 'Save Changes'}
-              </Button>
+              {canEditFields && (
+                <Button onClick={handleSave} disabled={saving}>
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  Save Changes
+                </Button>
+              )}
               <Button variant="outline" onClick={markComplete} disabled={saving}
                 className={data?.is_completed ? 'text-orange-600 border-orange-200' : 'text-green-600 border-green-200'}
               >

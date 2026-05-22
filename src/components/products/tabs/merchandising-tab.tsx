@@ -65,7 +65,9 @@ function initForm(data: MerchandisingData | null): FormState {
 
 export function MerchandisingTab({ product, profile, data }: MerchandisingTabProps) {
   const router = useRouter()
-  const canEdit = !data?.is_locked && (!data?.is_completed || profile.role === 'admin') && ['admin', 'merchandising'].includes(profile.role)
+  const isRoleAllowed = ['admin', 'merchandising'].includes(profile.role)
+  const canEditFields = !data?.is_locked && !data?.is_completed && isRoleAllowed
+  const showActions = !data?.is_locked && isRoleAllowed
 
   const [activeVersion, setActiveVersion] = useState<'attribute' | 'production'>('attribute')
   const [attrForm, setAttrForm] = useState<FormState>(() => initForm(data))
@@ -124,10 +126,9 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
       product_id: product.id, user_id: profile.id,
       action: `updated merchandising data (${versionLabel})`, department: 'merchandising',
     })
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
     setSaving(false)
-    router.refresh()
+    setSaved(true)
+    setTimeout(() => { setSaved(false); router.refresh() }, 2000)
   }
 
   async function handleExcelUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -325,7 +326,7 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
         placeholder={placeholder || ''}
         value={(form[field] as string) || ''}
         onChange={e => set(field, e.target.value)}
-        disabled={!canEdit}
+        disabled={!canEditFields}
         className="h-8 text-sm"
       />
     </div>
@@ -335,7 +336,7 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
     <div className="max-w-3xl space-y-4">
 
       {/* Excel Upload Card */}
-      {canEdit && (
+      {canEditFields && (
         <Card className="border-green-200 bg-green-50">
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -431,7 +432,7 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
                     placeholder="0"
                     value={(form.dimensions as Record<string, string>)[dim] || ''}
                     onChange={e => set('dimensions', { ...form.dimensions, [dim]: e.target.value })}
-                    disabled={!canEdit}
+                    disabled={!canEditFields}
                     className="h-8 text-sm"
                   />
                 </div>
@@ -442,7 +443,7 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
                   placeholder="inches"
                   value={form.dimensions?.unit || ''}
                   onChange={e => set('dimensions', { ...form.dimensions, unit: e.target.value })}
-                  disabled={!canEdit}
+                  disabled={!canEditFields}
                   className="h-8 text-sm"
                 />
               </div>
@@ -492,7 +493,7 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
                 {form.materials.map((m, i) => (
                   <span key={i} className="flex items-center gap-1 bg-blue-50 text-blue-700 text-xs px-2.5 py-1 rounded-full">
                     {m}
-                    {canEdit && (
+                    {canEditFields && (
                       <button onClick={() => set('materials', form.materials.filter((_, j) => j !== i))}>
                         <X className="h-3 w-3 hover:text-red-500" />
                       </button>
@@ -500,7 +501,7 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
                   </span>
                 ))}
               </div>
-              {canEdit && (
+              {canEditFields && (
                 <div className="flex gap-2">
                   <Input
                     placeholder="Add material..."
@@ -527,12 +528,17 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
           {saveError && (
             <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{saveError}</p>
           )}
-          {canEdit && (
+          {saved && (
+            <p className="text-sm text-green-600 bg-green-50 border border-green-200 rounded-lg px-3 py-2">Changes saved.</p>
+          )}
+          {showActions && (
             <div className="flex items-center gap-3 pt-2 border-t border-gray-100">
-              <Button onClick={handleSave} disabled={saving}>
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                {saved ? 'Saved!' : 'Save Changes'}
-              </Button>
+              {canEditFields && (
+                <Button onClick={handleSave} disabled={saving}>
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  Save Changes
+                </Button>
+              )}
               <Button variant="outline" onClick={markComplete} disabled={saving}
                 className={data?.is_completed ? 'text-orange-600 border-orange-200' : 'text-green-600 border-green-200'}
               >

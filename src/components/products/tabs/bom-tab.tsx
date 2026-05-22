@@ -6,6 +6,7 @@ import { Loader2, Lock, Save, Plus, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
 import type { Product, Profile, BomData, BomItem, MerchandisingData } from '@/lib/types'
 
@@ -24,6 +25,7 @@ export function BomTab({ product, profile, data, merchandisingData }: BomTabProp
   const canEditFields = !data?.is_locked && !data?.is_completed && isRoleAllowed
   const showActions = !data?.is_locked && isRoleAllowed
   const [items, setItems] = useState<BomItem[]>(data?.items || [])
+  const [fgInvCode, setFgInvCode] = useState(data?.fg_inv_code || '')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [activeColour, setActiveColour] = useState<string | null>(null)
@@ -38,7 +40,7 @@ export function BomTab({ product, profile, data, merchandisingData }: BomTabProp
   async function handleSave() {
     setSaving(true)
     const supabase = createClient()
-    await supabase.from('bom_data').update({ items, updated_by: profile.id }).eq('product_id', product.id)
+    await supabase.from('bom_data').update({ items, fg_inv_code: fgInvCode || null, updated_by: profile.id }).eq('product_id', product.id)
     await supabase.from('activity_logs').insert({
       product_id: product.id, user_id: profile.id,
       action: `updated BOM (${items.length} items)`, department: 'bom',
@@ -71,6 +73,23 @@ export function BomTab({ product, profile, data, merchandisingData }: BomTabProp
           )}
         </CardHeader>
         <CardContent>
+          {/* Finished Goods INV Code */}
+          <div className="flex items-end gap-3 mb-4 pb-4 border-b border-gray-100">
+            <div className="space-y-1.5 w-64">
+              <Label className="text-xs">Finished Goods INV Code</Label>
+              <Input
+                placeholder="ERP INV code for this product"
+                value={fgInvCode}
+                onChange={e => setFgInvCode(e.target.value.toUpperCase())}
+                disabled={!canEditFields}
+                className="font-mono h-8 text-sm"
+              />
+            </div>
+            {data?.fg_inv_code && (
+              <span className="text-xs text-gray-400 pb-1.5">Currently: <span className="font-mono font-medium text-gray-700">{data.fg_inv_code}</span></span>
+            )}
+          </div>
+
           {/* Colour tabs */}
           {colourVariants.length > 0 && (
             <div className="flex items-center gap-1 mb-4 border-b border-gray-100 pb-3 flex-wrap">

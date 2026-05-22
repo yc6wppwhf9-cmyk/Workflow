@@ -158,6 +158,7 @@ export interface BomData {
   id: string
   product_id: string
   items: BomItem[] | null
+  fg_inv_code: string | null
   is_completed: boolean
   is_locked: boolean
   updated_by: string | null

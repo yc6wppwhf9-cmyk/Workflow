@@ -124,6 +124,7 @@ create table bom_data (
   id              uuid primary key default uuid_generate_v4(),
   product_id      uuid not null references products(id) on delete cascade,
   items           jsonb,   -- [{ inv_code, inv_name, quantity, unit }]
+  fg_inv_code     text,    -- finished goods INV code from ERP, entered by BOM team
   is_completed    boolean not null default false,
   is_locked       boolean not null default false,
   updated_by      uuid references profiles(id),

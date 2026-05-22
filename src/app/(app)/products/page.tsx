@@ -12,7 +12,12 @@ export default async function ProductsPage() {
 
   const { data: products } = await supabase
     .from('products')
-    .select('*, creator:profiles!created_by(full_name, email)')
+    .select(`
+      *,
+      creator:profiles!created_by(full_name, email),
+      design_data(designer_name, color_skus, channel),
+      bom_data(fg_inv_code)
+    `)
     .order('created_at', { ascending: false })
 
   return (

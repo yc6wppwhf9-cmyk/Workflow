@@ -16,6 +16,8 @@ interface ProductRow {
   workflow_stage: string
   created_at: string
   creator?: { full_name: string; email: string } | null
+  design_data?: { designer_name: string | null; color_skus: string[] | null; channel: string | null }[] | null
+  bom_data?: { fg_inv_code: string | null }[] | null
 }
 
 interface ProductsTableProps {
@@ -29,9 +31,17 @@ export function ProductsTable({ products, profile }: ProductsTableProps) {
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
 
   const filtered = products.filter((p) => {
-    const matchSearch =
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.sku.toLowerCase().includes(search.toLowerCase())
+    const design = p.design_data?.[0]
+    const bom = p.bom_data?.[0]
+    const haystack = [
+      p.name,
+      p.sku,
+      design?.designer_name,
+      design?.channel,
+      bom?.fg_inv_code,
+      ...(design?.color_skus || []),
+    ].join(' ').toLowerCase()
+    const matchSearch = !search || haystack.includes(search.toLowerCase())
     const matchStage = stageFilter === 'all' || p.workflow_stage === stageFilter
     const matchCategory = categoryFilter === 'all' || p.category === categoryFilter
     return matchSearch && matchStage && matchCategory
@@ -44,7 +54,7 @@ export function ProductsTable({ products, profile }: ProductsTableProps) {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
-            placeholder="Search by name or SKU..."
+            placeholder="Search by name, designer, SKU, channel..."
             className="pl-9"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -81,43 +91,86 @@ export function ProductsTable({ products, profile }: ProductsTableProps) {
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50">
               <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Product</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">SKU</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Colour SKUs</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">FG INV</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Channel</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Category</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Stage</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Created</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">By</th>
               <th className="w-10" />
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {filtered.map((p) => (
-              <tr key={p.id} className="hover:bg-gray-50 transition-colors group">
-                <td className="px-5 py-3.5">
-                  <Link href={`/products/${p.id}`} className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
-                      <Package className="h-4 w-4 text-blue-500" />
-                    </div>
-                    <span className="font-medium text-gray-900 group-hover:text-blue-600">{p.name}</span>
-                  </Link>
-                </td>
-                <td className="px-4 py-3.5 text-gray-500 font-mono text-xs">{p.sku}</td>
-                <td className="px-4 py-3.5">
-                  <span className="text-gray-600">{CATEGORY_LABELS[p.category as ProductCategory] || p.category}</span>
-                </td>
-                <td className="px-4 py-3.5">
-                  <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${STAGE_COLORS[p.workflow_stage as WorkflowStage]}`}>
-                    {STAGE_LABELS[p.workflow_stage as WorkflowStage]}
-                  </span>
-                </td>
-                <td className="px-4 py-3.5 text-gray-500 text-xs">{formatDate(p.created_at)}</td>
-                <td className="px-4 py-3.5 text-gray-500 text-xs">{p.creator?.full_name || '—'}</td>
-                <td className="pr-4">
-                  <Link href={`/products/${p.id}`}>
-                    <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-blue-500" />
-                  </Link>
-                </td>
-              </tr>
-            ))}
+            {filtered.map((p) => {
+              const design = p.design_data?.[0]
+              const bom = p.bom_data?.[0]
+              const colourSkus = design?.color_skus || []
+              return (
+                <tr key={p.id} className="hover:bg-gray-50 transition-colors group">
+                  {/* Product name + designer stacked */}
+                  <td className="px-5 py-3.5">
+                    <Link href={`/products/${p.id}`} className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                        <Package className="h-4 w-4 text-blue-500" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900 group-hover:text-blue-600">{p.name}</p>
+                        {design?.designer_name && (
+                          <p className="text-xs text-gray-400 mt-0.5">{design.designer_name}</p>
+                        )}
+                      </div>
+                    </Link>
+                  </td>
+
+                  {/* Colour SKUs */}
+                  <td className="px-4 py-3.5">
+                    {colourSkus.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {colourSkus.slice(0, 3).map((sku, i) => (
+                          <span key={i} className="text-xs font-mono bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{sku}</span>
+                        ))}
+                        {colourSkus.length > 3 && (
+                          <span className="text-xs text-gray-400">+{colourSkus.length - 3}</span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-gray-300 text-xs">—</span>
+                    )}
+                  </td>
+
+                  {/* FG INV */}
+                  <td className="px-4 py-3.5 font-mono text-xs text-gray-700">
+                    {bom?.fg_inv_code || <span className="text-gray-300">—</span>}
+                  </td>
+
+                  {/* Channel */}
+                  <td className="px-4 py-3.5 text-gray-600 text-xs">
+                    {design?.channel || <span className="text-gray-300">—</span>}
+                  </td>
+
+                  {/* Category */}
+                  <td className="px-4 py-3.5 text-gray-600 text-sm">
+                    {CATEGORY_LABELS[p.category as ProductCategory] || p.category}
+                  </td>
+
+                  {/* Stage */}
+                  <td className="px-4 py-3.5">
+                    <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${STAGE_COLORS[p.workflow_stage as WorkflowStage]}`}>
+                      {STAGE_LABELS[p.workflow_stage as WorkflowStage]}
+                    </span>
+                  </td>
+
+                  {/* Created */}
+                  <td className="px-4 py-3.5 text-gray-400 text-xs">{formatDate(p.created_at)}</td>
+
+                  <td className="pr-4">
+                    <Link href={`/products/${p.id}`}>
+                      <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-blue-500" />
+                    </Link>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
 

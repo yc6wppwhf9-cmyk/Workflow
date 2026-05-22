@@ -34,12 +34,38 @@ export async function POST(req: NextRequest) {
   const updates: PromiseLike<unknown>[] = []
   const fields_updated: string[] = []
 
+  // Enrich all colour variant BOM items with INV codes from item_master
+  let enrichedVariants = colour_variants || []
+  if (enrichedVariants.length > 0) {
+    const allNames: string[] = []
+    for (const v of enrichedVariants) {
+      for (const item of v.bomItems || []) allNames.push(item.inv_name)
+    }
+    if (allNames.length > 0) {
+      const normAll = allNames.map(n => n.trim().toLowerCase().replace(/\s+/g, ' '))
+      const uniqueNorms = [...new Set(normAll)]
+      const { data: masterRows } = await supabase
+        .from('item_master').select('inv_code, item_name_norm, uom').in('item_name_norm', uniqueNorms)
+      const masterMap = new Map<string, { inv_code: string; uom: string }>()
+      for (const row of masterRows ?? []) masterMap.set(row.item_name_norm, { inv_code: row.inv_code, uom: row.uom })
+
+      enrichedVariants = enrichedVariants.map((v: { bomItems?: { inv_name: string; inv_code: string; consumption: string; unit: string }[] }) => ({
+        ...v,
+        bomItems: (v.bomItems || []).map((item: { inv_name: string; inv_code: string; consumption: string; unit: string }) => {
+          const norm = item.inv_name.trim().toLowerCase().replace(/\s+/g, ' ')
+          const master = masterMap.get(norm)
+          return { ...item, inv_code: master?.inv_code ?? item.inv_code, unit: master?.uom ?? item.unit }
+        }),
+      }))
+    }
+  }
+
   if (merch_fields) {
     if (isReupload) {
       // Save revised data as production version, keep attribute untouched
       updates.push(
         supabase.from('merchandising_data').update({
-          production_fields: { ...merch_fields, colour_variants: colour_variants || [] },
+          production_fields: { ...merch_fields, colour_variants: enrichedVariants },
           updated_by: user.id,
         }).eq('product_id', product_id)
       )
@@ -49,7 +75,7 @@ export async function POST(req: NextRequest) {
       updates.push(
         supabase.from('merchandising_data').update({
           ...merch_fields,
-          colour_variants: colour_variants || [],
+          colour_variants: enrichedVariants,
           updated_by: user.id,
         }).eq('product_id', product_id)
       )

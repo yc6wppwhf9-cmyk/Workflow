@@ -72,7 +72,7 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
   const [prodForm, setProdForm] = useState<FormState>(() =>
     data?.production_fields ? initForm(data.production_fields as unknown as Parameters<typeof initForm>[0]) : initForm(null)
   )
-  const hasProd = !!data?.production_fields
+  const [hasProd, setHasProd] = useState(!!data?.production_fields)
   const form = activeVersion === 'attribute' ? attrForm : prodForm
   const setForm = activeVersion === 'attribute' ? setAttrForm : setProdForm
   const [newMaterial, setNewMaterial] = useState('')
@@ -102,6 +102,7 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
     if (savesToProduction) {
       await supabase.from('merchandising_data').update({ production_fields: form, updated_by: profile.id }).eq('product_id', product.id)
       setProdForm({ ...form })
+      setHasProd(true)
       setActiveVersion('production')
     } else {
       await supabase.from('merchandising_data').update({ ...attrForm, updated_by: profile.id }).eq('product_id', product.id)
@@ -265,6 +266,7 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
         const newForm = { ...initForm(null), ...merch_fields } as FormState
         if (version_saved === 'production') {
           setProdForm(newForm)
+          setHasProd(true)
           setActiveVersion('production')
         } else {
           setAttrForm(newForm)

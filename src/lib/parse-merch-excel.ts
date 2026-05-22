@@ -150,7 +150,8 @@ export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): Pars
           if (!itemName) continue
           const invCode = String(rows[i]?.[col] || '').trim()
           if (!invCode || invCode === '0' || invCode.toUpperCase() === 'NA') continue
-          items.push({ inv_code: invCode, inv_name: itemName, quantity: '1', unit: 'pcs' })
+          // invCode (from style column) is the inventory item name; actual inv_code filled by BOM team
+          items.push({ inv_code: '', inv_name: invCode, quantity: '1', unit: 'pcs' })
         }
         if (items.length > 0) bomByStyle[styleKey] = items
       }

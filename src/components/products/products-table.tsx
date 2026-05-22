@@ -15,9 +15,8 @@ interface ProductRow {
   category: string
   workflow_stage: string
   created_at: string
-  creator?: { full_name: string; email: string } | null
-  design_data?: { designer_name: string | null; color_skus: string[] | null; channel: string | null }[] | null
-  bom_data?: { fg_inv_code: string | null }[] | null
+  design_data?: { designer_name: string | null; color_skus: string[] | null; channel: string | null } | null
+  bom_data?: { fg_inv_code: string | null } | null
 }
 
 interface ProductsTableProps {
@@ -30,12 +29,9 @@ export function ProductsTable({ products, profile }: ProductsTableProps) {
   const [stageFilter, setStageFilter] = useState<string>('all')
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
 
-  const getDesign = (p: ProductRow) => { const r = p.design_data; return Array.isArray(r) ? r[0] : r }
-  const getBom = (p: ProductRow) => { const r = p.bom_data; return Array.isArray(r) ? r[0] : r }
-
   const filtered = products.filter((p) => {
-    const design = getDesign(p)
-    const bom = getBom(p)
+    const design = p.design_data
+    const bom = p.bom_data
     const haystack = [
       p.name,
       p.sku,
@@ -105,8 +101,8 @@ export function ProductsTable({ products, profile }: ProductsTableProps) {
           </thead>
           <tbody className="divide-y divide-gray-100">
             {filtered.map((p) => {
-              const design = getDesign(p)
-              const bom = getBom(p)
+              const design = p.design_data
+              const bom = p.bom_data
               const colourSkus = design?.color_skus || []
               return (
                 <tr key={p.id} className="hover:bg-gray-50 transition-colors group">

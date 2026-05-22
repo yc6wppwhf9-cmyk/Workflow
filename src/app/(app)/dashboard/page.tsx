@@ -156,7 +156,8 @@ export default async function DashboardPage() {
             <CardContent>
               <div className="space-y-1">
                 {recentProducts?.map((p) => {
-                  const bom = (p.bom_data as { fg_inv_code?: string | null }[] | null)?.[0]
+                  const bomRaw = p.bom_data as { fg_inv_code?: string | null }[] | { fg_inv_code?: string | null } | null
+                  const bom = Array.isArray(bomRaw) ? bomRaw[0] : bomRaw
                   return (
                     <Link
                       key={p.id}

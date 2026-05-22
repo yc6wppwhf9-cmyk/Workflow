@@ -91,6 +91,28 @@ export interface DesignData {
   sample_color: string | null
   color_skus: string[] | null
   unique_feature: string | null
+  // Tech pack fields (exact mapping from design Excel)
+  farma: string | null
+  season_year: string | null
+  fabric: string | null
+  lining: string | null
+  air_mesh: string | null
+  zipper: string | null
+  puller: string | null
+  patta_9mm: string | null
+  patta_1: string | null
+  patta_2: string | null
+  lader_lock: string | null
+  branding: string | null
+  screen_print: string | null
+  digital_print: string | null
+  bartech: string | null
+  re_sampling_by: string | null
+  remarks: string | null
+  add_on_1: string | null
+  add_on_2: string | null
+  add_on_3: string | null
+  designer_sign: string | null
   is_completed: boolean
   is_locked: boolean
   updated_by: string | null

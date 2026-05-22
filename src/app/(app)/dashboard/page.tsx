@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Header } from '@/components/layout/header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
-import { Package, TrendingUp, Clock, CheckCircle2, ArrowRight, Hash } from 'lucide-react'
+import { Package, TrendingUp, Clock, CheckCircle2, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
 import { STAGE_LABELS, STAGE_COLORS, type WorkflowStage } from '@/lib/types'
 import { formatDateTime } from '@/lib/utils'
@@ -15,7 +15,6 @@ export default async function DashboardPage() {
     { count: liveProducts },
     { count: inProgressProducts },
     { data: recentProducts },
-    { data: fgInvProducts },
     { data: recentLogs },
     { count: designComplete },
     { count: merchComplete },
@@ -27,7 +26,6 @@ export default async function DashboardPage() {
     supabase.from('products').select('*', { count: 'exact', head: true }).eq('workflow_stage', 'product_live'),
     supabase.from('products').select('*', { count: 'exact', head: true }).not('workflow_stage', 'in', '(draft,product_live)'),
     supabase.from('products').select('id, name, sku, workflow_stage, created_at, bom_data(fg_inv_code)').order('created_at', { ascending: false }).limit(6),
-    supabase.from('bom_data').select('fg_inv_code, product:products(id, name, sku)').not('fg_inv_code', 'is', null).limit(20),
     supabase.from('activity_logs').select('*, user:profiles(full_name), product:products(name, sku)').order('created_at', { ascending: false }).limit(8),
     supabase.from('design_data').select('*', { count: 'exact', head: true }).eq('is_completed', true),
     supabase.from('merchandising_data').select('*', { count: 'exact', head: true }).eq('is_completed', true),
@@ -108,83 +106,45 @@ export default async function DashboardPage() {
           </Card>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* FG INV Codes */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Hash className="h-4 w-4 text-gray-400" />
-                FG INV Codes
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {fgInvProducts && fgInvProducts.length > 0 ? (
-                  fgInvProducts.map((row, i) => {
-                    const product = (Array.isArray(row.product) ? row.product[0] : row.product) as { id: string; name?: string; sku?: string } | null
-                    if (!product) return null
-                    return (
-                      <Link
-                        key={i}
-                        href={`/products/${product.id}`}
-                        className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-gray-50 transition-colors group"
-                      >
-                        <p className="text-sm text-gray-700 truncate group-hover:text-blue-600">
-                          {product.name || product.sku}
-                        </p>
-                        <span className="text-xs font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded shrink-0 ml-2">
-                          {row.fg_inv_code}
-                        </span>
-                      </Link>
-                    )
-                  })
-                ) : (
-                  <p className="text-sm text-gray-400 text-center py-6">No FG INV codes assigned yet</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Recent Products */}
-          <Card className="lg:col-span-2">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-base">Recent Products</CardTitle>
-              <Link href="/products" className="text-sm text-blue-600 hover:underline flex items-center gap-1">
-                View all <ArrowRight className="h-3 w-3" />
-              </Link>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-1">
-                {recentProducts?.map((p) => {
-                  const bomRaw = p.bom_data as { fg_inv_code?: string | null }[] | { fg_inv_code?: string | null } | null
-                  const bom = Array.isArray(bomRaw) ? bomRaw[0] : bomRaw
-                  return (
-                    <Link
-                      key={p.id}
-                      href={`/products/${p.id}`}
-                      className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors group"
-                    >
-                      <p className="text-sm font-medium text-gray-900 group-hover:text-blue-600 truncate">
-                        {p.name || p.sku}
-                      </p>
-                      {bom?.fg_inv_code && (
-                        <span className="text-xs font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded shrink-0 ml-3">
-                          {bom.fg_inv_code}
-                        </span>
-                      )}
-                    </Link>
-                  )
-                })}
-                {(!recentProducts || recentProducts.length === 0) && (
-                  <p className="text-sm text-gray-400 text-center py-6">
-                    No products yet.{' '}
-                    <Link href="/products" className="text-blue-600 hover:underline">Create one</Link>
-                  </p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        {/* Recent Products */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base">Recent Products</CardTitle>
+            <Link href="/products" className="text-sm text-blue-600 hover:underline flex items-center gap-1">
+              View all <ArrowRight className="h-3 w-3" />
+            </Link>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-1">
+              {recentProducts?.map((p) => {
+                const bomRaw = p.bom_data as { fg_inv_code?: string | null }[] | { fg_inv_code?: string | null } | null
+                const bom = Array.isArray(bomRaw) ? bomRaw[0] : bomRaw
+                return (
+                  <Link
+                    key={p.id}
+                    href={`/products/${p.id}`}
+                    className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors group"
+                  >
+                    <p className="text-sm font-medium text-gray-900 group-hover:text-blue-600 truncate">
+                      {p.name || p.sku}
+                    </p>
+                    {bom?.fg_inv_code && (
+                      <span className="text-xs font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded shrink-0 ml-3">
+                        {bom.fg_inv_code}
+                      </span>
+                    )}
+                  </Link>
+                )
+              })}
+              {(!recentProducts || recentProducts.length === 0) && (
+                <p className="text-sm text-gray-400 text-center py-6">
+                  No products yet.{' '}
+                  <Link href="/products" className="text-blue-600 hover:underline">Create one</Link>
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Activity feed */}
         <Card>

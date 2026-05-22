@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Save, Loader2, Shield, Workflow, Building2, RefreshCw } from 'lucide-react'
+import { Save, Loader2, Shield, Workflow, Building2, RefreshCw, FileSpreadsheet, Upload, CheckCircle2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -32,6 +32,15 @@ export function SettingsPanel({ users, currentProfile }: SettingsPanelProps) {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState('')
 
+  const itemMasterRef = useRef<HTMLInputElement>(null)
+  const [imCount, setImCount] = useState<number | null>(null)
+  const [imUploading, setImUploading] = useState(false)
+  const [imResult, setImResult] = useState<{ count?: number; error?: string } | null>(null)
+
+  useEffect(() => {
+    fetch('/api/upload-item-master').then(r => r.json()).then(j => setImCount(j.count ?? null))
+  }, [])
+
   // Company settings
   const [companyName, setCompanyName] = useState('HSCVPL')
   const [companyTagline, setCompanyTagline] = useState('Product Lifecycle Management')
@@ -49,6 +58,21 @@ export function SettingsPanel({ users, currentProfile }: SettingsPanelProps) {
     setTimeout(() => setSavedAccount(false), 2000)
     setSavingAccount(false)
     router.refresh()
+  }
+
+  async function handleItemMasterUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImUploading(true)
+    setImResult(null)
+    const fd = new FormData()
+    fd.append('file', file)
+    const res = await fetch('/api/upload-item-master', { method: 'POST', body: fd })
+    const json = await res.json()
+    setImResult(json)
+    if (json.count) setImCount(json.count)
+    setImUploading(false)
+    if (itemMasterRef.current) itemMasterRef.current.value = ''
   }
 
   async function resetUserPassword(userId: string, email: string) {
@@ -131,6 +155,35 @@ export function SettingsPanel({ users, currentProfile }: SettingsPanelProps) {
             ))}
           </div>
           <p className="text-xs text-gray-400 mt-3">Stage ownership is built into the workflow and cannot be changed here.</p>
+        </CardContent>
+      </Card>
+
+      {/* Item Master */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <FileSpreadsheet className="h-4 w-4 text-gray-500" />
+            <CardTitle className="text-base">Item Master</CardTitle>
+          </div>
+          <CardDescription>
+            INV codes lookup table used when importing merchandising Excel.
+            {imCount !== null && <span className="ml-1 text-green-600 font-medium">{imCount.toLocaleString()} items loaded.</span>}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3">
+            <Button size="sm" variant="outline" onClick={() => itemMasterRef.current?.click()} disabled={imUploading}>
+              {imUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              {imUploading ? 'Uploading...' : imCount ? 'Replace Item Master' : 'Upload Item Master'}
+            </Button>
+            <input ref={itemMasterRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleItemMasterUpload} />
+            {imResult && (
+              imResult.error
+                ? <p className="text-xs text-red-600">{imResult.error}</p>
+                : <span className="flex items-center gap-1 text-xs text-green-600"><CheckCircle2 className="h-3.5 w-3.5" />{imResult.count?.toLocaleString()} items loaded</span>
+            )}
+          </div>
+          <p className="text-xs text-gray-400 mt-2">Upload the <span className="font-mono">New_Item_Master_report.xlsx</span> file. INV codes are matched to BOM item names automatically on next merch Excel upload.</p>
         </CardContent>
       </Card>
 

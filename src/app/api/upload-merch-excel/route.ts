@@ -69,12 +69,27 @@ export async function POST(req: NextRequest) {
   if (!isReupload) {
     const primaryVariantBom = colour_variants?.[0]?.bomItems
     if (primaryVariantBom?.length > 0) {
-      let bomItems = primaryVariantBom.map((item: { inv_name: string; inv_code: string }) => ({
-        inv_name: item.inv_name,
-        inv_code: item.inv_code,
-        consumption: '',
-        unit: '',
-      }))
+      // Look up INV codes from item_master by normalised item name
+      const rawNames: string[] = primaryVariantBom.map((item: { inv_name: string }) => item.inv_name)
+      const normNames = rawNames.map(n => n.trim().toLowerCase().replace(/\s+/g, ' '))
+      const { data: masterRows } = await supabase
+        .from('item_master')
+        .select('inv_code, item_name_norm, uom')
+        .in('item_name_norm', normNames)
+      const masterMap = new Map<string, { inv_code: string; uom: string }>()
+      for (const row of masterRows ?? []) {
+        masterMap.set(row.item_name_norm, { inv_code: row.inv_code, uom: row.uom })
+      }
+
+      let bomItems = primaryVariantBom.map((item: { inv_name: string; inv_code: string }, idx: number) => {
+        const master = masterMap.get(normNames[idx])
+        return {
+          inv_name: item.inv_name,
+          inv_code: master?.inv_code ?? item.inv_code,
+          consumption: '',
+          unit: master?.uom ?? '',
+        }
+      })
       if (cutting_items?.length > 0) {
         bomItems = matchConsumptionToBom(bomItems, cutting_items)
       }

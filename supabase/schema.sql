@@ -275,9 +275,24 @@ create trigger on_auth_user_created
   for each row execute function handle_new_user();
 
 -- ============================================================
+-- ITEM MASTER
+-- ============================================================
+
+create table item_master (
+  id               uuid primary key default uuid_generate_v4(),
+  inv_code         text not null,
+  item_name        text not null,
+  item_name_norm   text not null,   -- trim + lowercase + collapsed spaces, for fast lookup
+  uom              text,
+  constraint item_master_norm_unique unique (item_name_norm)
+);
+create index item_master_norm_idx on item_master (item_name_norm);
+
+-- ============================================================
 -- ROW LEVEL SECURITY
 -- ============================================================
 
+alter table item_master enable row level security;
 alter table profiles enable row level security;
 alter table products enable row level security;
 alter table design_data enable row level security;
@@ -288,6 +303,15 @@ alter table sales_data enable row level security;
 alter table product_files enable row level security;
 alter table activity_logs enable row level security;
 alter table stage_unlock_requests enable row level security;
+
+-- Item Master
+create policy "item_master_select" on item_master for select using (auth.role() = 'authenticated');
+create policy "item_master_insert" on item_master for insert with check (
+  exists (select 1 from profiles where id = auth.uid() and role = 'admin')
+);
+create policy "item_master_delete" on item_master for delete using (
+  exists (select 1 from profiles where id = auth.uid() and role = 'admin')
+);
 
 -- Profiles
 create policy "profiles_select" on profiles for select using (true);

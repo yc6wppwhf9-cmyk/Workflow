@@ -35,6 +35,7 @@ export function SettingsPanel({ users, currentProfile }: SettingsPanelProps) {
   const itemMasterRef = useRef<HTMLInputElement>(null)
   const [imCount, setImCount] = useState<number | null>(null)
   const [imUploading, setImUploading] = useState(false)
+  const [imProgress, setImProgress] = useState('')
   const [imResult, setImResult] = useState<{ count?: number; error?: string } | null>(null)
 
   useEffect(() => {
@@ -64,13 +65,59 @@ export function SettingsPanel({ users, currentProfile }: SettingsPanelProps) {
     const file = e.target.files?.[0]
     if (!file) return
     setImUploading(true)
+    setImProgress('Parsing file...')
     setImResult(null)
-    const fd = new FormData()
-    fd.append('file', file)
-    const res = await fetch('/api/upload-item-master', { method: 'POST', body: fd })
-    const json = await res.json()
-    setImResult(json)
-    if (json.count) setImCount(json.count)
+
+    try {
+      // Parse entirely in the browser — no server round-trip for the raw file
+      const { read, utils } = await import('xlsx')
+      const buffer = await file.arrayBuffer()
+      const wb = read(buffer, { type: 'array' })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows = utils.sheet_to_json<string[]>(ws, { header: 1, defval: '' }) as string[][]
+
+      // Header row has 'ARTICLE CODE' (row 2 in this file, but scan to be safe)
+      let headerRowIdx = -1
+      for (let i = 0; i < rows.length; i++) {
+        if (rows[i].some(c => String(c).trim() === 'ARTICLE CODE')) { headerRowIdx = i; break }
+      }
+      if (headerRowIdx < 0) { setImResult({ error: 'ARTICLE CODE column not found' }); setImUploading(false); return }
+
+      const headers = rows[headerRowIdx]
+      const articleCodeIdx = headers.findIndex(h => String(h).trim() === 'ARTICLE CODE')
+      const itemNameIdx = headers.findIndex(h => String(h).trim() === 'ITEM NAME')
+      const uomIdx = headers.findIndex(h => String(h).trim() === 'UOM')
+
+      const items = rows
+        .slice(headerRowIdx + 1)
+        .map(r => ({
+          inv_code: String(r[articleCodeIdx] ?? '').trim(),
+          item_name: String(r[itemNameIdx] ?? '').trim(),
+          item_name_norm: String(r[itemNameIdx] ?? '').trim().toLowerCase().replace(/\s+/g, ' '),
+          uom: uomIdx >= 0 ? String(r[uomIdx] ?? '').trim() : '',
+        }))
+        .filter(r => r.inv_code && r.item_name_norm)
+
+      setImProgress(`Saving ${items.length.toLocaleString()} items...`)
+
+      // Write directly to Supabase from the browser (no server API hop)
+      const supabase = createClient()
+      const BATCH = 1000
+      for (let i = 0; i < items.length; i += BATCH) {
+        const { error } = await supabase
+          .from('item_master')
+          .upsert(items.slice(i, i + BATCH), { onConflict: 'item_name_norm' })
+        if (error) { setImResult({ error: error.message }); setImUploading(false); return }
+        setImProgress(`Saving... ${Math.min(i + BATCH, items.length).toLocaleString()} / ${items.length.toLocaleString()}`)
+      }
+
+      setImResult({ count: items.length })
+      setImCount(items.length)
+    } catch (err) {
+      setImResult({ error: String(err) })
+    }
+
+    setImProgress('')
     setImUploading(false)
     if (itemMasterRef.current) itemMasterRef.current.value = ''
   }
@@ -171,13 +218,14 @@ export function SettingsPanel({ users, currentProfile }: SettingsPanelProps) {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <Button size="sm" variant="outline" onClick={() => itemMasterRef.current?.click()} disabled={imUploading}>
               {imUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              {imUploading ? 'Uploading...' : imCount ? 'Replace Item Master' : 'Upload Item Master'}
+              {imUploading ? 'Loading...' : imCount ? 'Replace Item Master' : 'Upload Item Master'}
             </Button>
             <input ref={itemMasterRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleItemMasterUpload} />
-            {imResult && (
+            {imUploading && imProgress && <p className="text-xs text-blue-600 font-medium">{imProgress}</p>}
+            {!imUploading && imResult && (
               imResult.error
                 ? <p className="text-xs text-red-600">{imResult.error}</p>
                 : <span className="flex items-center gap-1 text-xs text-green-600"><CheckCircle2 className="h-3.5 w-3.5" />{imResult.count?.toLocaleString()} items loaded</span>

@@ -20,7 +20,7 @@ interface MarketingTabProps {
 
 export function MarketingTab({ product, profile, data, files }: MarketingTabProps) {
   const router = useRouter()
-  const canEdit = !data?.is_locked && ['admin', 'marketing'].includes(profile.role)
+  const canEdit = !data?.is_locked && (!data?.is_completed || profile.role === 'admin') && ['admin', 'marketing'].includes(profile.role)
 
   const [form, setForm] = useState({
     product_features: data?.product_features || [] as string[],

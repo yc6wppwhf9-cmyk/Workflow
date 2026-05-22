@@ -19,7 +19,7 @@ const emptyItem = (): BomItem => ({ inv_name: '', inv_code: '', consumption: '',
 
 export function BomTab({ product, profile, data }: BomTabProps) {
   const router = useRouter()
-  const canEdit = !data?.is_locked && ['admin', 'bom'].includes(profile.role)
+  const canEdit = !data?.is_locked && (!data?.is_completed || profile.role === 'admin') && ['admin', 'bom'].includes(profile.role)
   const [items, setItems] = useState<BomItem[]>(data?.items || [])
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)

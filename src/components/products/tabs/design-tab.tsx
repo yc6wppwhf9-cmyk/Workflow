@@ -22,7 +22,7 @@ interface DesignTabProps {
 
 export function DesignTab({ product, profile, data, files }: DesignTabProps) {
   const router = useRouter()
-  const canEdit = !data?.is_locked && ['admin', 'design'].includes(profile.role)
+  const canEdit = !data?.is_locked && (!data?.is_completed || profile.role === 'admin') && ['admin', 'design'].includes(profile.role)
 
   const [form, setForm] = useState({
     channel: data?.channel || '',

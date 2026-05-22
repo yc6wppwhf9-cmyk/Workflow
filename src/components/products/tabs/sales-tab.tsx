@@ -22,7 +22,7 @@ const LAUNCH_STATUSES = ['Planned', 'In Progress', 'Launched', 'Paused', 'Discon
 
 export function SalesTab({ product, profile, data }: SalesTabProps) {
   const router = useRouter()
-  const canEdit = !data?.is_locked && ['admin', 'sales'].includes(profile.role)
+  const canEdit = !data?.is_locked && (!data?.is_completed || profile.role === 'admin') && ['admin', 'sales'].includes(profile.role)
 
   const [form, setForm] = useState({
     mrp: data?.mrp?.toString() || '',

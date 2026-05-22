@@ -65,7 +65,7 @@ function initForm(data: MerchandisingData | null): FormState {
 
 export function MerchandisingTab({ product, profile, data }: MerchandisingTabProps) {
   const router = useRouter()
-  const canEdit = !data?.is_locked && ['admin', 'merchandising'].includes(profile.role)
+  const canEdit = !data?.is_locked && (!data?.is_completed || profile.role === 'admin') && ['admin', 'merchandising'].includes(profile.role)
 
   const [activeVersion, setActiveVersion] = useState<'attribute' | 'production'>('attribute')
   const [attrForm, setAttrForm] = useState<FormState>(() => initForm(data))

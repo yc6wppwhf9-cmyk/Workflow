@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Lock, Save, Plus, X, Upload, ExternalLink, Trash2 } from 'lucide-react'
+import { Loader2, Lock, Save, Plus, X, Upload, ExternalLink, Trash2, FileSpreadsheet, CheckCircle2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { createClient } from '@/lib/supabase/client'
 import { CATEGORY_LABELS, BRANDS, CHANNELS, type ProductCategory, type Brand } from '@/lib/types'
 import type { Product, Profile, DesignData, ProductFile } from '@/lib/types'
+import { parseTechPackRows, buildSpecText } from '@/lib/parse-techpack'
 
 interface DesignTabProps {
   product: Product
@@ -42,6 +43,10 @@ export function DesignTab({ product, profile, data, files }: DesignTabProps) {
   const illustrationRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadingName, setUploadingName] = useState('')
+
+  const techPackRef = useRef<HTMLInputElement>(null)
+  const [parsingTechPack, setParsing] = useState(false)
+  const [techPackResult, setTechPackResult] = useState<{ filled: string[] } | null>(null)
 
   const designFiles = files.filter(f => f.department === 'design' && f.file_type?.startsWith('image/'))
 
@@ -132,6 +137,55 @@ export function DesignTab({ product, profile, data, files }: DesignTabProps) {
     router.refresh()
   }
 
+  async function handleTechPackUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setParsing(true)
+    setTechPackResult(null)
+
+    try {
+      const { read, utils } = await import('xlsx')
+      const buffer = await file.arrayBuffer()
+      const wb = read(buffer, { type: 'array' })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows = utils.sheet_to_json<string[]>(ws, { header: 1, defval: '' }) as string[][]
+      const fields = parseTechPackRows(rows)
+
+      const filled: string[] = []
+      const updates: Partial<typeof form> = {}
+
+      if (fields.designerName) {
+        updates.designer_name = fields.designerName
+        filled.push('Designer Name')
+      }
+      const specText = buildSpecText(fields)
+      if (specText) {
+        updates.unique_feature = specText
+        filled.push('Material Specs')
+      }
+      if (fields.farma && !form.color_skus.includes(fields.farma)) {
+        updates.color_skus = [...form.color_skus, fields.farma]
+        filled.push(`Farma code (${fields.farma})`)
+      }
+
+      setForm(f => ({ ...f, ...updates }))
+
+      // If product name is a placeholder, update it from STYLE NAME
+      if (fields.styleName && (product.name === 'New Product' || product.name.startsWith('PROD-'))) {
+        const supabase = createClient()
+        await supabase.from('products').update({ name: fields.styleName, updated_by: profile.id }).eq('id', product.id)
+        filled.push(`Product name → ${fields.styleName}`)
+      }
+
+      setTechPackResult({ filled })
+    } catch {
+      setTechPackResult({ filled: [] })
+    }
+
+    setParsing(false)
+    if (techPackRef.current) techPackRef.current.value = ''
+  }
+
   async function deleteFile(file: ProductFile) {
     const supabase = createClient()
     const urlParts = file.file_url.split('/product-files/')
@@ -206,6 +260,42 @@ export function DesignTab({ product, profile, data, files }: DesignTabProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* Tech Pack Upload */}
+      {canEditFields && (
+        <Card className="border-purple-200 bg-purple-50">
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-purple-100 flex items-center justify-center shrink-0">
+                  <FileSpreadsheet className="h-5 w-5 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-purple-900">Upload Tech Pack</p>
+                  <p className="text-xs text-purple-700">Fills designer name, material specs, and farma code from the design Excel</p>
+                </div>
+              </div>
+              <Button size="sm" onClick={() => techPackRef.current?.click()} disabled={parsingTechPack} className="bg-purple-600 hover:bg-purple-700 shrink-0">
+                {parsingTechPack ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                {parsingTechPack ? 'Parsing...' : 'Upload Tech Pack'}
+              </Button>
+              <input ref={techPackRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleTechPackUpload} />
+            </div>
+            {techPackResult && (
+              <div className="mt-3 pt-3 border-t border-purple-200">
+                {techPackResult.filled.length > 0 ? (
+                  <div className="flex items-start gap-2 text-purple-800">
+                    <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0 text-purple-600" />
+                    <p className="text-xs">Filled: {techPackResult.filled.join(', ')}. Review below and save.</p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-red-600">Could not extract data — check the file format.</p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-3">

@@ -78,6 +78,7 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
   const [newMaterial, setNewMaterial] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   const excelInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
@@ -95,21 +96,33 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
 
   async function handleSave() {
     setSaving(true)
+    setSaveError('')
     const supabase = createClient()
-    // If attribute already has data, any manual edit goes to production version
-    const attributeAlreadySet = !!(data?.weight)
-    const savesToProduction = activeVersion === 'production' || attributeAlreadySet
-    if (savesToProduction) {
-      await supabase.from('merchandising_data').update({ production_fields: form, updated_by: profile.id }).eq('product_id', product.id)
+    let versionLabel: 'attribute' | 'production'
+
+    if (activeVersion === 'production') {
+      const { error } = await supabase.from('merchandising_data').update({ production_fields: form, updated_by: profile.id }).eq('product_id', product.id)
+      if (error) { setSaveError(error.message); setSaving(false); return }
       setProdForm({ ...form })
       setHasProd(true)
-      setActiveVersion('production')
+      versionLabel = 'production'
     } else {
-      await supabase.from('merchandising_data').update({ ...attrForm, updated_by: profile.id }).eq('product_id', product.id)
+      const { error } = await supabase.from('merchandising_data').update({ ...attrForm, updated_by: profile.id }).eq('product_id', product.id)
+      if (error) { setSaveError(error.message); setSaving(false); return }
+      versionLabel = 'attribute'
+      // First manual edit on attribute: also create production as a copy, then switch to it
+      if (!hasProd) {
+        await supabase.from('merchandising_data').update({ production_fields: attrForm, updated_by: profile.id }).eq('product_id', product.id)
+        setProdForm({ ...attrForm })
+        setHasProd(true)
+        setActiveVersion('production')
+        versionLabel = 'production'
+      }
     }
+
     await supabase.from('activity_logs').insert({
       product_id: product.id, user_id: profile.id,
-      action: `updated merchandising data (${savesToProduction ? 'production' : 'attribute'})`, department: 'merchandising',
+      action: `updated merchandising data (${versionLabel})`, department: 'merchandising',
     })
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
@@ -299,7 +312,7 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
     setSaving(true)
     const supabase = createClient()
     await supabase.from('merchandising_data').update({
-      ...form, is_completed: !data?.is_completed, updated_by: profile.id,
+      ...attrForm, is_completed: !data?.is_completed, updated_by: profile.id,
     }).eq('product_id', product.id)
     setSaving(false)
     router.refresh()
@@ -511,6 +524,9 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
             </div>
           </div>
 
+          {saveError && (
+            <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{saveError}</p>
+          )}
           {canEdit && (
             <div className="flex items-center gap-3 pt-2 border-t border-gray-100">
               <Button onClick={handleSave} disabled={saving}>

@@ -88,7 +88,7 @@ export function SettingsPanel({ users, currentProfile }: SettingsPanelProps) {
       const itemNameIdx = headers.findIndex(h => String(h).trim() === 'ITEM NAME')
       const uomIdx = headers.findIndex(h => String(h).trim() === 'UOM')
 
-      const items = rows
+      const rawItems = rows
         .slice(headerRowIdx + 1)
         .map(r => ({
           inv_code: String(r[articleCodeIdx] ?? '').trim(),
@@ -97,6 +97,10 @@ export function SettingsPanel({ users, currentProfile }: SettingsPanelProps) {
           uom: uomIdx >= 0 ? String(r[uomIdx] ?? '').trim() : '',
         }))
         .filter(r => r.inv_code && r.item_name_norm)
+
+      // Deduplicate by item_name_norm — upsert fails if same key appears twice in one batch
+      const itemMap = new Map(rawItems.map(r => [r.item_name_norm, r]))
+      const items = Array.from(itemMap.values())
 
       setImProgress(`Saving ${items.length.toLocaleString()} items...`)
 

@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Header } from '@/components/layout/header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
-import { Package, TrendingUp, Clock, CheckCircle2, ArrowRight, Layers } from 'lucide-react'
+import { Package, TrendingUp, Clock, CheckCircle2, ArrowRight, Hash } from 'lucide-react'
 import Link from 'next/link'
 import { STAGE_LABELS, STAGE_COLORS, type WorkflowStage } from '@/lib/types'
 import { formatDateTime } from '@/lib/utils'
@@ -15,7 +15,7 @@ export default async function DashboardPage() {
     { count: liveProducts },
     { count: inProgressProducts },
     { data: recentProducts },
-    { data: stageCounts },
+    { data: fgInvProducts },
     { data: recentLogs },
     { count: designComplete },
     { count: merchComplete },
@@ -27,11 +27,14 @@ export default async function DashboardPage() {
     supabase.from('products').select('*', { count: 'exact', head: true }).eq('workflow_stage', 'product_live'),
     supabase.from('products').select('*', { count: 'exact', head: true }).not('workflow_stage', 'in', '(draft,product_live)'),
     supabase.from('products').select(`
-      id, name, sku, workflow_stage, created_at,
+      id, name, sku, workflow_stage,
       bom_data(fg_inv_code),
       design_data(designer_name)
     `).order('created_at', { ascending: false }).limit(6),
-    supabase.from('products').select('workflow_stage'),
+    supabase.from('products').select(`
+      id, name, sku,
+      bom_data!inner(fg_inv_code)
+    `).not('bom_data.fg_inv_code', 'is', null).order('created_at', { ascending: false }).limit(20),
     supabase.from('activity_logs').select('*, user:profiles(full_name), product:products(name, sku)').order('created_at', { ascending: false }).limit(8),
     supabase.from('design_data').select('*', { count: 'exact', head: true }).eq('is_completed', true),
     supabase.from('merchandising_data').select('*', { count: 'exact', head: true }).eq('is_completed', true),
@@ -40,25 +43,10 @@ export default async function DashboardPage() {
     supabase.from('sales_data').select('*', { count: 'exact', head: true }).eq('is_completed', true),
   ])
 
-  const stageMap: Record<string, number> = {}
-  if (stageCounts) {
-    for (const p of stageCounts) {
-      stageMap[p.workflow_stage] = (stageMap[p.workflow_stage] || 0) + 1
-    }
-  }
-
   const total = totalProducts || 0
   const deptTotal = total * 5
   const deptDone = (designComplete || 0) + (merchComplete || 0) + (bomComplete || 0) + (marketingComplete || 0) + (salesComplete || 0)
   const deptRate = deptTotal > 0 ? Math.round((deptDone / deptTotal) * 100) : 0
-
-  const deptStats = [
-    { label: 'Design', done: designComplete || 0 },
-    { label: 'Merchandising', done: merchComplete || 0 },
-    { label: 'BOM', done: bomComplete || 0 },
-    { label: 'Marketing', done: marketingComplete || 0 },
-    { label: 'Sales', done: salesComplete || 0 },
-  ]
 
   return (
     <div>
@@ -128,32 +116,38 @@ export default async function DashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Department Health */}
+          {/* FG INV Codes */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
-                <Layers className="h-4 w-4 text-gray-400" />
-                Department Health
+                <Hash className="h-4 w-4 text-gray-400" />
+                FG INV Codes
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {deptStats.map(({ label, done }) => {
-                const pct = total > 0 ? Math.round((done / total) * 100) : 0
-                return (
-                  <div key={label}>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-sm text-gray-700">{label}</span>
-                      <span className="text-xs text-gray-500">
-                        <span className="font-semibold text-gray-900">{done}</span> / {total}
-                      </span>
-                    </div>
-                    <Progress value={pct} className="h-1.5" />
-                  </div>
-                )
-              })}
-              {total === 0 && (
-                <p className="text-sm text-gray-400 text-center py-4">No products yet</p>
-              )}
+            <CardContent>
+              <div className="space-y-2">
+                {fgInvProducts && fgInvProducts.length > 0 ? (
+                  fgInvProducts.map((p) => {
+                    const bom = (p.bom_data as { fg_inv_code?: string | null }[] | null)?.[0]
+                    return (
+                      <Link
+                        key={p.id}
+                        href={`/products/${p.id}`}
+                        className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-gray-50 transition-colors group"
+                      >
+                        <p className="text-sm text-gray-700 truncate group-hover:text-blue-600">
+                          {p.name || p.sku}
+                        </p>
+                        <span className="text-xs font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded shrink-0 ml-2">
+                          {bom?.fg_inv_code}
+                        </span>
+                      </Link>
+                    )
+                  })
+                ) : (
+                  <p className="text-sm text-gray-400 text-center py-6">No FG INV codes assigned yet</p>
+                )}
+              </div>
             </CardContent>
           </Card>
 
@@ -212,26 +206,6 @@ export default async function DashboardPage() {
             </CardContent>
           </Card>
         </div>
-
-        {/* Pipeline by Stage */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Pipeline by Stage</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-              {Object.entries(STAGE_LABELS).map(([stage, label]) => {
-                const count = stageMap[stage] || 0
-                return (
-                  <div key={stage} className="text-center p-4 rounded-xl bg-gray-50 border border-gray-100">
-                    <p className="text-2xl font-bold text-gray-900">{count}</p>
-                    <p className="text-xs text-gray-500 mt-1 leading-tight">{label}</p>
-                  </div>
-                )
-              })}
-            </div>
-          </CardContent>
-        </Card>
 
         {/* Activity feed */}
         <Card>

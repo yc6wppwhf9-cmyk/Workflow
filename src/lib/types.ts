@@ -242,19 +242,6 @@ export interface ActivityLog {
   user?: Profile
 }
 
-export interface StageUnlockRequest {
-  id: string
-  product_id: string
-  stage: WorkflowStage
-  requested_by: string | null
-  reason: string | null
-  status: 'pending' | 'approved' | 'rejected'
-  resolved_by: string | null
-  created_at: string
-  resolved_at: string | null
-  requester?: Profile
-}
-
 // Workflow stage ordering and labels
 export const WORKFLOW_STAGES: WorkflowStage[] = [
   'draft',

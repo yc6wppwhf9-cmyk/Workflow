@@ -192,6 +192,7 @@ export function DesignTab({ product, profile, data, files }: DesignTabProps) {
 
     setParsing(false)
     if (techPackRef.current) techPackRef.current.value = ''
+    router.refresh()
   }
 
   async function handleIllustrationUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -320,7 +321,10 @@ export function DesignTab({ product, profile, data, files }: DesignTabProps) {
                 {techPackResult.filled.length > 0 ? (
                   <div className="flex items-start gap-2 text-purple-800">
                     <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0 text-purple-600" />
-                    <p className="text-xs">Filled: {techPackResult.filled.join(', ')}. Review and save.</p>
+                    <div className="text-xs space-y-1">
+                      <p>Filled: {techPackResult.filled.join(', ')}. Review and save.</p>
+                      <p className="text-purple-600">If the Excel has multiple colour variants, data is taken from the first variant. Adjust colour-specific fields (Fabric, Zipper, Branding, Bartech, Patta) as needed.</p>
+                    </div>
                   </div>
                 ) : (
                   <p className="text-xs text-red-600">Could not extract data — check the file format.</p>

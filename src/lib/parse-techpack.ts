@@ -29,24 +29,21 @@ function norm(s: string): string {
   return String(s).toUpperCase().replace(/[-:\s]/g, '')
 }
 
-// Return the first non-empty cell after the given column in the same row
-function valueAfter(row: string[], col: number): string {
-  for (let v = col + 1; v < row.length; v++) {
-    const val = String(row[v] || '').trim()
-    if (val) return val
-  }
-  return ''
+// Return the cell immediately after the label (values are always adjacent in col+1).
+// Skipping empty cells was the bug — it caused empty values to grab the next label.
+function valueAt(row: string[], col: number): string {
+  return String(row[col + 1] ?? '').trim()
 }
 
-// Find the Nth (0-indexed) cell matching keyword and return its adjacent value
+// Find the Nth (0-indexed) cell that EXACTLY matches the normalised keyword and return its adjacent value.
+// Exact match prevents "9MM PATTA" from matching keyword "PATTA" (9MMPATTA !== PATTA).
 function extractNth(rows: string[][], keyword: string, nth = 0): string {
   const kw = norm(keyword)
   let count = 0
   for (const row of rows) {
     for (let c = 0; c < row.length; c++) {
-      const cell = norm(row[c])
-      if (cell.includes(kw) && cell.length < kw.length + 10) {
-        if (count === nth) return valueAfter(row, c)
+      if (norm(row[c]) === kw) {
+        if (count === nth) return valueAt(row, c)
         count++
       }
     }
@@ -59,7 +56,7 @@ function extract(rows: string[][], keyword: string): string {
 }
 
 export function parseTechPackRows(rows: string[][]): TechPackFields {
-  // Season year: look for YYYY-YYYY in first 3 rows
+  // Season year: look for YYYY-YYYY pattern in first 3 rows
   let seasonYear = ''
   for (const row of rows.slice(0, 3)) {
     for (const cell of row) {

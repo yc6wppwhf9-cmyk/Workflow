@@ -29,6 +29,7 @@ interface ProductDetailProps {
   salesData: SalesData | null
   files: ProductFile[]
   logs: ActivityLog[]
+  defaultTab?: string
 }
 
 const TABS = [
@@ -42,10 +43,14 @@ const TABS = [
   { value: 'timeline', label: 'Timeline' },
 ]
 
+const VALID_TABS = new Set(TABS.map(t => t.value))
+
 export function ProductDetail({
   product, profile, designData, merchandisingData,
   bomData, marketingData, salesData, files, logs,
+  defaultTab,
 }: ProductDetailProps) {
+  const initialTab = defaultTab && VALID_TABS.has(defaultTab) ? defaultTab : 'overview'
   const router = useRouter()
 
   useEffect(() => {
@@ -111,7 +116,7 @@ export function ProductDetail({
         salesData={salesData}
       />
 
-      <TabsPrimitive.Root defaultValue="overview">
+      <TabsPrimitive.Root defaultValue={initialTab}>
         <div className="border-b border-gray-200 bg-white px-6">
           <TabsPrimitive.List className="flex gap-0 -mb-px">
             {TABS.map((tab) => (

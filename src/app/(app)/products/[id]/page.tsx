@@ -4,8 +4,15 @@ import { Header } from '@/components/layout/header'
 import { ProductDetail } from '@/components/products/product-detail'
 import type { Profile } from '@/lib/types'
 
-export default async function ProductPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ProductPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ tab?: string }>
+}) {
   const { id } = await params
+  const { tab } = await searchParams
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
@@ -53,6 +60,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
         salesData={salesData}
         files={files || []}
         logs={logs || []}
+        defaultTab={tab}
       />
     </div>
   )

@@ -7,18 +7,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createClient } from '@/lib/supabase/client'
-import { formatCurrency } from '@/lib/utils'
-import type { Product, Profile, SalesData } from '@/lib/types'
+import { CHANNELS, CATEGORY_LABELS, type Product, type Profile, type SalesData, type ProductCategory } from '@/lib/types'
 
 interface SalesTabProps {
   product: Product
   profile: Profile
   data: SalesData | null
 }
-
-const LAUNCH_STATUSES = ['Planned', 'In Progress', 'Launched', 'Paused', 'Discontinued']
 
 export function SalesTab({ product, profile, data }: SalesTabProps) {
   const router = useRouter()
@@ -27,34 +25,43 @@ export function SalesTab({ product, profile, data }: SalesTabProps) {
   const showActions = !data?.is_locked && isRoleAllowed
 
   const [form, setForm] = useState({
-    mrp: data?.mrp?.toString() || '',
-    dealer_pricing: data?.dealer_pricing?.toString() || '',
-    launch_status: data?.launch_status || '',
-    launch_date: data?.launch_date || '',
+    assign_to: data?.assign_to || '',
+    channel: data?.channel || '',
+    category: product.category || '',
+    price_range: data?.price_range || '',
+    deadline_date: data?.deadline_date || '',
+    product_specification: data?.product_specification || '',
   })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
-  const margin = form.mrp && form.dealer_pricing
-    ? Math.round(((parseFloat(form.mrp) - parseFloat(form.dealer_pricing)) / parseFloat(form.mrp)) * 100)
-    : null
+  function set(field: string, value: string) {
+    setForm(f => ({ ...f, [field]: value }))
+  }
 
   async function handleSave() {
     setSaving(true)
     const supabase = createClient()
 
-    await supabase.from('sales_data').update({
-      mrp: form.mrp ? parseFloat(form.mrp) : null,
-      dealer_pricing: form.dealer_pricing ? parseFloat(form.dealer_pricing) : null,
-      launch_status: form.launch_status,
-      launch_date: form.launch_date || null,
-      updated_by: profile.id,
-    }).eq('product_id', product.id)
+    await Promise.all([
+      supabase.from('sales_data').update({
+        assign_to: form.assign_to || null,
+        channel: form.channel || null,
+        price_range: form.price_range || null,
+        deadline_date: form.deadline_date || null,
+        product_specification: form.product_specification || null,
+        updated_by: profile.id,
+      }).eq('product_id', product.id),
+
+      form.category
+        ? supabase.from('products').update({ category: form.category, updated_by: profile.id }).eq('id', product.id)
+        : Promise.resolve(),
+    ])
 
     await supabase.from('activity_logs').insert({
       product_id: product.id,
       user_id: profile.id,
-      action: 'updated sales data',
+      action: 'updated sales requirement',
       department: 'sales',
     })
 
@@ -67,10 +74,11 @@ export function SalesTab({ product, profile, data }: SalesTabProps) {
     setSaving(true)
     const supabase = createClient()
     await supabase.from('sales_data').update({
-      mrp: form.mrp ? parseFloat(form.mrp) : null,
-      dealer_pricing: form.dealer_pricing ? parseFloat(form.dealer_pricing) : null,
-      launch_status: form.launch_status,
-      launch_date: form.launch_date || null,
+      assign_to: form.assign_to || null,
+      channel: form.channel || null,
+      price_range: form.price_range || null,
+      deadline_date: form.deadline_date || null,
+      product_specification: form.product_specification || null,
       is_completed: !data?.is_completed,
       updated_by: profile.id,
     }).eq('product_id', product.id)
@@ -82,7 +90,7 @@ export function SalesTab({ product, profile, data }: SalesTabProps) {
     <div className="max-w-2xl space-y-4">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-3">
-          <CardTitle className="text-base">Sales Details</CardTitle>
+          <CardTitle className="text-base">Sales Requirement</CardTitle>
           {data?.is_locked && (
             <span className="flex items-center gap-1.5 text-xs text-orange-600 bg-orange-50 px-2.5 py-1 rounded-full border border-orange-200">
               <Lock className="h-3 w-3" /> Stage Locked
@@ -90,69 +98,87 @@ export function SalesTab({ product, profile, data }: SalesTabProps) {
           )}
         </CardHeader>
         <CardContent className="space-y-4">
+
+          {/* Row 1: Assign To + Channel */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label>MRP (₹)</Label>
+              <Label>Assign To</Label>
               <Input
-                type="number"
-                placeholder="0.00"
-                value={form.mrp}
-                onChange={(e) => setForm({ ...form, mrp: e.target.value })}
+                placeholder="Designer / team member name"
+                value={form.assign_to}
+                onChange={e => set('assign_to', e.target.value)}
                 disabled={!canEditFields}
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Dealer Pricing (₹)</Label>
-              <Input
-                type="number"
-                placeholder="0.00"
-                value={form.dealer_pricing}
-                onChange={(e) => setForm({ ...form, dealer_pricing: e.target.value })}
-                disabled={!canEditFields}
-              />
+              <Label>Channel</Label>
+              <Select value={form.channel} onValueChange={v => set('channel', v)} disabled={!canEditFields}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select channel..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {CHANNELS.map(c => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
-          {margin !== null && (
-            <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm">
-              <span className="text-gray-600">Dealer margin: </span>
-              <span className="font-semibold text-green-700">{margin}%</span>
-              {form.mrp && form.dealer_pricing && (
-                <span className="text-gray-500 ml-2">
-                  ({formatCurrency(parseFloat(form.mrp) - parseFloat(form.dealer_pricing))} per unit)
-                </span>
-              )}
-            </div>
-          )}
-
+          {/* Row 2: Category + Price Range */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label>Launch Status</Label>
-              <Select value={form.launch_status} onValueChange={(v) => setForm({ ...form, launch_status: v })} disabled={!canEditFields}>
+              <Label>Category</Label>
+              <Select value={form.category} onValueChange={v => set('category', v)} disabled={!canEditFields}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select status..." />
+                  <SelectValue placeholder="Select category..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {LAUNCH_STATUSES.map((s) => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>{label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>Launch Date</Label>
+              <Label>Price Range (₹)</Label>
               <Input
-                type="date"
-                value={form.launch_date}
-                onChange={(e) => setForm({ ...form, launch_date: e.target.value })}
+                placeholder="e.g. 500 – 1500"
+                value={form.price_range}
+                onChange={e => set('price_range', e.target.value)}
                 disabled={!canEditFields}
               />
             </div>
           </div>
 
+          {/* Deadline Date */}
+          <div className="space-y-1.5">
+            <Label>Deadline Date</Label>
+            <Input
+              type="date"
+              value={form.deadline_date}
+              onChange={e => set('deadline_date', e.target.value)}
+              disabled={!canEditFields}
+              className="w-48"
+            />
+          </div>
+
+          {/* Product Specification */}
+          <div className="space-y-1.5">
+            <Label>Product Specification</Label>
+            <Textarea
+              placeholder="Describe the product requirements, features, target customer, and any specific details..."
+              value={form.product_specification}
+              onChange={e => set('product_specification', e.target.value)}
+              disabled={!canEditFields}
+              rows={5}
+            />
+          </div>
+
           {saved && (
             <p className="text-sm text-green-600 bg-green-50 border border-green-200 rounded-lg px-3 py-2">Changes saved.</p>
           )}
+
           {showActions && (
             <div className="flex items-center gap-3 pt-2">
               {canEditFields && (
@@ -161,7 +187,10 @@ export function SalesTab({ product, profile, data }: SalesTabProps) {
                   Save Changes
                 </Button>
               )}
-              <Button variant="outline" onClick={markComplete} disabled={saving}
+              <Button
+                variant="outline"
+                onClick={markComplete}
+                disabled={saving}
                 className={data?.is_completed ? 'text-orange-600 border-orange-200' : 'text-green-600 border-green-200'}
               >
                 {data?.is_completed ? 'Mark Incomplete' : 'Mark Sales Complete'}

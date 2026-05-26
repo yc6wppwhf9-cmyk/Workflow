@@ -205,6 +205,12 @@ export interface MarketingData {
 export interface SalesData {
   id: string
   product_id: string
+  assign_to: string | null
+  channel: string | null
+  price_range: string | null
+  deadline_date: string | null
+  product_specification: string | null
+  // legacy fields kept in DB
   mrp: number | null
   dealer_pricing: number | null
   launch_status: string | null

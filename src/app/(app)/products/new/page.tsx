@@ -20,7 +20,7 @@ export default async function NewProductPage() {
       <Header
         title="New Product"
         subtitle={isSales
-          ? "Enter the product name, category and brand, then save to open the sales requirement form."
+          ? "Fill in the product details and sales requirement, then create the product."
           : "Fill in the design details and upload the tech pack, then create the product."}
       />
       <div className="p-6">

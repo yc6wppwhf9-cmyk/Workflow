@@ -15,6 +15,7 @@ import type { Profile, WorkflowStage } from '@/lib/types'
 interface SettingsPanelProps {
   users: Pick<Profile, 'id' | 'full_name' | 'email' | 'role'>[]
   currentProfile: Profile
+  settings: Record<string, string>
 }
 
 const WORKFLOW_STAGES: WorkflowStage[] = [
@@ -27,7 +28,7 @@ const WORKFLOW_STAGES: WorkflowStage[] = [
   'product_live',
 ]
 
-export function SettingsPanel({ users, currentProfile }: SettingsPanelProps) {
+export function SettingsPanel({ users, currentProfile, settings }: SettingsPanelProps) {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState('')
@@ -42,9 +43,23 @@ export function SettingsPanel({ users, currentProfile }: SettingsPanelProps) {
     fetch('/api/upload-item-master').then(r => r.json()).then(j => setImCount(j.count ?? null))
   }, [])
 
-  // Company settings
-  const [companyName, setCompanyName] = useState('HSCVPL')
-  const [companyTagline, setCompanyTagline] = useState('Product Lifecycle Management')
+  // Company settings — loaded from DB
+  const [companyName, setCompanyName] = useState(settings.company_name ?? 'HSCVPL')
+  const [companyTagline, setCompanyTagline] = useState(settings.company_tagline ?? 'Product Lifecycle Management')
+  const [savingCompany, setSavingCompany] = useState(false)
+  const [savedCompany, setSavedCompany] = useState(false)
+
+  async function saveCompanySettings() {
+    setSavingCompany(true)
+    const supabase = createClient()
+    await Promise.all([
+      supabase.from('system_settings').update({ value: companyName, updated_at: new Date().toISOString() }).eq('key', 'company_name'),
+      supabase.from('system_settings').update({ value: companyTagline, updated_at: new Date().toISOString() }).eq('key', 'company_tagline'),
+    ])
+    setSavedCompany(true)
+    setTimeout(() => { setSavedCompany(false); router.refresh() }, 2000)
+    setSavingCompany(false)
+  }
 
   // My account
   const [fullName, setFullName] = useState(currentProfile.full_name)
@@ -157,7 +172,10 @@ export function SettingsPanel({ users, currentProfile }: SettingsPanelProps) {
               <Input value={companyTagline} onChange={e => setCompanyTagline(e.target.value)} />
             </div>
           </div>
-          <p className="text-xs text-gray-400">Note: Company name changes take effect after the next deployment.</p>
+          <Button onClick={saveCompanySettings} disabled={savingCompany} size="sm">
+            {savingCompany ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {savedCompany ? 'Saved!' : 'Save Company Settings'}
+          </Button>
         </CardContent>
       </Card>
 

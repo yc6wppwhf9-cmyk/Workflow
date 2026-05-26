@@ -84,11 +84,10 @@ export function MarketingTab({ product, profile, data, files }: MarketingTabProp
       const storagePath = `${product.id}/marketing_${ts}_${i}_${file.name}`
       const { error } = await supabase.storage.from('product-files').upload(storagePath, file, { upsert: true })
       if (!error) {
-        const { data: { publicUrl } } = supabase.storage.from('product-files').getPublicUrl(storagePath)
         await supabase.from('product_files').insert({
           product_id: product.id,
           name: file.name,
-          file_url: publicUrl,
+          file_url: storagePath,
           file_type: file.type,
           file_size: file.size,
           department: 'marketing',
@@ -110,10 +109,11 @@ export function MarketingTab({ product, profile, data, files }: MarketingTabProp
 
   async function deleteFile(file: ProductFile) {
     const supabase = createClient()
-    // Extract storage path from URL
-    const urlParts = file.file_url.split('/product-files/')
-    if (urlParts[1]) {
-      await supabase.storage.from('product-files').remove([decodeURIComponent(urlParts[1])])
+    const url = file.file_url
+    const parts = url.split('/product-files/')
+    const storagePath = parts.length > 1 ? decodeURIComponent(parts[1].split('?')[0]) : url
+    if (!storagePath.startsWith('http')) {
+      await supabase.storage.from('product-files').remove([storagePath])
     }
     await supabase.from('product_files').delete().eq('id', file.id)
     router.refresh()

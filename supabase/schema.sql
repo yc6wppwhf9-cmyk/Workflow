@@ -312,9 +312,25 @@ create table item_master (
 create index item_master_norm_idx on item_master (item_name_norm);
 
 -- ============================================================
+-- SYSTEM SETTINGS
+-- ============================================================
+
+create table system_settings (
+  key        text primary key,
+  value      text not null,
+  updated_at timestamptz not null default now()
+);
+
+insert into system_settings (key, value) values
+  ('company_name', 'HSCVPL'),
+  ('company_tagline', 'Product Lifecycle Management')
+on conflict (key) do nothing;
+
+-- ============================================================
 -- ROW LEVEL SECURITY
 -- ============================================================
 
+alter table system_settings enable row level security;
 alter table item_master enable row level security;
 alter table profiles enable row level security;
 alter table products enable row level security;
@@ -326,6 +342,12 @@ alter table sales_data enable row level security;
 alter table product_files enable row level security;
 alter table activity_logs enable row level security;
 alter table stage_unlock_requests enable row level security;
+
+-- System settings
+create policy "settings_select" on system_settings for select using (auth.role() = 'authenticated');
+create policy "settings_update" on system_settings for update using (
+  exists (select 1 from profiles where id = auth.uid() and role = 'admin')
+);
 
 -- Item Master
 create policy "item_master_select" on item_master for select using (auth.role() = 'authenticated');
@@ -343,7 +365,14 @@ create policy "profiles_update_own" on profiles for update using (auth.uid() = i
 -- Products
 create policy "products_select" on products for select using (auth.role() = 'authenticated');
 create policy "products_insert" on products for insert with check (auth.role() = 'authenticated');
-create policy "products_update" on products for update using (auth.role() = 'authenticated');
+create policy "products_update" on products for update using (
+  exists (
+    select 1 from profiles
+    where id = auth.uid()
+      and is_active = true
+      and role in ('admin', 'design', 'merchandising', 'bom', 'marketing', 'sales')
+  )
+);
 
 -- Design data
 create policy "design_select" on design_data for select using (auth.role() = 'authenticated');
@@ -399,7 +428,7 @@ create policy "unlock_update" on stage_unlock_requests for update using (
 -- ============================================================
 
 insert into storage.buckets (id, name, public)
-values ('product-files', 'product-files', true)
+values ('product-files', 'product-files', false)
 on conflict (id) do nothing;
 
 create policy "product_files_upload" on storage.objects
@@ -411,7 +440,8 @@ create policy "product_files_update" on storage.objects
   using (bucket_id = 'product-files');
 
 create policy "product_files_read" on storage.objects
-  for select using (bucket_id = 'product-files');
+  for select to authenticated
+  using (bucket_id = 'product-files');
 
 -- ============================================================
 -- TRANSACTIONAL RPC FUNCTIONS
@@ -427,6 +457,7 @@ create or replace function advance_product_stage(
 declare
   v_current_stage workflow_stage;
   v_role user_role;
+  v_is_completed boolean;
 begin
   if auth.uid() <> p_user_id then
     raise exception 'Unauthorized user ID';
@@ -446,9 +477,44 @@ begin
       raise exception 'Only marketing team or admin can advance from bom_finalized';
     elsif v_current_stage = 'marketing_ready' and v_role <> 'sales' then
       raise exception 'Only sales team or admin can advance from marketing_ready';
-    elsif v_current_stage = 'sales_priced' or v_current_stage = 'product_live' then
+    elsif v_current_stage in ('sales_priced', 'product_live') then
       raise exception 'Only admin can advance from this stage';
     end if;
+
+    -- Server-side is_completed check (non-admins only)
+    case v_current_stage
+      when 'draft' then
+        select coalesce(is_completed, false) into v_is_completed
+          from design_data where product_id = p_product_id;
+        if not v_is_completed then
+          raise exception 'Design must be marked complete before advancing';
+        end if;
+      when 'design_completed' then
+        select coalesce(is_completed, false) into v_is_completed
+          from merchandising_data where product_id = p_product_id;
+        if not v_is_completed then
+          raise exception 'Merchandising must be marked complete before advancing';
+        end if;
+      when 'merchandising_completed' then
+        select coalesce(is_completed, false) into v_is_completed
+          from bom_data where product_id = p_product_id;
+        if not v_is_completed then
+          raise exception 'BOM must be marked complete before advancing';
+        end if;
+      when 'bom_finalized' then
+        select coalesce(is_completed, false) into v_is_completed
+          from marketing_data where product_id = p_product_id;
+        if not v_is_completed then
+          raise exception 'Marketing must be marked complete before advancing';
+        end if;
+      when 'marketing_ready' then
+        select coalesce(is_completed, false) into v_is_completed
+          from sales_data where product_id = p_product_id;
+        if not v_is_completed then
+          raise exception 'Sales must be marked complete before advancing';
+        end if;
+      else null;
+    end case;
   end if;
 
   update products

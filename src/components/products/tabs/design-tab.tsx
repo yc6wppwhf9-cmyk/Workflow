@@ -207,9 +207,8 @@ export function DesignTab({ product, profile, data, files }: DesignTabProps) {
       const storagePath = `${product.id}/design_${ts}_${i}_${file.name}`
       const { error } = await supabase.storage.from('product-files').upload(storagePath, file, { upsert: true })
       if (!error) {
-        const { data: { publicUrl } } = supabase.storage.from('product-files').getPublicUrl(storagePath)
         await supabase.from('product_files').insert({
-          product_id: product.id, name: file.name, file_url: publicUrl,
+          product_id: product.id, name: file.name, file_url: storagePath,
           file_type: file.type, file_size: file.size,
           department: 'design', uploaded_by: profile.id,
         })
@@ -227,9 +226,12 @@ export function DesignTab({ product, profile, data, files }: DesignTabProps) {
 
   async function deleteFile(file: ProductFile) {
     const supabase = createClient()
-    const urlParts = file.file_url.split('/product-files/')
-    if (urlParts[1]) {
-      await supabase.storage.from('product-files').remove([decodeURIComponent(urlParts[1])])
+    // Extract storage path from either a signed URL or a legacy public URL
+    const url = file.file_url
+    const parts = url.split('/product-files/')
+    const storagePath = parts.length > 1 ? decodeURIComponent(parts[1].split('?')[0]) : null
+    if (storagePath) {
+      await supabase.storage.from('product-files').remove([storagePath])
     }
     await supabase.from('product_files').delete().eq('id', file.id)
     router.refresh()

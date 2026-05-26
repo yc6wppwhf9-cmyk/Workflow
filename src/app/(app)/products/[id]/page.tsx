@@ -32,7 +32,7 @@ export default async function ProductPage({
     { data: bomData },
     { data: marketingData },
     { data: salesData },
-    { data: files },
+    { data: rawFiles },
     { data: logs },
   ] = await Promise.all([
     supabase.from('design_data').select('*').eq('product_id', id).single(),
@@ -43,6 +43,28 @@ export default async function ProductPage({
     supabase.from('product_files').select('*, uploader:profiles!uploaded_by(full_name)').eq('product_id', id).order('created_at', { ascending: false }),
     supabase.from('activity_logs').select('*, user:profiles(full_name)').eq('product_id', id).order('created_at', { ascending: false }).limit(50),
   ])
+
+  // Convert stored paths to 1-hour signed URLs (bucket is private)
+  const fileList = rawFiles || []
+  let files = fileList
+  if (fileList.length > 0) {
+    const paths = fileList.map(f => {
+      const url = f.file_url
+      if (!url.startsWith('http')) return url
+      // Legacy public URL — extract storage path
+      const parts = url.split('/product-files/')
+      return parts.length > 1 ? decodeURIComponent(parts[1].split('?')[0]) : url
+    })
+    const { data: signedData } = await supabase.storage
+      .from('product-files')
+      .createSignedUrls(paths, 3600)
+    if (signedData) {
+      files = fileList.map((f, i) => ({
+        ...f,
+        file_url: signedData[i]?.signedUrl || f.file_url,
+      }))
+    }
+  }
 
   return (
     <div>

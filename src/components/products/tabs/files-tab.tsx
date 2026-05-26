@@ -65,19 +65,15 @@ export function FilesTab({ product, profile, files: initialFiles }: FilesTabProp
       return
     }
 
-    const { data: { publicUrl } } = supabase.storage.from('product-files').getPublicUrl(path)
-
-    const { data: fileRecord } = await supabase.from('product_files').insert({
+    await supabase.from('product_files').insert({
       product_id: product.id,
       name: file.name,
-      file_url: publicUrl,
+      file_url: path,
       file_type: file.type,
       file_size: file.size,
       department: profile.role,
       uploaded_by: profile.id,
-    }).select('*, uploader:profiles!uploaded_by(full_name)').single()
-
-    if (fileRecord) setFiles([fileRecord, ...files])
+    })
 
     await supabase.from('activity_logs').insert({
       product_id: product.id,
@@ -91,8 +87,13 @@ export function FilesTab({ product, profile, files: initialFiles }: FilesTabProp
     router.refresh()
   }
 
-  async function handleDelete(fileId: string, fileName: string) {
+  async function handleDelete(fileId: string, fileName: string, fileUrl: string) {
     const supabase = createClient()
+    const parts = fileUrl.split('/product-files/')
+    const storagePath = parts.length > 1 ? decodeURIComponent(parts[1].split('?')[0]) : null
+    if (storagePath) {
+      await supabase.storage.from('product-files').remove([storagePath])
+    }
     await supabase.from('product_files').delete().eq('id', fileId)
     setFiles(files.filter(f => f.id !== fileId))
     await supabase.from('activity_logs').insert({
@@ -130,7 +131,7 @@ export function FilesTab({ product, profile, files: initialFiles }: FilesTabProp
                   {(profile.role === 'admin' || file.uploaded_by === profile.id) && (
                     <button
                       className="absolute top-1 right-1 h-6 w-6 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                      onClick={e => { e.stopPropagation(); handleDelete(file.id, file.name) }}
+                      onClick={e => { e.stopPropagation(); handleDelete(file.id, file.name, file.file_url) }}
                     >
                       <X className="h-3 w-3" />
                     </button>
@@ -194,7 +195,7 @@ export function FilesTab({ product, profile, files: initialFiles }: FilesTabProp
                       <Button
                         variant="ghost" size="icon"
                         className="h-8 w-8 text-red-400 hover:text-red-600 hover:bg-red-50"
-                        onClick={() => handleDelete(file.id, file.name)}
+                        onClick={() => handleDelete(file.id, file.name, file.file_url)}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>

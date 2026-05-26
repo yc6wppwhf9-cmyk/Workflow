@@ -10,11 +10,19 @@ export default async function AdminSettingsPage() {
 
   if (profile?.role !== 'admin') redirect('/dashboard')
 
-  const { data: users } = await supabase
-    .from('profiles')
-    .select('id, full_name, email, role')
-    .eq('is_active', true)
-    .order('full_name')
+  const [{ data: users }, { data: settingsRows }] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('id, full_name, email, role')
+      .eq('is_active', true)
+      .order('full_name'),
+    supabase
+      .from('system_settings')
+      .select('key, value'),
+  ])
+
+  const settings: Record<string, string> = {}
+  for (const row of settingsRows ?? []) settings[row.key] = row.value
 
   return (
     <div>
@@ -23,7 +31,7 @@ export default async function AdminSettingsPage() {
         subtitle="Configure workflow, roles, and system preferences"
       />
       <div className="p-6">
-        <SettingsPanel users={users ?? []} currentProfile={profile} />
+        <SettingsPanel users={users ?? []} currentProfile={profile} settings={settings} />
       </div>
     </div>
   )

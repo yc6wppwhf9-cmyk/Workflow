@@ -203,7 +203,7 @@ export function NewProductForm({ profile }: NewProductFormProps) {
       department: 'design',
     })
 
-    router.push(`/products/${product.id}?tab=design`)
+    router.push(`/products/${product.id}?tab=${profile.role === 'sales' ? 'sales' : 'design'}`)
     router.refresh()
   }
 

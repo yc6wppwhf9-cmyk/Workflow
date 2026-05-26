@@ -107,12 +107,12 @@ export async function POST(req: NextRequest) {
         masterMap.set(row.item_name_norm, { inv_code: row.inv_code, uom: row.uom })
       }
 
-      let bomItems = primaryVariantBom.map((item: { inv_name: string; inv_code: string }, idx: number) => {
+      let bomItems = primaryVariantBom.map((item: { inv_name: string; inv_code: string; consumption?: string }, idx: number) => {
         const master = masterMap.get(normNames[idx])
         return {
           inv_name: item.inv_name,
           inv_code: master?.inv_code ?? item.inv_code,
-          consumption: '',
+          consumption: item.consumption ?? '',
           unit: master?.uom ?? '',
         }
       })

@@ -37,6 +37,20 @@ export default async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
+  // Block deactivated users — sign them out and redirect to login
+  if (user && !pathname.startsWith('/login') && !pathname.startsWith('/auth')) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('is_active')
+      .eq('id', user.id)
+      .single()
+
+    if (profile && !profile.is_active) {
+      await supabase.auth.signOut()
+      return NextResponse.redirect(new URL('/login?reason=deactivated', request.url))
+    }
+  }
+
   return supabaseResponse
 }
 

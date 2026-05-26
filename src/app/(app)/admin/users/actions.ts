@@ -88,8 +88,21 @@ export async function createTeamUser(formData: {
     return { error: 'Failed to retrieve newly created user details' }
   }
 
-  // 2. Introduce a small delay to let database trigger handle profile insertion
-  await new Promise((resolve) => setTimeout(resolve, 600))
+  // 2. Wait for the auth trigger to create the profile row (up to 5 retries × 400ms)
+  let profileExists = false
+  for (let i = 0; i < 5; i++) {
+    await new Promise(r => setTimeout(r, 400))
+    const { data } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('id', authUser.user.id)
+      .single()
+    if (data) { profileExists = true; break }
+  }
+
+  if (!profileExists) {
+    return { error: 'Profile row was not created by the database trigger. Check Supabase trigger configuration.' }
+  }
 
   // 3. Update profile role and details in profiles table
   const { error: profileError } = await supabaseAdmin

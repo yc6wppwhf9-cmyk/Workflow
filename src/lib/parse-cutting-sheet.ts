@@ -8,17 +8,22 @@ export interface CuttingSheetItem {
 }
 
 export function parseCuttingSheetFromWorkbook(workbook: WorkBook): CuttingSheetItem[] {
-  let targetSheet = workbook.Sheets[workbook.SheetNames[0]]
+  // Prefer a sheet explicitly named "CUTTING SHEET" (or similar)
+  const namedSheet = workbook.SheetNames.find(n => n.toUpperCase().includes('CUTTING'))
+  if (namedSheet) {
+    return parseCuttingSheetRows(
+      XLSX.utils.sheet_to_json<string[]>(workbook.Sheets[namedSheet], { header: 1, defval: '' }) as string[][]
+    )
+  }
+  // Fallback: find first sheet with a CONSMP column that isn't the INV SHEET RM
   for (const name of workbook.SheetNames) {
+    if (name.toUpperCase().includes('INV')) continue
     const rows = XLSX.utils.sheet_to_json<string[]>(workbook.Sheets[name], { header: 1, defval: '' }) as string[][]
     if (rows.some(r => r.some(c => String(c).toUpperCase().includes('CONSMP')))) {
-      targetSheet = workbook.Sheets[name]
-      break
+      return parseCuttingSheetRows(rows)
     }
   }
-  return parseCuttingSheetRows(
-    XLSX.utils.sheet_to_json<string[]>(targetSheet, { header: 1, defval: '' }) as string[][]
-  )
+  return []
 }
 
 export function parseCuttingSheet(buffer: ArrayBuffer): CuttingSheetItem[] {

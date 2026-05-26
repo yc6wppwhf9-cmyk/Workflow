@@ -164,7 +164,7 @@ export function SalesTab({ product, profile, data }: SalesTabProps) {
               <Button variant="outline" onClick={markComplete} disabled={saving}
                 className={data?.is_completed ? 'text-orange-600 border-orange-200' : 'text-green-600 border-green-200'}
               >
-                {data?.is_completed ? 'Mark Incomplete' : 'Mark Pricing Complete'}
+                {data?.is_completed ? 'Mark Incomplete' : 'Mark Sales Complete'}
               </Button>
             </div>
           )}

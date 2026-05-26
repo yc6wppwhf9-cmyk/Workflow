@@ -233,9 +233,8 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
           .from('product-files')
           .upload(storagePath, img.bytes, { contentType: img.mimeType, upsert: true })
         if (uploadError) { errors.push(`Image failed: ${img.name}`); continue }
-        const { data: { publicUrl } } = supabase.storage.from('product-files').getPublicUrl(storagePath)
         fileRecords.push({
-          product_id: product.id, name: img.name, file_url: publicUrl,
+          product_id: product.id, name: img.name, file_url: storagePath,
           file_type: img.mimeType, file_size: img.bytes.length,
           department: 'merchandising', uploaded_by: profile.id, colour_tag: img.colourTag,
         })
@@ -247,9 +246,8 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
       const { error: excelErr } = await supabase.storage.from('product-files')
         .upload(excelPath, arrayBuffer, { contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', upsert: true })
       if (!excelErr) {
-        const { data: { publicUrl } } = supabase.storage.from('product-files').getPublicUrl(excelPath)
         fileRecords.push({
-          product_id: product.id, name: file.name, file_url: publicUrl,
+          product_id: product.id, name: file.name, file_url: excelPath,
           file_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
           file_size: file.size, department: 'merchandising', uploaded_by: profile.id, colour_tag: null,
         })

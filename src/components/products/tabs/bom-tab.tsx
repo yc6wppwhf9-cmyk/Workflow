@@ -26,6 +26,7 @@ export function BomTab({ product, profile, data, merchandisingData }: BomTabProp
   const showActions = !data?.is_locked && isRoleAllowed
   const [items, setItems] = useState<BomItem[]>(data?.items || [])
   const [fgInvCode, setFgInvCode] = useState(data?.fg_inv_code || '')
+  const [costGiven, setCostGiven] = useState(data?.cost_given || false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [activeColour, setActiveColour] = useState<string | null>(null)
@@ -56,6 +57,13 @@ export function BomTab({ product, profile, data, merchandisingData }: BomTabProp
     await supabase.from('bom_data').update({ items, is_completed: !data?.is_completed, updated_by: profile.id }).eq('product_id', product.id)
     setSaving(false)
     router.refresh()
+  }
+
+  async function toggleCostGiven() {
+    const next = !costGiven
+    setCostGiven(next)
+    const supabase = createClient()
+    await supabase.from('bom_data').update({ cost_given: next, updated_by: profile.id }).eq('product_id', product.id)
   }
 
   return (
@@ -124,6 +132,7 @@ export function BomTab({ product, profile, data, merchandisingData }: BomTabProp
                     <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 w-8">#</th>
                     <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500">Item Name</th>
                     <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500">INV Code</th>
+                    <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 w-28">Consumption</th>
                     <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 w-24">Unit</th>
                   </tr>
                 </thead>
@@ -133,6 +142,7 @@ export function BomTab({ product, profile, data, merchandisingData }: BomTabProp
                       <td className="px-3 py-2 text-xs text-gray-400">{i + 1}</td>
                       <td className="px-3 py-2 text-sm text-gray-800">{item.inv_name}</td>
                       <td className="px-3 py-2 text-sm font-mono text-gray-600">{item.inv_code || <span className="text-gray-300">—</span>}</td>
+                      <td className="px-3 py-2 text-sm text-gray-600">{item.consumption || <span className="text-gray-300">—</span>}</td>
                       <td className="px-3 py-2 text-sm text-gray-600">{item.unit || <span className="text-gray-300">—</span>}</td>
                     </tr>
                   ))}
@@ -234,7 +244,7 @@ export function BomTab({ product, profile, data, merchandisingData }: BomTabProp
                 <p className="text-sm text-green-600 bg-green-50 border border-green-200 rounded-lg px-3 py-2 mt-4">Changes saved.</p>
               )}
               {showActions && (
-                <div className="flex items-center gap-3 mt-4 pt-4 border-t border-gray-100">
+                <div className="flex items-center gap-3 mt-4 pt-4 border-t border-gray-100 flex-wrap">
                   {canEditFields && (
                     <Button onClick={handleSave} disabled={saving}>
                       {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
@@ -246,6 +256,16 @@ export function BomTab({ product, profile, data, merchandisingData }: BomTabProp
                   >
                     {data?.is_completed ? 'Mark Incomplete' : 'Mark BOM Complete'}
                   </Button>
+                  <label className="flex items-center gap-2 cursor-pointer select-none ml-2">
+                    <input
+                      type="checkbox"
+                      checked={costGiven}
+                      onChange={toggleCostGiven}
+                      disabled={!canEditFields}
+                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700">Cost Given</span>
+                  </label>
                   <span className="text-xs text-gray-400">{items.length} items</span>
                 </div>
               )}

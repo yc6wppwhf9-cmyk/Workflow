@@ -1,8 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
 import { Header } from '@/components/layout/header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { STAGE_LABELS, STAGE_COLORS, ROLE_LABELS, type WorkflowStage, type UserRole } from '@/lib/types'
+import { STAGE_LABELS, STAGE_COLORS, ROLE_LABELS, CATEGORY_LABELS, type WorkflowStage, type UserRole, type ProductCategory } from '@/lib/types'
 import { Progress } from '@/components/ui/progress'
+import { ExportButton } from '@/components/reports/export-button'
 
 export default async function ReportsPage() {
   const supabase = await createClient()
@@ -33,7 +34,7 @@ export default async function ReportsPage() {
 
   return (
     <div>
-      <Header title="Reports" subtitle="Analytics and pipeline overview" />
+      <Header title="Reports" subtitle="Analytics and pipeline overview" actions={<ExportButton />} />
       <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Products by stage */}
         <Card>
@@ -69,7 +70,7 @@ export default async function ReportsPage() {
                   return (
                     <div key={cat}>
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm capitalize text-gray-700">{cat}</span>
+                        <span className="text-sm text-gray-700">{CATEGORY_LABELS[cat as ProductCategory] || cat}</span>
                         <span className="text-sm font-semibold text-gray-900">{count} <span className="text-xs text-gray-400 font-normal">({pct}%)</span></span>
                       </div>
                       <Progress value={pct} className="h-2" />
@@ -111,9 +112,9 @@ export default async function ReportsPage() {
           <CardContent className="grid grid-cols-2 gap-4">
             {[
               { label: 'Total Products', value: total, color: 'text-blue-600' },
-              { label: 'Live Products', value: byStage['product_live'] || 0, color: 'text-green-600' },
-              { label: 'In Progress', value: total - (byStage['draft'] || 0) - (byStage['product_live'] || 0), color: 'text-purple-600' },
-              { label: 'Still in Draft', value: byStage['draft'] || 0, color: 'text-gray-500' },
+              { label: 'Marketing Done', value: byStage['marketing_ready'] || 0, color: 'text-green-600' },
+              { label: 'In Progress', value: total - (byStage['draft'] || 0) - (byStage['marketing_ready'] || 0), color: 'text-purple-600' },
+              { label: 'Awaiting Sales', value: byStage['draft'] || 0, color: 'text-gray-500' },
             ].map(({ label, value, color }) => (
               <div key={label} className="text-center py-4 rounded-xl bg-gray-50">
                 <p className={`text-3xl font-bold ${color}`}>{value}</p>

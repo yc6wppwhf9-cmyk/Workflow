@@ -34,41 +34,35 @@ export function WorkflowBar({
   const currentIndex = WORKFLOW_STAGES.indexOf(product.workflow_stage as WorkflowStage)
   const isAdmin = profile.role === 'admin'
 
-  // 6 display stages — 'draft' maps to Design being in-progress (index 0)
+  // 5 display stages matching the new hierarchy: Sales → Design → Merch → BOM → Marketing
   const DISPLAY_STAGES = [
-    { label: 'Design',        doneAfter: 0 },  // done when currentIndex > 0 (past draft)
-    { label: 'Merchandising', doneAfter: 1 },  // done when past design_completed
-    { label: 'BOM',           doneAfter: 2 },
-    { label: 'Marketing',     doneAfter: 3 },
-    { label: 'Sales',         doneAfter: 4 },
-    { label: 'Product Live',  doneAfter: 5 },
+    { label: 'Sales',         doneAfter: 0 },  // done when past draft
+    { label: 'Design',        doneAfter: 1 },
+    { label: 'Merchandising', doneAfter: 2 },
+    { label: 'BOM',           doneAfter: 3 },
+    { label: 'Marketing',     doneAfter: 4 },
   ]
 
-  // Validation: Check if the current stage has been marked as complete
   const isCurrentStageComplete = () => {
     switch (product.workflow_stage as WorkflowStage) {
-      case 'draft':
-        return designData?.is_completed || false
-      case 'design_completed':
-        return merchandisingData?.is_completed || false
-      case 'merchandising_completed':
-        return bomData?.is_completed || false
-      case 'bom_finalized':
-        return marketingData?.is_completed || false
-      case 'marketing_ready':
-        return salesData?.is_completed || false
-      default:
-        return true // sales_priced or product_live
+      case 'draft':                  return salesData?.is_completed || false
+      case 'design_completed':       return designData?.is_completed || false
+      case 'merchandising_completed': return merchandisingData?.is_completed || false
+      case 'bom_finalized':          return bomData?.is_completed || false
+      case 'marketing_ready':        return marketingData?.is_completed || false
+      default:                       return true
     }
   }
 
   const currentStageCompleted = isCurrentStageComplete()
+  const isTerminal = currentIndex >= WORKFLOW_STAGES.length - 1
+  const hasNextStage = !isTerminal
 
   const currentStageOwner = STAGE_OWNER_ROLE[product.workflow_stage as WorkflowStage]
   const isOwner = profile.role === currentStageOwner
-  // Admins can bypass incomplete stages, owners must complete the stage first
   const canAdvance = (isAdmin || isOwner) && (currentStageCompleted || isAdmin)
-  const isLive = product.workflow_stage === 'product_live'
+
+  const prevStage = currentIndex > 0 ? WORKFLOW_STAGES[currentIndex - 1] : null
 
   async function advanceStage() {
     if (currentIndex >= WORKFLOW_STAGES.length - 1) return
@@ -78,7 +72,6 @@ export function WorkflowBar({
     const nextStage = WORKFLOW_STAGES[currentIndex + 1]
     const actionText = `advanced stage to "${STAGE_LABELS[nextStage]}"`
 
-    // Attempt RPC transaction
     const { error: rpcError } = await supabase.rpc('advance_product_stage', {
       p_product_id: product.id,
       p_next_stage: nextStage,
@@ -88,24 +81,14 @@ export function WorkflowBar({
     })
 
     if (rpcError) {
-      console.warn('RPC advance failed, falling back to client-side updates:', rpcError.message)
-      // Fallback: Perform separate updates
-      const { error: updateError } = await supabase
-        .from('products')
-        .update({
-          workflow_stage: nextStage,
-          updated_by: profile.id,
-        })
-        .eq('id', product.id)
-
-      if (!updateError) {
-        await supabase.from('activity_logs').insert({
-          product_id: product.id,
-          user_id: profile.id,
-          action: actionText,
-          department: profile.role,
-        })
-      }
+      alert(`Could not advance stage: ${rpcError.message}`)
+    } else {
+      // Fire notification — non-blocking, don't await
+      fetch('/api/notify-stage-advance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: product.id, product_name: product.name, next_stage: nextStage }),
+      }).catch(() => { /* notifications are best-effort */ })
     }
 
     router.refresh()
@@ -113,42 +96,21 @@ export function WorkflowBar({
   }
 
   async function requestUnlock() {
+    if (currentIndex <= 0) return   // guard: cannot unlock below Draft
     setUnlockLoading(true)
     const supabase = createClient()
 
     if (isAdmin) {
-      // Admin can unlock directly
-      const prevStage = WORKFLOW_STAGES[currentIndex - 1] || 'draft'
-      const actionText = `unlocked stage back to "${STAGE_LABELS[prevStage as WorkflowStage]}"`
-
-      // Attempt RPC transaction
+      const actionText = `unlocked stage back to "${STAGE_LABELS[prevStage!]}"`
       const { error: rpcError } = await supabase.rpc('unlock_product_stage', {
         p_product_id: product.id,
-        p_prev_stage: prevStage,
+        p_prev_stage: prevStage!,
         p_user_id: profile.id,
         p_action: actionText,
         p_department: 'admin'
       })
-
       if (rpcError) {
-        console.warn('RPC unlock failed, falling back to client-side updates:', rpcError.message)
-        // Fallback
-        const { error: updateError } = await supabase
-          .from('products')
-          .update({
-            workflow_stage: prevStage,
-            updated_by: profile.id,
-          })
-          .eq('id', product.id)
-
-        if (!updateError) {
-          await supabase.from('activity_logs').insert({
-            product_id: product.id,
-            user_id: profile.id,
-            action: actionText,
-            department: 'admin',
-          })
-        }
+        alert(`Could not unlock stage: ${rpcError.message}`)
       }
     } else {
       await supabase.from('stage_unlock_requests').insert({
@@ -197,7 +159,7 @@ export function WorkflowBar({
 
         {/* Actions */}
         <div className="flex items-center gap-3">
-          {!isLive && !currentStageCompleted && (
+          {!currentStageCompleted && (
             <div className="flex items-center gap-1.5 text-xs text-orange-600 bg-orange-50 border border-orange-200 px-3 py-1.5 rounded-lg font-medium">
               <AlertCircle className="h-3.5 w-3.5 shrink-0" />
               Pending department completion
@@ -205,7 +167,7 @@ export function WorkflowBar({
           )}
 
           <div className="flex items-center gap-2">
-            {!isLive && currentIndex > 0 && (
+            {currentIndex > 0 && (
               <Button
                 variant="outline"
                 size="sm"
@@ -216,7 +178,7 @@ export function WorkflowBar({
                 {isAdmin ? 'Unlock Stage' : 'Request Unlock'}
               </Button>
             )}
-            {!isLive && (isAdmin || isOwner) && (
+            {hasNextStage && (isAdmin || isOwner) && (
               <Button
                 size="sm"
                 onClick={advanceStage}
@@ -228,9 +190,9 @@ export function WorkflowBar({
                 Advance Stage
               </Button>
             )}
-            {isLive && (
+            {isTerminal && currentStageCompleted && (
               <span className="flex items-center gap-1.5 text-sm font-medium text-green-600">
-                <Check className="h-4 w-4" /> Product Live
+                <Check className="h-4 w-4" /> Pipeline Complete
               </span>
             )}
           </div>
@@ -251,7 +213,12 @@ export function WorkflowBar({
           <div className="space-y-3">
             <div className="flex items-start gap-2 rounded-lg bg-orange-50 border border-orange-200 p-3 text-sm text-orange-700">
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-              Current stage: <strong>{STAGE_LABELS[product.workflow_stage as WorkflowStage]}</strong>
+              <div>
+                <p>Current: <strong>{STAGE_LABELS[product.workflow_stage as WorkflowStage]}</strong></p>
+                {isAdmin && prevStage && (
+                  <p className="mt-0.5">Will revert to: <strong>{STAGE_LABELS[prevStage]}</strong></p>
+                )}
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label>Reason</Label>

@@ -35,7 +35,7 @@ export interface ParsedSKU {
 export interface ParsedBOMItem {
   inv_code: string
   inv_name: string
-  quantity: string
+  consumption: string
   unit: string
 }
 
@@ -116,8 +116,9 @@ export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): Pars
   }
 
   // ── Parse INV SHEET RM ────────────────────────────────────────────────────
-  // Format: row N = header [ITEM NAME, style1, style2, ...]
-  //         rows N+1... = [item_name, code_for_style1, code_for_style2, ...]
+  // Actual format: row N = header [ITEM NAME, StyleA, CONSMP, StyleB, CONSMP, ...]
+  //                rows N+1... = [CategoryLabel, item_for_A, consmp_A, item_for_B, consmp_B, ...]
+  // Style columns are at odd indices (1, 3, 5...); CONSMP columns follow each at +1.
   const bomByStyle: Record<string, ParsedBOMItem[]> = {}
   const invSheet = workbook.Sheets['INV SHEET RM']
   if (invSheet) {
@@ -134,29 +135,31 @@ export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): Pars
     if (headerRowIdx >= 0) {
       const headerRow = rows[headerRowIdx]
 
-      // Collect all style columns
-      const styleColumns: Array<{ col: number; styleKey: string }> = []
+      // Identify style columns — skip "CONSMP" and empty headers; each style's CONSMP is at col+1
+      const styleColumns: Array<{ col: number; styleKey: string; consmpCol: number }> = []
       for (let c = 1; c < headerRow.length; c++) {
         const raw = String(headerRow[c] || '').trim()
-        if (!raw || raw === '0') continue
-        styleColumns.push({ col: c, styleKey: normaliseStyleName(raw) })
+        if (!raw || raw === '0' || raw.toUpperCase() === 'CONSMP') continue
+        styleColumns.push({ col: c, styleKey: normaliseStyleName(raw), consmpCol: c + 1 })
       }
 
-      // Parse item rows into per-style BOM maps
-      for (const { col, styleKey } of styleColumns) {
+      // Parse item rows: item name is in the style column, consumption in the CONSMP column
+      for (const { col, styleKey, consmpCol } of styleColumns) {
         const items: ParsedBOMItem[] = []
         for (let i = headerRowIdx + 1; i < rows.length; i++) {
-          const itemName = String(rows[i]?.[0] || '').trim()
-          if (!itemName) continue
-          const invCode = String(rows[i]?.[col] || '').trim()
-          if (!invCode || invCode === '0' || invCode.toUpperCase() === 'NA') continue
-          // invCode (from style column) is the inventory item name; actual inv_code filled by BOM team
-          items.push({ inv_code: '', inv_name: invCode, quantity: '1', unit: 'pcs' })
+          const invName = String(rows[i]?.[col] || '').trim()
+          if (!invName || invName === '0' || invName.toUpperCase() === 'NA') continue
+          const rawConsump = rows[i]?.[consmpCol]
+          const consumption =
+            rawConsump !== null && rawConsump !== undefined && String(rawConsump).trim() !== '' && String(rawConsump).trim() !== '0'
+              ? String(rawConsump)
+              : ''
+          items.push({ inv_code: '', inv_name: invName, consumption, unit: '' })
         }
         if (items.length > 0) bomByStyle[styleKey] = items
       }
 
-      // Aggregate bomItems for the matched product column (for BOM tab)
+      // Aggregate bomItems for the matched product column (used for log count)
       if (productName) {
         const pnNorm = productName.toLowerCase().replace(/\s+/g, ' ').trim()
         const pnCompact = pnNorm.replace(/\s/g, '')
@@ -168,7 +171,6 @@ export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): Pars
             break
           }
         }
-        // If nothing matched with product name, use first column
         if (bomItems.length === 0 && styleColumns.length > 0) {
           bomItems.push(...(bomByStyle[styleColumns[0].styleKey] || []))
         }

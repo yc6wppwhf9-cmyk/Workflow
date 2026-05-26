@@ -181,6 +181,7 @@ export interface BomData {
   product_id: string
   items: BomItem[] | null
   fg_inv_code: string | null
+  cost_given: boolean
   is_completed: boolean
   is_locked: boolean
   updated_by: string | null
@@ -249,22 +250,20 @@ export const WORKFLOW_STAGES: WorkflowStage[] = [
   'merchandising_completed',
   'bom_finalized',
   'marketing_ready',
-  'sales_priced',
-  'product_live',
 ]
 
 export const STAGE_LABELS: Record<WorkflowStage, string> = {
-  draft: 'Draft',
+  draft: 'Sales',
   design_completed: 'Design Completed',
   merchandising_completed: 'Merchandising Completed',
   bom_finalized: 'BOM Finalized',
-  marketing_ready: 'Marketing Ready',
+  marketing_ready: 'Marketing Completed',
   sales_priced: 'Sales Priced',
   product_live: 'Product Live',
 }
 
 export const STAGE_COLORS: Record<WorkflowStage, string> = {
-  draft: 'bg-gray-100 text-gray-700',
+  draft: 'bg-green-100 text-green-700',
   design_completed: 'bg-purple-100 text-purple-700',
   merchandising_completed: 'bg-blue-100 text-blue-700',
   bom_finalized: 'bg-orange-100 text-orange-700',
@@ -293,11 +292,11 @@ export const ROLE_COLORS: Record<UserRole, string> = {
   viewer: 'bg-gray-100 text-gray-700',
 }
 
-// Which department can edit which stage
+// Which department advances FROM each stage (i.e. who does the work while in that stage)
 export const STAGE_OWNER_ROLE: Partial<Record<WorkflowStage, UserRole>> = {
-  draft: 'design',
-  design_completed: 'merchandising',
-  merchandising_completed: 'bom',
-  bom_finalized: 'marketing',
-  marketing_ready: 'sales',
+  draft: 'sales',
+  design_completed: 'design',
+  merchandising_completed: 'merchandising',
+  bom_finalized: 'bom',
+  // marketing_ready is the terminal stage — marketing marks complete but does not advance
 }

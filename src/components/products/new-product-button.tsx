@@ -12,7 +12,7 @@ interface NewProductButtonProps {
 export function NewProductButton({ profile }: NewProductButtonProps) {
   const router = useRouter()
 
-  if (!['admin', 'sales', 'design'].includes(profile.role)) return null
+  if (!['admin', 'sales'].includes(profile.role)) return null
 
   return (
     <Button onClick={() => router.push('/products/new')}>

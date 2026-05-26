@@ -298,11 +298,11 @@ export const ROLE_COLORS: Record<UserRole, string> = {
   viewer: 'bg-gray-100 text-gray-700',
 }
 
-// Which department advances FROM each stage (i.e. who does the work while in that stage)
+// Which department owns each stage (does the work while the product is in that stage)
 export const STAGE_OWNER_ROLE: Partial<Record<WorkflowStage, UserRole>> = {
   draft: 'sales',
   design_completed: 'design',
   merchandising_completed: 'merchandising',
   bom_finalized: 'bom',
-  // marketing_ready is the terminal stage — marketing marks complete but does not advance
+  marketing_ready: 'marketing',
 }

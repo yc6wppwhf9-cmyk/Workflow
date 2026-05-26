@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createClient } from '@/lib/supabase/client'
-import { STAGE_LABELS, STAGE_OWNER_ROLE, ROLE_LABELS } from '@/lib/types'
+import { STAGE_LABELS, STAGE_OWNER_ROLE, ROLE_LABELS, WORKFLOW_STAGES } from '@/lib/types'
 import type { Profile, WorkflowStage } from '@/lib/types'
 
 interface SettingsPanelProps {
@@ -18,15 +18,6 @@ interface SettingsPanelProps {
   settings: Record<string, string>
 }
 
-const WORKFLOW_STAGES: WorkflowStage[] = [
-  'draft',
-  'design_completed',
-  'merchandising_completed',
-  'bom_finalized',
-  'marketing_ready',
-  'sales_priced',
-  'product_live',
-]
 
 export function SettingsPanel({ users, currentProfile, settings }: SettingsPanelProps) {
   const router = useRouter()
@@ -211,7 +202,7 @@ export function SettingsPanel({ users, currentProfile, settings }: SettingsPanel
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {WORKFLOW_STAGES.filter(s => s !== 'draft').map(stage => (
+            {WORKFLOW_STAGES.map(stage => (
               <div key={stage} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
                 <div>
                   <p className="text-sm font-medium">{STAGE_LABELS[stage]}</p>

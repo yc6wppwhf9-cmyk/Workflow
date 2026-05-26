@@ -48,12 +48,12 @@ export function Sidebar({ profile }: SidebarProps) {
   return (
     <aside className="w-64 shrink-0 flex flex-col bg-gray-900 text-white min-h-screen">
       {/* Logo */}
-      <div className="flex items-center justify-center px-5 py-4 border-b border-gray-800">
+      <div className="flex items-center justify-center px-4 py-3 border-b border-gray-800">
         <Image
           src="/logo.png"
           alt="Logo"
-          width={160}
-          height={60}
+          width={120}
+          height={44}
           className="object-contain"
           priority
         />

@@ -267,9 +267,9 @@ export function NewProductForm({ profile }: NewProductFormProps) {
   }
 
   return (
-    <div className="max-w-3xl space-y-4">
+    <div className="space-y-4">
 
-      {/* Tech Pack Upload */}
+      {/* Tech Pack Upload — full width */}
       <Card className="border-purple-200 bg-purple-50">
         <CardContent className="pt-4 pb-4">
           <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -295,7 +295,7 @@ export function NewProductForm({ profile }: NewProductFormProps) {
                   <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0 text-purple-600" />
                   <div className="text-xs space-y-1">
                     <p>Filled: {techPackResult.filled.join(', ')}. Review and save.</p>
-                    <p className="text-purple-600">If the Excel has multiple colour variants, data is taken from the first variant. Adjust colour-specific fields as needed.</p>
+                    <p className="text-purple-600">If the Excel has multiple colour variants, data is taken from the first variant.</p>
                   </div>
                 </div>
               ) : (
@@ -306,16 +306,16 @@ export function NewProductForm({ profile }: NewProductFormProps) {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Design Details</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-5">
+      {/* Two-column layout */}
+      <div className="grid grid-cols-2 gap-4 items-start">
 
-          {/* Product identity */}
-          <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Product</p>
-            <div className="mb-3 space-y-1.5">
+        {/* LEFT — Product identity + Colour SKUs + Unique Feature + Actions */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Product</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-1.5">
               <Label className="text-xs text-gray-500">Style Name</Label>
               <Input
                 placeholder="Leave blank — auto-filled from tech pack"
@@ -324,7 +324,7 @@ export function NewProductForm({ profile }: NewProductFormProps) {
                 className="text-sm"
               />
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs text-gray-500">Category <span className="text-red-500">*</span></Label>
                 <Select value={form.category} onValueChange={v => setForm(f => ({ ...f, category: v as ProductCategory }))}>
@@ -345,6 +345,8 @@ export function NewProductForm({ profile }: NewProductFormProps) {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs text-gray-500">Channel</Label>
                 <Select value={form.channel} onValueChange={v => setForm(f => ({ ...f, channel: v }))}>
@@ -354,125 +356,126 @@ export function NewProductForm({ profile }: NewProductFormProps) {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-          </div>
-
-          {/* Tech pack fields */}
-          <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Tech Pack</p>
-            <div className="grid grid-cols-3 gap-3 mb-3">
-              <F label="Designer Name" field="designer_name" />
-              <F label="Farma" field="farma" placeholder="e.g. DAYSTEP" mono />
-              <F label="Season Year" field="season_year" placeholder="e.g. 2026-2027" />
-            </div>
-            <div className="grid grid-cols-2 gap-3 mb-3">
               <F label="Sample Color" field="sample_color" placeholder="e.g. Midnight Black" />
             </div>
-          </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <F label="Fabric" field="fabric" placeholder="e.g. 600*600 PU-BLK" />
-            <F label="Lining" field="lining" placeholder="e.g. PLN LGR" />
-            <F label="Air Mesh" field="air_mesh" placeholder="YES / NO / NA" />
-          </div>
+            {/* Colour SKUs */}
+            <div className="space-y-1.5">
+              <Label className="text-xs text-gray-500">Colour SKUs</Label>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {form.color_skus.map((sku, i) => (
+                  <span key={i} className="flex items-center gap-1 bg-gray-100 text-gray-700 text-xs px-2.5 py-1 rounded-full font-mono">
+                    {sku}
+                    <button type="button" onClick={() => setForm(f => ({ ...f, color_skus: f.color_skus.filter((_, j) => j !== i) }))}>
+                      <X className="h-3 w-3 hover:text-red-500" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Input placeholder="Add SKU..." value={newSku}
+                  onChange={e => setNewSku(e.target.value.toUpperCase())}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && newSku.trim()) {
+                      e.preventDefault()
+                      setForm(f => ({ ...f, color_skus: [...f.color_skus, newSku.trim()] }))
+                      setNewSku('')
+                    }
+                  }}
+                  className="font-mono h-8 text-sm"
+                />
+                <Button type="button" variant="outline" size="icon" className="h-8 w-8"
+                  onClick={() => { if (newSku.trim()) { setForm(f => ({ ...f, color_skus: [...f.color_skus, newSku.trim()] })); setNewSku('') } }}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <F label="Zipper" field="zipper" placeholder="e.g. 8 NO.-BLK" />
-            <F label="Puller" field="puller" placeholder="e.g. PVC PRIO NEW-BLK" />
-            <F label="9mm Patta" field="patta_9mm" placeholder="e.g. BLK+HANGER" />
-          </div>
+            {/* Unique Feature */}
+            <div className="space-y-1.5">
+              <Label className="text-xs text-gray-500">Unique Feature / USP</Label>
+              <Textarea placeholder="Unique selling point or feature..."
+                value={form.unique_feature}
+                onChange={e => setForm(f => ({ ...f, unique_feature: e.target.value }))}
+                rows={3} className="text-sm" />
+            </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <F label="Patta 1" field="patta_1" placeholder='e.g. 0.75"-BLK' />
-            <F label="Patta 2" field="patta_2" placeholder="e.g. NA" />
-            <F label="Lader Lock" field="lader_lock" placeholder='e.g. 0.75"-BLK' />
-          </div>
+            {error && (
+              <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">{error}</div>
+            )}
 
-          <div className="grid grid-cols-3 gap-3">
-            <F label="Branding" field="branding" placeholder="e.g. PBR PRIO HOPE-BLK-RED" />
-            <F label="Screen Print" field="screen_print" placeholder="YES / NO / NA" />
-            <F label="Digital Print" field="digital_print" placeholder="YES / NO / NA" />
-          </div>
+            <div className="flex items-center gap-3 pt-2">
+              <Button onClick={handleSave} disabled={saving}>
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                {saving ? 'Creating Product...' : 'Create Product'}
+              </Button>
+              <Button variant="outline" onClick={() => router.push('/products')}>Cancel</Button>
+            </div>
+          </CardContent>
+        </Card>
 
-          <div className="grid grid-cols-3 gap-3">
-            <F label="Bartech" field="bartech" placeholder="e.g. BLK" />
-            <F label="Re-sampling By" field="re_sampling_by" />
-            <div className="space-y-1">
+        {/* RIGHT — Tech Pack detail fields */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Tech Pack Details</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <F label="Designer Name" field="designer_name" />
+              <F label="Farma" field="farma" placeholder="e.g. DAYSTEP" mono />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <F label="Season Year" field="season_year" placeholder="e.g. 2026-2027" />
+              <F label="Re-sampling By" field="re_sampling_by" />
+            </div>
+
+            <div className="border-t border-gray-100 pt-3">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Materials</p>
+              <div className="grid grid-cols-2 gap-3">
+                <F label="Fabric" field="fabric" placeholder="e.g. 600*600 PU-BLK" />
+                <F label="Lining" field="lining" placeholder="e.g. PLN LGR" />
+                <F label="Air Mesh" field="air_mesh" placeholder="YES / NO / NA" />
+                <F label="Branding" field="branding" placeholder="e.g. PBR PRIO HOPE" />
+              </div>
+            </div>
+
+            <div className="border-t border-gray-100 pt-3">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Hardware</p>
+              <div className="grid grid-cols-2 gap-3">
+                <F label="Zipper" field="zipper" placeholder="e.g. 8 NO.-BLK" />
+                <F label="Puller" field="puller" placeholder="e.g. PVC PRIO NEW-BLK" />
+                <F label="9mm Patta" field="patta_9mm" placeholder="e.g. BLK+HANGER" />
+                <F label="Patta 1" field="patta_1" placeholder='e.g. 0.75"-BLK' />
+                <F label="Patta 2" field="patta_2" placeholder="e.g. NA" />
+                <F label="Lader Lock" field="lader_lock" placeholder='e.g. 0.75"-BLK' />
+                <F label="Bartech" field="bartech" placeholder="e.g. BLK" />
+              </div>
+            </div>
+
+            <div className="border-t border-gray-100 pt-3">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Printing & Add-ons</p>
+              <div className="grid grid-cols-2 gap-3">
+                <F label="Screen Print" field="screen_print" placeholder="YES / NO / NA" />
+                <F label="Digital Print" field="digital_print" placeholder="YES / NO / NA" />
+                <F label="Add On 1" field="add_on_1" />
+                <F label="Add On 2" field="add_on_2" />
+                <F label="Add On 3" field="add_on_3" />
+                <F label="Designer Sign" field="designer_sign" />
+              </div>
+            </div>
+
+            <div className="border-t border-gray-100 pt-3 space-y-1">
               <Label className="text-xs text-gray-500">Remarks</Label>
               <Textarea placeholder="e.g. USE 600×600 PVC FABRIC IN BACK" value={form.remarks}
                 onChange={e => setForm(f => ({ ...f, remarks: e.target.value }))}
-                rows={2} className="text-sm" />
+                rows={3} className="text-sm" />
             </div>
-          </div>
+          </CardContent>
+        </Card>
 
-          <div className="grid grid-cols-3 gap-3">
-            <F label="Add On 1" field="add_on_1" />
-            <F label="Add On 2" field="add_on_2" />
-            <F label="Add On 3" field="add_on_3" />
-          </div>
+      </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <F label="Designer Sign" field="designer_sign" />
-          </div>
-
-          {/* Colour SKUs */}
-          <div className="space-y-1.5">
-            <Label className="text-xs text-gray-500">Colour SKUs</Label>
-            <div className="flex flex-wrap gap-2 mb-2">
-              {form.color_skus.map((sku, i) => (
-                <span key={i} className="flex items-center gap-1 bg-gray-100 text-gray-700 text-xs px-2.5 py-1 rounded-full font-mono">
-                  {sku}
-                  <button type="button" onClick={() => setForm(f => ({ ...f, color_skus: f.color_skus.filter((_, j) => j !== i) }))}>
-                    <X className="h-3 w-3 hover:text-red-500" />
-                  </button>
-                </span>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <Input placeholder="Add SKU..." value={newSku}
-                onChange={e => setNewSku(e.target.value.toUpperCase())}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && newSku.trim()) {
-                    e.preventDefault()
-                    setForm(f => ({ ...f, color_skus: [...f.color_skus, newSku.trim()] }))
-                    setNewSku('')
-                  }
-                }}
-                className="font-mono h-8 text-sm"
-              />
-              <Button type="button" variant="outline" size="icon" className="h-8 w-8"
-                onClick={() => { if (newSku.trim()) { setForm(f => ({ ...f, color_skus: [...f.color_skus, newSku.trim()] })); setNewSku('') } }}
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          </div>
-
-          {/* Unique Feature */}
-          <div className="space-y-1.5">
-            <Label className="text-xs text-gray-500">Unique Feature / USP</Label>
-            <Textarea placeholder="Unique selling point or feature..."
-              value={form.unique_feature}
-              onChange={e => setForm(f => ({ ...f, unique_feature: e.target.value }))}
-              rows={3} className="text-sm" />
-          </div>
-
-          {error && (
-            <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">{error}</div>
-          )}
-
-          <div className="flex items-center gap-3 pt-2">
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              {saving ? 'Creating Product...' : 'Create Product'}
-            </Button>
-            <Button variant="outline" onClick={() => router.push('/products')}>
-              Cancel
-            </Button>
-          </div>
-
-        </CardContent>
-      </Card>
     </div>
   )
 }

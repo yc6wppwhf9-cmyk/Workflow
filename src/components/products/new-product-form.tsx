@@ -51,6 +51,7 @@ const EMPTY = {
 
 export function NewProductForm({ profile }: NewProductFormProps) {
   const router = useRouter()
+  const isSales = profile.role === 'sales'
   const [form, setForm] = useState({ ...EMPTY })
   const [newSku, setNewSku] = useState('')
   const [saving, setSaving] = useState(false)
@@ -205,6 +206,64 @@ export function NewProductForm({ profile }: NewProductFormProps) {
 
     router.push(`/products/${product.id}?tab=${profile.role === 'sales' ? 'sales' : 'design'}`)
     router.refresh()
+  }
+
+  // Sales role: simple form — product identity only, full brief filled in the Sales tab
+  if (isSales) {
+    return (
+      <div className="max-w-lg space-y-4">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">New Product</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Product Name</Label>
+              <Input
+                placeholder="e.g. HELIX 005"
+                value={form.name}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                autoFocus
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Category <span className="text-red-500">*</span></Label>
+                <Select value={form.category} onValueChange={v => setForm(f => ({ ...f, category: v as ProductCategory }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {(Object.entries(CATEGORY_LABELS) as [ProductCategory, string][]).map(([v, l]) => (
+                      <SelectItem key={v} value={v}>{l}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Brand</Label>
+                <Select value={form.brand} onValueChange={v => setForm(f => ({ ...f, brand: v as Brand }))}>
+                  <SelectTrigger><SelectValue placeholder="Select brand" /></SelectTrigger>
+                  <SelectContent>
+                    {BRANDS.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {error && (
+              <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">{error}</div>
+            )}
+
+            <div className="flex items-center gap-3 pt-2">
+              <Button onClick={handleSave} disabled={saving}>
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                {saving ? 'Creating...' : 'Create Product'}
+              </Button>
+              <Button variant="outline" onClick={() => router.push('/products')}>Cancel</Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (

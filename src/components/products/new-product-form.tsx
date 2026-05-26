@@ -49,10 +49,22 @@ const EMPTY = {
   designer_sign: '',
 }
 
+const SALES_EMPTY = {
+  name: '',
+  category: 'junior-backpacks' as ProductCategory,
+  brand: '' as Brand | '',
+  assign_to: '',
+  channel: '',
+  price_range: '',
+  deadline_date: '',
+  product_specification: '',
+}
+
 export function NewProductForm({ profile }: NewProductFormProps) {
   const router = useRouter()
   const isSales = profile.role === 'sales'
   const [form, setForm] = useState({ ...EMPTY })
+  const [salesForm, setSalesForm] = useState({ ...SALES_EMPTY })
   const [newSku, setNewSku] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -132,6 +144,54 @@ export function NewProductForm({ profile }: NewProductFormProps) {
     if (techPackRef.current) techPackRef.current.value = ''
   }
 
+  async function handleSalesSave() {
+    if (!salesForm.category) { setError('Category is required'); return }
+    setSaving(true)
+    setError('')
+
+    const supabase = createClient()
+
+    const { data: product, error: productErr } = await supabase
+      .from('products')
+      .insert({
+        name: salesForm.name.trim() || 'New Product',
+        sku: salesForm.name.trim()
+          ? salesForm.name.trim().toUpperCase().replace(/\s+/g, '-').substring(0, 20)
+          : `PROD-${Date.now().toString(36).toUpperCase()}`,
+        category: salesForm.category,
+        ...(salesForm.brand && { brand: salesForm.brand }),
+        created_by: profile.id,
+        updated_by: profile.id,
+      })
+      .select()
+      .single()
+
+    if (productErr || !product) {
+      setError(productErr?.message || 'Failed to create product')
+      setSaving(false)
+      return
+    }
+
+    await supabase.from('sales_data').update({
+      assign_to:             salesForm.assign_to             || null,
+      channel:               salesForm.channel               || null,
+      price_range:           salesForm.price_range           || null,
+      deadline_date:         salesForm.deadline_date         || null,
+      product_specification: salesForm.product_specification || null,
+      updated_by: profile.id,
+    }).eq('product_id', product.id)
+
+    await supabase.from('activity_logs').insert({
+      product_id: product.id,
+      user_id: profile.id,
+      action: 'created product with sales requirement',
+      department: 'sales',
+    })
+
+    router.push(`/products/${product.id}?tab=sales`)
+    router.refresh()
+  }
+
   async function handleSave() {
     if (!form.category) { setError('Category is required'); return }
     setSaving(true)
@@ -208,28 +268,29 @@ export function NewProductForm({ profile }: NewProductFormProps) {
     router.refresh()
   }
 
-  // Sales role: simple form — product identity only, full brief filled in the Sales tab
+  // Sales role: full sales requirement form — creates product + sales_data in one save
   if (isSales) {
     return (
-      <div className="max-w-lg space-y-4">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">New Product</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-1.5">
-              <Label>Product Name</Label>
-              <Input
-                placeholder="e.g. HELIX 005"
-                value={form.name}
-                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                autoFocus
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
+      <div className="max-w-2xl space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          {/* LEFT — Product identity */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Product</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-1.5">
+                <Label>Product Name</Label>
+                <Input
+                  placeholder="e.g. HELIX 005"
+                  value={salesForm.name}
+                  onChange={e => setSalesForm(f => ({ ...f, name: e.target.value }))}
+                  autoFocus
+                />
+              </div>
               <div className="space-y-1.5">
                 <Label>Category <span className="text-red-500">*</span></Label>
-                <Select value={form.category} onValueChange={v => setForm(f => ({ ...f, category: v as ProductCategory }))}>
+                <Select value={salesForm.category} onValueChange={v => setSalesForm(f => ({ ...f, category: v as ProductCategory }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {(Object.entries(CATEGORY_LABELS) as [ProductCategory, string][]).map(([v, l]) => (
@@ -240,28 +301,80 @@ export function NewProductForm({ profile }: NewProductFormProps) {
               </div>
               <div className="space-y-1.5">
                 <Label>Brand</Label>
-                <Select value={form.brand} onValueChange={v => setForm(f => ({ ...f, brand: v as Brand }))}>
+                <Select value={salesForm.brand} onValueChange={v => setSalesForm(f => ({ ...f, brand: v as Brand }))}>
                   <SelectTrigger><SelectValue placeholder="Select brand" /></SelectTrigger>
                   <SelectContent>
                     {BRANDS.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-            </div>
+              <div className="space-y-1.5">
+                <Label>Channel</Label>
+                <Select value={salesForm.channel} onValueChange={v => setSalesForm(f => ({ ...f, channel: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select channel" /></SelectTrigger>
+                  <SelectContent>
+                    {CHANNELS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
 
-            {error && (
-              <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">{error}</div>
-            )}
+          {/* RIGHT — Sales requirement */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Sales Requirement</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-1.5">
+                <Label>Assign To</Label>
+                <Input
+                  placeholder="Designer / team member name"
+                  value={salesForm.assign_to}
+                  onChange={e => setSalesForm(f => ({ ...f, assign_to: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Price Range</Label>
+                <Input
+                  placeholder="e.g. ₹800 – ₹1200"
+                  value={salesForm.price_range}
+                  onChange={e => setSalesForm(f => ({ ...f, price_range: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Deadline Date</Label>
+                <Input
+                  type="date"
+                  value={salesForm.deadline_date}
+                  onChange={e => setSalesForm(f => ({ ...f, deadline_date: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Product Specification</Label>
+                <Textarea
+                  placeholder="Describe the product requirements, key features, target customer..."
+                  value={salesForm.product_specification}
+                  onChange={e => setSalesForm(f => ({ ...f, product_specification: e.target.value }))}
+                  rows={4}
+                  className="text-sm"
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
-            <div className="flex items-center gap-3 pt-2">
-              <Button onClick={handleSave} disabled={saving}>
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                {saving ? 'Creating...' : 'Create Product'}
-              </Button>
-              <Button variant="outline" onClick={() => router.push('/products')}>Cancel</Button>
-            </div>
-          </CardContent>
-        </Card>
+        {error && (
+          <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">{error}</div>
+        )}
+
+        <div className="flex items-center gap-3">
+          <Button onClick={handleSalesSave} disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {saving ? 'Creating...' : 'Create Product'}
+          </Button>
+          <Button variant="outline" onClick={() => router.push('/products')}>Cancel</Button>
+        </div>
       </div>
     )
   }

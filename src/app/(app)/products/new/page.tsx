@@ -9,15 +9,19 @@ export default async function NewProductPage() {
   const { data: { user } } = await supabase.auth.getUser()
   const { data: profile } = await supabase.from('profiles').select('*').eq('id', user!.id).single()
 
-  if (!['admin', 'design'].includes(profile?.role)) {
+  if (!['admin', 'design', 'sales'].includes(profile?.role)) {
     redirect('/products')
   }
+
+  const isSales = profile?.role === 'sales'
 
   return (
     <div>
       <Header
         title="New Product"
-        subtitle="Fill in the design details and upload the tech pack, then create the product."
+        subtitle={isSales
+          ? "Enter the product name, category and brand, then save to open the sales requirement form."
+          : "Fill in the design details and upload the tech pack, then create the product."}
       />
       <div className="p-6">
         <NewProductForm profile={profile as Profile} />

@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard,
@@ -47,14 +48,15 @@ export function Sidebar({ profile }: SidebarProps) {
   return (
     <aside className="w-64 shrink-0 flex flex-col bg-gray-900 text-white min-h-screen">
       {/* Logo */}
-      <div className="flex items-center gap-3 px-5 py-5 border-b border-gray-800">
-        <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center shrink-0">
-          <Package className="h-4 w-4 text-white" />
-        </div>
-        <div>
-          <p className="text-sm font-semibold leading-none">PLM System</p>
-          <p className="text-xs text-gray-400 mt-0.5">Product Lifecycle</p>
-        </div>
+      <div className="flex items-center justify-center px-5 py-4 border-b border-gray-800">
+        <Image
+          src="/logo.png"
+          alt="Logo"
+          width={160}
+          height={60}
+          className="object-contain"
+          priority
+        />
       </div>
 
       {/* Main nav */}

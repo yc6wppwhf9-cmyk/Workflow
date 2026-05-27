@@ -8,10 +8,26 @@ import { ExportButton } from '@/components/reports/export-button'
 export default async function ReportsPage() {
   const supabase = await createClient()
 
-  const [{ data: products }, { data: profiles }] = await Promise.all([
+  const [{ data: products }, { data: profiles }, { data: designSubmissionsRaw }] = await Promise.all([
     supabase.from('products').select('workflow_stage, category, created_at'),
     supabase.from('profiles').select('role, is_active'),
+    supabase.from('design_submissions').select('submitted_by, status, submitter:profiles!submitted_by(id, full_name)'),
   ])
+
+  // Design efficiency: group submissions by designer
+  const designerMap: Record<string, { name: string; total: number; approved: number; rejected: number; pending: number }> = {}
+  for (const row of designSubmissionsRaw || []) {
+    const submitter = (Array.isArray(row.submitter) ? row.submitter[0] : row.submitter) as { id: string; full_name: string } | null
+    if (!submitter) continue
+    if (!designerMap[submitter.id]) {
+      designerMap[submitter.id] = { name: submitter.full_name, total: 0, approved: 0, rejected: 0, pending: 0 }
+    }
+    designerMap[submitter.id].total++
+    if (row.status === 'approved') designerMap[submitter.id].approved++
+    else if (row.status === 'rejected') designerMap[submitter.id].rejected++
+    else designerMap[submitter.id].pending++
+  }
+  const designerStats = Object.values(designerMap).sort((a, b) => b.total - a.total)
 
   // Products by stage
   const byStage: Record<string, number> = {}
@@ -121,6 +137,50 @@ export default async function ReportsPage() {
                 <p className="text-xs text-gray-500 mt-1">{label}</p>
               </div>
             ))}
+          </CardContent>
+        </Card>
+
+        {/* Design team efficiency */}
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle className="text-base">Design Team Efficiency</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {designerStats.length === 0 ? (
+              <p className="text-sm text-gray-400">No design submissions yet.</p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    <th className="text-left py-2 text-xs font-semibold text-gray-500 uppercase">Designer</th>
+                    <th className="text-center py-2 text-xs font-semibold text-gray-500 uppercase">Submitted</th>
+                    <th className="text-center py-2 text-xs font-semibold text-green-600 uppercase">Approved</th>
+                    <th className="text-center py-2 text-xs font-semibold text-red-500 uppercase">Rejected</th>
+                    <th className="text-center py-2 text-xs font-semibold text-yellow-600 uppercase">Pending</th>
+                    <th className="text-center py-2 text-xs font-semibold text-gray-500 uppercase">Approval %</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {designerStats.map(d => {
+                    const rate = d.total > 0 ? Math.round((d.approved / d.total) * 100) : 0
+                    return (
+                      <tr key={d.name} className="hover:bg-gray-50">
+                        <td className="py-2.5 font-medium text-gray-900">{d.name}</td>
+                        <td className="py-2.5 text-center text-gray-700">{d.total}</td>
+                        <td className="py-2.5 text-center text-green-600 font-semibold">{d.approved}</td>
+                        <td className="py-2.5 text-center text-red-500 font-semibold">{d.rejected}</td>
+                        <td className="py-2.5 text-center text-yellow-600">{d.pending}</td>
+                        <td className="py-2.5 text-center">
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${rate >= 70 ? 'bg-green-100 text-green-700' : rate >= 40 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-600'}`}>
+                            {rate}%
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
           </CardContent>
         </Card>
       </div>

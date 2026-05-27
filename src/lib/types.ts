@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'design' | 'merchandising' | 'bom' | 'marketing' | 'sales' | 'viewer'
+export type UserRole = 'admin' | 'design' | 'design_head' | 'merchandising' | 'bom' | 'marketing' | 'sales' | 'viewer'
 
 export type WorkflowStage =
   | 'draft'
@@ -83,9 +83,22 @@ export interface Product {
   creator?: Profile
 }
 
+export interface DesignSubmission {
+  id: string
+  product_id: string
+  submitted_by: string
+  status: 'pending' | 'approved' | 'rejected'
+  feedback: string | null
+  reviewed_by: string | null
+  reviewed_at: string | null
+  created_at: string
+  submitter?: Pick<Profile, 'id' | 'full_name'>
+}
+
 export interface DesignData {
   id: string
   product_id: string
+  assigned_to: string | null
   channel: string | null
   designer_name: string | null
   sample_color: string | null
@@ -281,6 +294,7 @@ export const STAGE_COLORS: Record<WorkflowStage, string> = {
 export const ROLE_LABELS: Record<UserRole, string> = {
   admin: 'Admin',
   design: 'Design',
+  design_head: 'Design Head',
   merchandising: 'Merchandising',
   bom: 'BOM',
   marketing: 'Marketing',
@@ -291,6 +305,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 export const ROLE_COLORS: Record<UserRole, string> = {
   admin: 'bg-red-100 text-red-700',
   design: 'bg-purple-100 text-purple-700',
+  design_head: 'bg-violet-200 text-violet-800',
   merchandising: 'bg-blue-100 text-blue-700',
   bom: 'bg-orange-100 text-orange-700',
   marketing: 'bg-yellow-100 text-yellow-700',

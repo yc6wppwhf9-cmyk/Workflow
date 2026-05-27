@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { STAGE_LABELS, type WorkflowStage, type UserRole } from '@/lib/types'
+import { STAGE_LABELS, ROLE_LABELS, type WorkflowStage, type UserRole } from '@/lib/types'
 
-// Maps each stage to the role that needs to act next
-const NEXT_STAGE_ROLE: Partial<Record<WorkflowStage, UserRole>> = {
-  design_completed:         'merchandising',
-  merchandising_completed:  'bom',
-  bom_finalized:            'marketing',
-  marketing_ready:          'sales',
-  sales_priced:             'admin',
-  product_live:             'admin',
+// Maps each stage to the role(s) that need to act next
+const NEXT_STAGE_ROLES: Partial<Record<WorkflowStage, UserRole[]>> = {
+  design_completed:         ['design', 'design_head'],  // notify both team + head when sales sends requirement
+  merchandising_completed:  ['merchandising'],
+  bom_finalized:            ['bom'],
+  marketing_ready:          ['marketing'],
+  sales_priced:             ['admin'],
+  product_live:             ['admin'],
 }
 
 export async function POST(request: NextRequest) {
@@ -30,16 +30,16 @@ export async function POST(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const recipientRole = NEXT_STAGE_ROLE[next_stage]
-    if (!recipientRole) {
-      return NextResponse.json({ skipped: true, reason: 'No recipient role for this stage' })
+    const recipientRoles = NEXT_STAGE_ROLES[next_stage]
+    if (!recipientRoles || recipientRoles.length === 0) {
+      return NextResponse.json({ skipped: true, reason: 'No recipient roles for this stage' })
     }
 
-    // Fetch all active users for the recipient role
+    // Fetch all active users for all recipient roles
     const { data: recipients } = await supabase
       .from('profiles')
-      .select('email, full_name')
-      .eq('role', recipientRole)
+      .select('email, full_name, role')
+      .in('role', recipientRoles)
       .eq('is_active', true)
 
     if (!recipients || recipients.length === 0) {
@@ -55,31 +55,32 @@ export async function POST(request: NextRequest) {
     const fromEmail = process.env.RESEND_FROM_EMAIL || 'PLM System <noreply@hscvpl.com>'
 
     if (!resendKey) {
-      // No email provider — log and return success so the workflow isn't blocked
       console.log(`[notify] Stage advanced to "${stageLabel}" for "${product_name}". Recipients: ${recipients.map(r => r.email).join(', ')}`)
       return NextResponse.json({ sent: false, reason: 'RESEND_API_KEY not configured', recipients: recipients.length })
     }
 
-    const emailPromises = recipients.map(recipient =>
-      fetch('https://api.resend.com/emails', {
+    const emailPromises = recipients.map(recipient => {
+      const roleLabel = ROLE_LABELS[recipient.role as UserRole] || recipient.role
+      const isHead = recipient.role === 'design_head'
+      const actionLine = isHead
+        ? 'Please review the requirements and assign a designer.'
+        : `This product is now awaiting your department's attention.`
+      return fetch('https://api.resend.com/emails', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${resendKey}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Authorization': `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           from: fromEmail,
           to: [recipient.email],
           subject: `Action required: "${product_name}" is now at ${stageLabel}`,
           html: `
-            <p>Hi ${recipient.full_name},</p>
-            <p>The product <strong>${product_name}</strong> has advanced to the <strong>${stageLabel}</strong> stage and is now awaiting your department's attention.</p>
+            <p>Hi ${recipient.full_name} (${roleLabel}),</p>
+            <p>The product <strong>${product_name}</strong> has advanced to the <strong>${stageLabel}</strong> stage. ${actionLine}</p>
             <p><a href="${productUrl}" style="background:#2563eb;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:8px;">Open Product</a></p>
             <p style="color:#6b7280;font-size:12px;margin-top:24px;">HSCVPL Product Lifecycle Management System</p>
           `,
         }),
       })
-    )
+    })
 
     await Promise.allSettled(emailPromises)
 

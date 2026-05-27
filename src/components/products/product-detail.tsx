@@ -16,7 +16,7 @@ import { ColourVariantsTab } from '@/components/products/tabs/colour-variants-ta
 import { cn } from '@/lib/utils'
 import type {
   Product, Profile, DesignData, MerchandisingData,
-  BomData, MarketingData, SalesData, ProductFile, ActivityLog,
+  BomData, MarketingData, SalesData, ProductFile, ActivityLog, DesignSubmission,
 } from '@/lib/types'
 
 interface ProductDetailProps {
@@ -29,6 +29,8 @@ interface ProductDetailProps {
   salesData: SalesData | null
   files: ProductFile[]
   logs: ActivityLog[]
+  designSubmissions: DesignSubmission[]
+  designers: Pick<Profile, 'id' | 'full_name'>[]
   defaultTab?: string
 }
 
@@ -48,6 +50,7 @@ const VALID_TABS = new Set(TABS.map(t => t.value))
 export function ProductDetail({
   product, profile, designData, merchandisingData,
   bomData, marketingData, salesData, files, logs,
+  designSubmissions, designers,
   defaultTab,
 }: ProductDetailProps) {
   const initialTab = defaultTab && VALID_TABS.has(defaultTab) ? defaultTab : 'overview'
@@ -140,7 +143,7 @@ export function ProductDetail({
             <OverviewTab product={product} designData={designData} merchandisingData={merchandisingData} bomData={bomData} marketingData={marketingData} salesData={salesData} files={files} />
           </TabsPrimitive.Content>
           <TabsPrimitive.Content value="design">
-            <DesignTab product={product} profile={profile} data={designData} files={files} />
+            <DesignTab product={product} profile={profile} data={designData} files={files} submissions={designSubmissions} designers={designers} />
           </TabsPrimitive.Content>
           <TabsPrimitive.Content value="merchandising">
             <MerchandisingTab product={product} profile={profile} data={merchandisingData} />

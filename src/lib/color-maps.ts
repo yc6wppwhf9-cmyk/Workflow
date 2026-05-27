@@ -45,6 +45,14 @@ export function resolveColorName(raw: string): string {
     }
   }
 
+  // Try suffix match for full product-colour names like "HELIX 005 BLACK" → "Black"
+  const words = upper.split(/\s+/)
+  for (let i = 1; i < words.length; i++) {
+    const suffix = words.slice(i).join(' ')
+    if (COLOR_CODE_MAP[suffix]) return COLOR_CODE_MAP[suffix]
+    if (COLOR_HEX_MAP[suffix]) return capitalizeWords(suffix)
+  }
+
   return resolveSinglePart(raw) || raw
 }
 

@@ -82,17 +82,32 @@ export function SettingsPanel({ users, currentProfile, settings }: SettingsPanel
       const ws = wb.Sheets[wb.SheetNames[0]]
       const rows = utils.sheet_to_json<string[]>(ws, { header: 1, defval: '' }) as string[][]
 
-      // Header row has 'ARTICLE CODE' (row 2 in this file, but scan to be safe)
+      // Scan for header row — match any known column name variant
+      const invCodeVariants = ['ARTICLE CODE', 'INV CODE', 'ITEM CODE', 'ARTICLE NO', 'CODE']
+      const itemNameVariants = ['ITEM NAME', 'ITEM DESCRIPTION', 'DESCRIPTION', 'NAME', 'ITEM DESC']
+      const uomVariants = ['UOM', 'UNIT', 'UNIT OF MEASURE', 'BASE UOM']
+
+      const matchesHeader = (cell: string, variants: string[]) =>
+        variants.some(v => String(cell).trim().toUpperCase() === v)
+
       let headerRowIdx = -1
       for (let i = 0; i < rows.length; i++) {
-        if (rows[i].some(c => String(c).trim() === 'ARTICLE CODE')) { headerRowIdx = i; break }
+        if (rows[i].some(c => matchesHeader(String(c), invCodeVariants))) { headerRowIdx = i; break }
       }
-      if (headerRowIdx < 0) { setImResult({ error: 'ARTICLE CODE column not found' }); setImUploading(false); return }
+      if (headerRowIdx < 0) {
+        setImResult({ error: `Header row not found. Expected a column named one of: ${invCodeVariants.join(', ')}` })
+        setImUploading(false); return
+      }
 
       const headers = rows[headerRowIdx]
-      const articleCodeIdx = headers.findIndex(h => String(h).trim() === 'ARTICLE CODE')
-      const itemNameIdx = headers.findIndex(h => String(h).trim() === 'ITEM NAME')
-      const uomIdx = headers.findIndex(h => String(h).trim() === 'UOM')
+      const articleCodeIdx = headers.findIndex(h => matchesHeader(String(h), invCodeVariants))
+      const itemNameIdx = headers.findIndex(h => matchesHeader(String(h), itemNameVariants))
+      const uomIdx = headers.findIndex(h => matchesHeader(String(h), uomVariants))
+
+      if (itemNameIdx < 0) {
+        setImResult({ error: `Item Name column not found. Expected one of: ${itemNameVariants.join(', ')}` })
+        setImUploading(false); return
+      }
 
       const rawItems = rows
         .slice(headerRowIdx + 1)

@@ -8,7 +8,7 @@ build/
 next-env.d.ts
 
 .vercel
-supabase/.temp/
+supabase/
 images/
 .claude/
 test-*.mjs

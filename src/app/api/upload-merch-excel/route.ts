@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { product_id, merch_fields, colour_variants, designer_name, sample_color, summary, cutting_items, extracted_product_name } = body
+  const { product_id, merch_fields, colour_variants, bom_items, designer_name, sample_color, summary, cutting_items, extracted_product_name } = body
 
   if (!product_id) return NextResponse.json({ error: 'Missing product_id' }, { status: 400 })
 
@@ -91,12 +91,15 @@ export async function POST(req: NextRequest) {
     fields_updated.push('product_name')
   }
 
-  // Pre-populate BOM tab from the primary colour variant's INV items (attribute upload only)
+  // Pre-populate BOM tab (attribute upload only)
+  // Use first colour variant's BOM if available, otherwise fall back to the directly parsed bom_items
   if (!isReupload) {
     const primaryVariantBom = colour_variants?.[0]?.bomItems
-    if (primaryVariantBom?.length > 0) {
-      // Look up INV codes from item_master by normalised item name
-      const rawNames: string[] = primaryVariantBom.map((item: { inv_name: string }) => item.inv_name)
+    const rawBomSource: { inv_name: string; inv_code: string; consumption?: string }[] =
+      primaryVariantBom?.length > 0 ? primaryVariantBom : (bom_items ?? [])
+
+    if (rawBomSource.length > 0) {
+      const rawNames: string[] = rawBomSource.map((item) => item.inv_name)
       const normNames = rawNames.map(n => n.trim().toLowerCase().replace(/\s+/g, ' '))
       const { data: masterRows } = await supabase
         .from('item_master')
@@ -107,7 +110,7 @@ export async function POST(req: NextRequest) {
         masterMap.set(row.item_name_norm, { inv_code: row.inv_code, uom: row.uom })
       }
 
-      let bomItems = primaryVariantBom.map((item: { inv_name: string; inv_code: string; consumption?: string }, idx: number) => {
+      let bomRows = rawBomSource.map((item, idx) => {
         const master = masterMap.get(normNames[idx])
         return {
           inv_name: item.inv_name,
@@ -117,10 +120,10 @@ export async function POST(req: NextRequest) {
         }
       })
       if (cutting_items?.length > 0) {
-        bomItems = matchConsumptionToBom(bomItems, cutting_items)
+        bomRows = matchConsumptionToBom(bomRows, cutting_items)
       }
       updates.push(
-        supabase.from('bom_data').update({ items: bomItems, updated_by: user.id }).eq('product_id', product_id)
+        supabase.from('bom_data').update({ items: bomRows, updated_by: user.id }).eq('product_id', product_id)
       )
       fields_updated.push('bom_items')
     }

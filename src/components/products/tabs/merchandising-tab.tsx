@@ -269,6 +269,7 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
           product_id: product.id,
           merch_fields,
           colour_variants: colourVariants,
+          bom_items: parsed.bomItems,
           designer_name: primarySku?.designerName || null,
           sample_color: colourTags.join(', ') || null,
           cutting_items: parsed.cuttingItems,

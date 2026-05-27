@@ -154,7 +154,12 @@ export function DesignTab({ product, profile, data, salesData, files, submission
     setSavingAssign(true)
     const supabase = createClient()
     const resolvedId = userId === '__none__' ? null : userId
-    await supabase.from('design_data').update({ assigned_to: resolvedId, updated_by: profile.id }).eq('product_id', product.id)
+    const { error } = await supabase.from('design_data').update({ assigned_to: resolvedId, updated_by: profile.id }).eq('product_id', product.id)
+    if (error) {
+      console.error('saveAssignment error:', error)
+      setSavingAssign(false)
+      return
+    }
     await supabase.from('activity_logs').insert({
       product_id: product.id, user_id: profile.id,
       action: `assigned design to ${designers.find(d => d.id === userId)?.full_name || 'unassigned'}`,

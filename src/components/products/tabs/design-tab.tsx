@@ -77,7 +77,7 @@ export function DesignTab({ product, profile, data, files, submissions, designer
   const [newSku, setNewSku]       = useState('')
   const [saving, setSaving]       = useState(false)
   const [saved, setSaved]         = useState(false)
-  const [assignedTo, setAssignedTo] = useState<string>(data?.assigned_to || '')
+  const [assignedTo, setAssignedTo] = useState<string>(data?.assigned_to || '__none__')
   const [savingAssign, setSavingAssign] = useState(false)
 
   // Submission state
@@ -149,7 +149,8 @@ export function DesignTab({ product, profile, data, files, submissions, designer
   async function saveAssignment(userId: string) {
     setSavingAssign(true)
     const supabase = createClient()
-    await supabase.from('design_data').update({ assigned_to: userId || null, updated_by: profile.id }).eq('product_id', product.id)
+    const resolvedId = userId === '__none__' ? null : userId
+    await supabase.from('design_data').update({ assigned_to: resolvedId, updated_by: profile.id }).eq('product_id', product.id)
     await supabase.from('activity_logs').insert({
       product_id: product.id, user_id: profile.id,
       action: `assigned design to ${designers.find(d => d.id === userId)?.full_name || 'unassigned'}`,
@@ -322,14 +323,14 @@ export function DesignTab({ product, profile, data, files, submissions, designer
                     <SelectValue placeholder="Select team member…" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">— Unassigned —</SelectItem>
+                    <SelectItem value="__none__">— Unassigned —</SelectItem>
                     {designers.map(d => (
                       <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 {savingAssign && <Loader2 className="h-4 w-4 animate-spin text-violet-600" />}
-                {assignedTo && !savingAssign && (
+                {assignedTo && assignedTo !== '__none__' && !savingAssign && (
                   <span className="text-xs text-violet-700">
                     Assigned to <strong>{designers.find(d => d.id === assignedTo)?.full_name}</strong>
                   </span>

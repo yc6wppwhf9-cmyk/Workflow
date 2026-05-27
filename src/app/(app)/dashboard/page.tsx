@@ -306,8 +306,8 @@ export default async function DashboardPage() {
         .eq('status', 'pending')
         .order('created_at', { ascending: true }),
       supabase.from('products')
-        .select('id, name, created_at')
-        .eq('workflow_stage', 'design_completed')
+        .select('id, name, created_at, workflow_stage')
+        .in('workflow_stage', ['draft', 'design_completed'])
         .order('created_at', { ascending: false }),
       supabase.from('design_data')
         .select('product_id, assigned_to, assignee:profiles!assigned_to(full_name)'),
@@ -329,9 +329,9 @@ export default async function DashboardPage() {
         <div className="p-6 space-y-6">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <KpiCard label="Pending Reviews" value={pending.length} sub="awaiting your approval" icon={Send} color="bg-amber-50 [&>svg]:text-amber-500" />
-            <KpiCard label="Unassigned" value={unassigned.length} sub="products need a designer" icon={AlertCircle} color="bg-red-50 [&>svg]:text-red-500" />
-            <KpiCard label="Active Designs" value={assigned.length} sub="products in progress" icon={Clock} color="bg-blue-50 [&>svg]:text-blue-600" />
-            <KpiCard label="Total in Design" value={(productsInDesign || []).length} icon={Package} color="bg-purple-50 [&>svg]:text-purple-600" />
+            <KpiCard label="Unassigned" value={unassigned.length} sub="need a designer" icon={AlertCircle} color="bg-red-50 [&>svg]:text-red-500" />
+            <KpiCard label="In Progress" value={assigned.length} sub="assigned & active" icon={Clock} color="bg-blue-50 [&>svg]:text-blue-600" />
+            <KpiCard label="Total Active" value={(productsInDesign || []).length} sub="draft + design stage" icon={Package} color="bg-purple-50 [&>svg]:text-purple-600" />
           </div>
 
           {pending.length > 0 && (
@@ -372,7 +372,12 @@ export default async function DashboardPage() {
               <CardContent className="space-y-2">
                 {unassigned.map(p => (
                   <div key={p.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
-                    <p className="text-sm font-medium text-gray-900">{p.name}</p>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{p.name}</p>
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full ${p.workflow_stage === 'draft' ? 'bg-gray-100 text-gray-500' : 'bg-blue-100 text-blue-600'}`}>
+                        {p.workflow_stage === 'draft' ? 'From Sales' : 'Design Stage'}
+                      </span>
+                    </div>
                     <Link href={`/products/${p.id}?tab=design`} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
                       Assign <ArrowRight className="h-3 w-3" />
                     </Link>

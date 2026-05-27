@@ -4,7 +4,7 @@ import { STAGE_LABELS, ROLE_LABELS, type WorkflowStage, type UserRole } from '@/
 
 // Maps each stage to the role(s) that need to act next
 const NEXT_STAGE_ROLES: Partial<Record<WorkflowStage, UserRole[]>> = {
-  design_completed:         ['design', 'design_head'],  // notify both team + head when sales sends requirement
+  design_completed:         ['design_head'],  // only head is notified; head then assigns to a team member
   merchandising_completed:  ['merchandising'],
   bom_finalized:            ['bom'],
   marketing_ready:          ['marketing'],

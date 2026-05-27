@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
+import * as XLSX from 'xlsx'
 import { parseMerchExcel, filterSkusForProduct, aggregateMerchFields, buildColourVariants, extractProductBaseName } from '@/lib/parse-merch-excel'
 import type { Product, Profile, MerchandisingData } from '@/lib/types'
 
@@ -66,8 +67,9 @@ function initForm(data: MerchandisingData | null): FormState {
 export function MerchandisingTab({ product, profile, data }: MerchandisingTabProps) {
   const router = useRouter()
   const isRoleAllowed = ['admin', 'merchandising'].includes(profile.role)
-  const canEditFields = !data?.is_locked && !data?.is_completed && isRoleAllowed
-  const showActions = !data?.is_locked && isRoleAllowed
+  const isRightStage = product.workflow_stage === 'merchandising_completed' || profile.role === 'admin'
+  const canEditFields = !data?.is_locked && !data?.is_completed && isRoleAllowed && isRightStage
+  const showActions = !data?.is_locked && isRoleAllowed && isRightStage
 
   const [activeVersion, setActiveVersion] = useState<'attribute' | 'production'>('attribute')
   const [attrForm, setAttrForm] = useState<FormState>(() => initForm(data))
@@ -90,6 +92,7 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
     other_products_in_file: string[]; bom_items_found: number
     images_uploaded: number; fields_updated: string[]; errors: string[]
     version_saved?: 'attribute' | 'production'
+    sheet_names?: string[]
   } | null>(null)
 
   function set(field: keyof FormState, value: unknown) {
@@ -143,6 +146,8 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
     try {
       setUploadProgress('Parsing Excel...')
       const arrayBuffer = await file.arrayBuffer()
+      const wb = XLSX.read(arrayBuffer, { type: 'array' })
+      const sheetNames = wb.SheetNames
       const parsed = parseMerchExcel(arrayBuffer, product.name)
 
       const relevantSkus = filterSkusForProduct(parsed.skus, product.name)
@@ -291,7 +296,7 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
         colors_found: colourTags, other_products_in_file: otherProducts,
         bom_items_found: parsed.bomItems.length, images_uploaded,
         fields_updated: merch_fields ? ['dimensions', 'weight', 'compartments', 'materials', 'colour_variants', '+ all specs'] : [],
-        errors, version_saved,
+        errors, version_saved, sheet_names: sheetNames,
       })
     } catch (err) {
       setUploadResult({
@@ -300,6 +305,7 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
         errors: ['Unexpected error: ' + String(err)],
       })
     }
+
 
     setUploadProgress('')
     setUploading(false)
@@ -373,6 +379,9 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
                   <div className="text-xs text-red-700 space-y-1">
                     {uploadResult.errors.map((e, i) => <p key={i}>⚠ {e}</p>)}
                   </div>
+                )}
+                {uploadResult.sheet_names && (
+                  <p className="text-xs text-gray-500">Sheets found: {uploadResult.sheet_names.join(' · ')}</p>
                 )}
                 {uploadResult.other_products_in_file.length > 0 && (
                   <p className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">

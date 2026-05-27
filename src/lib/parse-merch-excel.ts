@@ -50,6 +50,11 @@ export function normaliseStyleName(s: string) {
   return s.replace(/^[A-Z0-9]+\s*\*\s*/i, '').toLowerCase().replace(/\s+/g, ' ').trim()
 }
 
+function findSheet(workbook: XLSX.WorkBook, keyword: string) {
+  const name = workbook.SheetNames.find(n => n.toUpperCase().replace(/\s+/g, ' ').includes(keyword.toUpperCase()))
+  return name ? workbook.Sheets[name] : undefined
+}
+
 export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): ParsedMerchData {
   const workbook = XLSX.read(buffer, { type: 'array', cellStyles: true })
 
@@ -58,7 +63,7 @@ export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): Pars
   const images: ParsedImage[] = []
 
   // ── Parse ATTRIBUTES FORMAT sheet ─────────────────────────────────────────
-  const attrSheet = workbook.Sheets['ATTRIBUTES FORMAT']
+  const attrSheet = findSheet(workbook, 'ATTRIBUTES')
   if (attrSheet) {
     const rows = XLSX.utils.sheet_to_json<string[]>(attrSheet, { header: 1, defval: '' }) as string[][]
 
@@ -120,13 +125,13 @@ export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): Pars
   //                rows N+1... = [CategoryLabel, item_for_A, consmp_A, item_for_B, consmp_B, ...]
   // Style columns are at odd indices (1, 3, 5...); CONSMP columns follow each at +1.
   const bomByStyle: Record<string, ParsedBOMItem[]> = {}
-  const invSheet = workbook.Sheets['INV SHEET RM']
+  const invSheet = findSheet(workbook, 'INV SHEET')
   if (invSheet) {
     const rows = XLSX.utils.sheet_to_json<string[]>(invSheet, { header: 1, defval: '' }) as string[][]
 
     let headerRowIdx = -1
-    for (let i = 0; i < rows.length; i++) {
-      if (String(rows[i]?.[0] || '').toUpperCase().includes('ITEM NAME')) {
+    for (let i = 0; i < Math.min(rows.length, 20); i++) {
+      if (rows[i].some(c => String(c || '').toUpperCase().includes('ITEM NAME') || String(c || '').toUpperCase().includes('ITEMS'))) {
         headerRowIdx = i
         break
       }

@@ -11,6 +11,7 @@ import {
   Settings,
   LogOut,
   ChevronRight,
+  TrendingUp,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -23,6 +24,10 @@ const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/products', label: 'Products', icon: Package },
   { href: '/reports', label: 'Reports', icon: BarChart3 },
+]
+
+const managementItems = [
+  { href: '/management', label: 'Management', icon: TrendingUp },
 ]
 
 const adminItems = [
@@ -80,6 +85,27 @@ export function Sidebar({ profile }: SidebarProps) {
             )}
           </Link>
         ))}
+
+        {['admin', 'design_head'].includes(profile.role) && (
+          <>
+            <p className="px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-5 mb-2">Management</p>
+            {managementItems.map(({ href, label, icon: Icon }) => (
+              <Link
+                key={href}
+                href={href}
+                className={cn(
+                  'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                  pathname.startsWith(href)
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                )}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                {label}
+              </Link>
+            ))}
+          </>
+        )}
 
         {profile.role === 'admin' && (
           <>

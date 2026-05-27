@@ -63,7 +63,7 @@ export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): Pars
   const images: ParsedImage[] = []
 
   // ── Parse ATTRIBUTES FORMAT sheet ─────────────────────────────────────────
-  const attrSheet = findSheet(workbook, 'ATTRIBUTES')
+  const attrSheet = findSheet(workbook, 'ATTRIBUTES FORMAT') ?? findSheet(workbook, 'ATTRIBUTES')
   if (attrSheet) {
     const rows = XLSX.utils.sheet_to_json<string[]>(attrSheet, { header: 1, defval: '' }) as string[][]
 
@@ -125,7 +125,7 @@ export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): Pars
   //                rows N+1... = [CategoryLabel, item_for_A, consmp_A, item_for_B, consmp_B, ...]
   // Style columns are at odd indices (1, 3, 5...); CONSMP columns follow each at +1.
   const bomByStyle: Record<string, ParsedBOMItem[]> = {}
-  const invSheet = findSheet(workbook, 'INV SHEET')
+  const invSheet = findSheet(workbook, 'INV SHEET RM') ?? findSheet(workbook, 'INV SHEET')
   if (invSheet) {
     const rows = XLSX.utils.sheet_to_json<string[]>(invSheet, { header: 1, defval: '' }) as string[][]
 

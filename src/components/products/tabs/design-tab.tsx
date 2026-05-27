@@ -726,15 +726,15 @@ export function DesignTab({ product, profile, data, salesData, files, submission
           <div>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Tech Pack</p>
             <div className="grid grid-cols-3 gap-3 mb-3">
-              <F label="Designer Name" field="designer_name" />
+              {F({ label: "Designer Name", field: "designer_name" })}
               <div className="space-y-1">
                 <Label className="text-xs text-gray-500">Style Name</Label>
                 <Input value={product.name} disabled className="h-8 text-sm bg-gray-50 text-gray-500" />
               </div>
-              <F label="Farma" field="farma" placeholder="e.g. DAYSTEP" mono />
+              {F({ label: "Farma", field: "farma", placeholder: "e.g. DAYSTEP", mono: true })}
             </div>
             <div className="grid grid-cols-2 gap-3 mb-3">
-              <F label="Season Year" field="season_year" placeholder="e.g. 2026-2027" />
+              {F({ label: "Season Year", field: "season_year", placeholder: "e.g. 2026-2027" })}
               <div className="space-y-1">
                 <Label className="text-xs text-gray-500">Sample Color</Label>
                 <Input placeholder="e.g. Midnight Black" value={form.sample_color}
@@ -745,28 +745,28 @@ export function DesignTab({ product, profile, data, salesData, files, submission
           </div>
 
           <div className="grid grid-cols-3 gap-3">
-            <F label="Fabric" field="fabric" placeholder="e.g. 600*600 PU-BLK" />
-            <F label="Lining" field="lining" placeholder="e.g. PLN LGR" />
-            <F label="Air Mesh" field="air_mesh" placeholder="YES / NO / NA" />
+            {F({ label: "Fabric", field: "fabric", placeholder: "e.g. 600*600 PU-BLK" })}
+            {F({ label: "Lining", field: "lining", placeholder: "e.g. PLN LGR" })}
+            {F({ label: "Air Mesh", field: "air_mesh", placeholder: "YES / NO / NA" })}
           </div>
           <div className="grid grid-cols-3 gap-3">
-            <F label="Zipper" field="zipper" placeholder="e.g. 8 NO.-BLK" />
-            <F label="Puller" field="puller" placeholder="e.g. PVC PRIO NEW-BLK" />
-            <F label="9mm Patta" field="patta_9mm" placeholder="e.g. BLK+HANGER" />
+            {F({ label: "Zipper", field: "zipper", placeholder: "e.g. 8 NO.-BLK" })}
+            {F({ label: "Puller", field: "puller", placeholder: "e.g. PVC PRIO NEW-BLK" })}
+            {F({ label: "9mm Patta", field: "patta_9mm", placeholder: "e.g. BLK+HANGER" })}
           </div>
           <div className="grid grid-cols-3 gap-3">
-            <F label="Patta 1" field="patta_1" placeholder='e.g. 0.75"-BLK' />
-            <F label="Patta 2" field="patta_2" placeholder="e.g. NA" />
-            <F label="Lader Lock" field="lader_lock" placeholder='e.g. 0.75"-BLK' />
+            {F({ label: "Patta 1", field: "patta_1", placeholder: 'e.g. 0.75"-BLK' })}
+            {F({ label: "Patta 2", field: "patta_2", placeholder: "e.g. NA" })}
+            {F({ label: "Lader Lock", field: "lader_lock", placeholder: 'e.g. 0.75"-BLK' })}
           </div>
           <div className="grid grid-cols-3 gap-3">
-            <F label="Branding" field="branding" placeholder="e.g. PBR PRIO HOPE-BLK-RED" />
-            <F label="Screen Print" field="screen_print" placeholder="YES / NO / NA" />
-            <F label="Digital Print" field="digital_print" placeholder="YES / NO / NA" />
+            {F({ label: "Branding", field: "branding", placeholder: "e.g. PBR PRIO HOPE-BLK-RED" })}
+            {F({ label: "Screen Print", field: "screen_print", placeholder: "YES / NO / NA" })}
+            {F({ label: "Digital Print", field: "digital_print", placeholder: "YES / NO / NA" })}
           </div>
           <div className="grid grid-cols-3 gap-3">
-            <F label="Bartech" field="bartech" placeholder="e.g. BLK" />
-            <F label="Re-sampling By" field="re_sampling_by" />
+            {F({ label: "Bartech", field: "bartech", placeholder: "e.g. BLK" })}
+            {F({ label: "Re-sampling By", field: "re_sampling_by" })}
             <div className="space-y-1">
               <Label className="text-xs text-gray-500">Remarks</Label>
               <Textarea placeholder="e.g. USE 600×600 PVC FABRIC IN BACK" value={form.remarks}
@@ -775,12 +775,12 @@ export function DesignTab({ product, profile, data, salesData, files, submission
             </div>
           </div>
           <div className="grid grid-cols-3 gap-3">
-            <F label="Add On 1" field="add_on_1" />
-            <F label="Add On 2" field="add_on_2" />
-            <F label="Add On 3" field="add_on_3" />
+            {F({ label: "Add On 1", field: "add_on_1" })}
+            {F({ label: "Add On 2", field: "add_on_2" })}
+            {F({ label: "Add On 3", field: "add_on_3" })}
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <F label="Designer Sign" field="designer_sign" />
+            {F({ label: "Designer Sign", field: "designer_sign" })}
           </div>
 
           {/* Colour SKUs */}

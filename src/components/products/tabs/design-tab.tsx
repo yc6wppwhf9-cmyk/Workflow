@@ -421,7 +421,25 @@ export function DesignTab({ product, profile, data, salesData, files, submission
             <CardHeader className="pb-2 pt-4">
               <CardTitle className="text-sm text-violet-900">Design Submissions for Review</CardTitle>
             </CardHeader>
-            <CardContent className="pb-4 space-y-3">
+            <CardContent className="pb-4 space-y-4">
+              {/* Illustration images for review */}
+              {designFiles.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Uploaded Illustrations ({designFiles.length})</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {designFiles.map(file => (
+                      <a key={file.id} href={file.file_url} target="_blank" rel="noopener noreferrer" className="group relative aspect-square rounded-lg overflow-hidden border border-gray-200 bg-gray-50 hover:border-violet-400 transition-colors">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={file.file_url} alt={file.name} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                          <ExternalLink className="h-5 w-5 text-white" />
+                        </div>
+                        <p className="absolute bottom-0 left-0 right-0 px-1.5 py-1 text-xs text-white bg-black/50 truncate opacity-0 group-hover:opacity-100 transition-opacity">{file.name}</p>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
               {submissions.length === 0 ? (
                 <p className="text-sm text-gray-400 py-2">No submissions yet — designer will submit illustrations for review.</p>
               ) : submissions.map(sub => (

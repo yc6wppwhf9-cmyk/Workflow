@@ -490,8 +490,8 @@ export function DesignTab({ product, profile, data, salesData, files, submission
         </Card>
       )}
 
-      {/* ── Illustrations ─────────────────────────────────────────── */}
-      <Card>
+      {/* ── Illustrations (team members only — head sees submissions in review queue) ── */}
+      {isTeamMember && <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="text-base">Illustrations</CardTitle>
           {canUploadIllos && (
@@ -546,7 +546,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
             </div>
           )}
         </CardContent>
-      </Card>
+      </Card>}
 
       {/* ── Submit for Review (design team members only) ──────────── */}
       {isTeamMember && !data?.is_locked && !data?.is_completed && (

@@ -233,7 +233,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       { data: myFiles },
     ] = await Promise.all([
       supabase.from('design_data')
-        .select('product_id, is_completed, product:products(id, name, workflow_stage, created_at)')
+        .select('product_id, is_completed, product:products(id, name, workflow_stage, created_at, sales_data(deadline_date))')
         .eq('assigned_to', userId),
       supabase.from('design_submissions')
         .select('product_id, status, created_at, feedback, reviewed_at')
@@ -258,12 +258,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       imagesByProduct[f.product_id] = (imagesByProduct[f.product_id] || 0) + 1
     }
 
-    const assignments = (myAssignments || []).map(a => ({
-      ...a,
-      product: one(a.product) as { id: string; name: string; workflow_stage: string; created_at: string } | null,
-      latestSub: latestSubByProduct[a.product_id] ?? null,
-      imagesUploaded: imagesByProduct[a.product_id] ?? 0,
-    }))
+    const assignments = (myAssignments || []).map(a => {
+      const prod = one(a.product) as { id: string; name: string; workflow_stage: string; created_at: string; sales_data?: { deadline_date?: string | null }[] | null } | null
+      const deadline = prod?.sales_data ? (one(prod.sales_data) as { deadline_date?: string | null } | null)?.deadline_date ?? null : null
+      return {
+        ...a,
+        product: prod,
+        deadline,
+        latestSub: latestSubByProduct[a.product_id] ?? null,
+        imagesUploaded: imagesByProduct[a.product_id] ?? 0,
+      }
+    })
 
     const allSubs = mySubmissions || []
     const totalSubs = allSubs.length
@@ -295,6 +300,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                   <thead>
                     <tr className="border-b border-gray-100 bg-gray-50">
                       <th className="text-left px-6 py-2 text-xs font-semibold text-gray-400 uppercase">Product</th>
+                      <th className="text-left px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Deadline</th>
                       <th className="text-center px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Images</th>
                       <th className="text-center px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Submissions</th>
                       <th className="text-center px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Status</th>
@@ -307,8 +313,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                       const subCount = (mySubmissions || []).filter(s => s.product_id === a.product_id).length
                       const rejCount = (mySubmissions || []).filter(s => s.product_id === a.product_id && s.status === 'rejected').length
                       return (
-                        <tr key={a.product_id} className="hover:bg-gray-50">
+                        <tr key={a.product_id} className={`hover:bg-gray-50 ${a.deadline && new Date(a.deadline) < new Date() ? 'bg-red-50' : ''}`}>
                           <td className="px-6 py-3 font-medium text-gray-900">{a.product?.name || a.product_id}</td>
+                          <td className="px-4 py-3 text-xs text-gray-500">
+                            {a.deadline
+                              ? (() => {
+                                  const d = new Date(a.deadline)
+                                  const overdue = d < new Date()
+                                  return <span className={overdue ? 'text-red-600 font-semibold' : ''}>{d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}{overdue ? ' ⚠' : ''}</span>
+                                })()
+                              : <span className="text-gray-300">—</span>}
+                          </td>
                           <td className="px-4 py-3 text-center text-gray-600">{a.imagesUploaded}</td>
                           <td className="px-4 py-3 text-center">
                             <span className="text-gray-700">{subCount}</span>
@@ -480,11 +495,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </Card>
           )}
 
-          <div className="flex gap-4">
-            <Link href="/management" className="flex items-center gap-2 text-sm text-violet-700 bg-violet-50 border border-violet-200 rounded-lg px-4 py-3 hover:bg-violet-100 transition-colors">
-              <TrendingUp className="h-4 w-4" /> Open Management Dashboard
-            </Link>
-          </div>
         </div>
       </div>
     )
@@ -506,7 +516,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       { data: recentLogs },
     ] = await Promise.all([
       supabase.from('products')
-        .select(`id, name, workflow_stage, created_at, dept_data:${deptCfg.dataTable}(is_completed, updated_at)`)
+        .select(`id, name, workflow_stage, created_at, dept_data:${deptCfg.dataTable}(is_completed, updated_at), sales_data(deadline_date)`)
         .eq('workflow_stage', deptCfg.stage)
         .order('created_at', { ascending: false }),
       supabase.from('activity_logs')
@@ -516,11 +526,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         .limit(6),
     ])
 
-    type DeptProduct = { id: string; name: string; workflow_stage: string; created_at: string; dept_data: { is_completed: boolean; updated_at: string }[] | null }
+    type DeptProduct = { id: string; name: string; workflow_stage: string; created_at: string; dept_data: { is_completed: boolean; updated_at: string }[] | null; sales_data: { deadline_date: string | null }[] | null }
     const rawProducts = myWorkProducts as unknown as DeptProduct[] | null
     const products = (rawProducts || []).map(p => ({
       ...p,
       dept: one(p.dept_data) as { is_completed: boolean; updated_at: string } | null,
+      deadline: (one(p.sales_data) as { deadline_date: string | null } | null)?.deadline_date ?? null,
     }))
     const pending   = products.filter(p => !p.dept?.is_completed)
     const completed = products.filter(p => p.dept?.is_completed)
@@ -547,6 +558,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                   <thead>
                     <tr className="border-b border-gray-100 bg-gray-50">
                       <th className="text-left px-6 py-2 text-xs font-semibold text-gray-400 uppercase">Product</th>
+                      <th className="text-left px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Deadline</th>
                       <th className="text-left px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Arrived</th>
                       <th className="px-4 py-2"></th>
                     </tr>
@@ -555,8 +567,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                     {pending.map(p => {
                       const days = Math.floor((Date.now() - new Date(p.created_at).getTime()) / 86400000)
                       return (
-                        <tr key={p.id} className="hover:bg-amber-50">
+                        <tr key={p.id} className={`hover:bg-amber-50 ${p.deadline && new Date(p.deadline) < new Date() ? 'bg-red-50' : ''}`}>
                           <td className="px-6 py-3 font-medium text-gray-900">{p.name}</td>
+                          <td className="px-4 py-3 text-xs">
+                            {p.deadline
+                              ? (() => { const d = new Date(p.deadline); const ov = d < new Date(); return <span className={ov ? 'text-red-600 font-semibold' : 'text-gray-500'}>{d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}{ov ? ' ⚠' : ''}</span> })()
+                              : <span className="text-gray-300">—</span>}
+                          </td>
                           <td className="px-4 py-3 text-xs text-gray-500">{days === 0 ? 'Today' : `${days}d ago`}</td>
                           <td className="px-4 py-3 text-right">
                             <Link href={`/products/${p.id}?tab=${deptCfg.tab}`} className="text-xs text-blue-600 hover:underline flex items-center gap-1 justify-end">

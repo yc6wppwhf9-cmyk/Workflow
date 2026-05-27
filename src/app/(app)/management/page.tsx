@@ -30,7 +30,7 @@ export default async function ManagementPage() {
   const { data: { user } } = await supabase.auth.getUser()
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user!.id).single()
 
-  if (!['admin', 'design_head'].includes(profile?.role ?? '')) redirect('/dashboard')
+  if (!['admin', 'management'].includes(profile?.role ?? '')) redirect('/dashboard')
 
   const [
     { data: allSubmissions },

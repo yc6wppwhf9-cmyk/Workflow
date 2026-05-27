@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'design' | 'design_head' | 'merchandising' | 'bom' | 'marketing' | 'sales' | 'viewer'
+export type UserRole = 'admin' | 'management' | 'design' | 'design_head' | 'merchandising' | 'bom' | 'marketing' | 'sales' | 'viewer'
 
 export type WorkflowStage =
   | 'draft'
@@ -294,6 +294,7 @@ export const STAGE_COLORS: Record<WorkflowStage, string> = {
 
 export const ROLE_LABELS: Record<UserRole, string> = {
   admin: 'Admin',
+  management: 'Management',
   design: 'Design',
   design_head: 'Design Head',
   merchandising: 'Merchandising',
@@ -305,6 +306,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 
 export const ROLE_COLORS: Record<UserRole, string> = {
   admin: 'bg-red-100 text-red-700',
+  management: 'bg-indigo-100 text-indigo-700',
   design: 'bg-purple-100 text-purple-700',
   design_head: 'bg-violet-200 text-violet-800',
   merchandising: 'bg-blue-100 text-blue-700',

@@ -86,7 +86,7 @@ export function Sidebar({ profile }: SidebarProps) {
           </Link>
         ))}
 
-        {['admin', 'design_head'].includes(profile.role) && (
+        {['admin', 'management'].includes(profile.role) && (
           <>
             <p className="px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-5 mb-2">Management</p>
             {managementItems.map(({ href, label, icon: Icon }) => (

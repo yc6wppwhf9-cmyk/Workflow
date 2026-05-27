@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Lock, Save, Plus, X, Upload, FileSpreadsheet, CheckCircle2 } from 'lucide-react'
+import { Loader2, Lock, Save, Plus, X, Upload, FileSpreadsheet, CheckCircle2, Clock } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -68,6 +68,7 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
   const router = useRouter()
   const isRoleAllowed = ['admin', 'merchandising'].includes(profile.role)
   const isRightStage = product.workflow_stage === 'merchandising_completed' || profile.role === 'admin'
+  const isWaiting = isRoleAllowed && !isRightStage
   const canEditFields = !data?.is_locked && !data?.is_completed && isRoleAllowed && isRightStage
   const showActions = !data?.is_locked && isRoleAllowed && isRightStage
 
@@ -347,11 +348,28 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
   }
 
   async function markComplete() {
+    const becomingComplete = !data?.is_completed
     setSaving(true)
     const supabase = createClient()
     await supabase.from('merchandising_data').update({
-      ...attrForm, is_completed: !data?.is_completed, updated_by: profile.id,
+      ...attrForm, is_completed: becomingComplete, updated_by: profile.id,
     }).eq('product_id', product.id)
+
+    if (becomingComplete && product.workflow_stage === 'merchandising_completed') {
+      await supabase.rpc('advance_product_stage', {
+        p_product_id: product.id,
+        p_next_stage: 'bom_finalized',
+        p_user_id: profile.id,
+        p_action: 'marked merchandising complete — stage advanced to BOM',
+        p_department: 'merchandising',
+      })
+      fetch('/api/notify-stage-advance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: product.id, product_name: product.name, next_stage: 'bom_finalized' }),
+      }).catch(() => {})
+    }
+
     setSaving(false)
     router.refresh()
   }
@@ -371,6 +389,26 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
 
   return (
     <div className="max-w-3xl space-y-4">
+
+      {/* Waiting for prior stages to complete */}
+      {isWaiting && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-3 text-amber-800">
+              <Clock className="h-5 w-5 shrink-0 text-amber-500" />
+              <div>
+                <p className="text-sm font-semibold">Awaiting design stage completion</p>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  This product is currently in the <strong>
+                    {product.workflow_stage === 'draft' ? 'Sales' :
+                     product.workflow_stage === 'design_completed' ? 'Design' : product.workflow_stage}
+                  </strong> stage. Merchandising will unlock once design marks their work complete and the stage is advanced.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Excel Upload Card */}
       {canEditFields && (
@@ -456,8 +494,8 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
           <div>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Product Info</p>
             <div className="grid grid-cols-2 gap-3">
-              <F label="Season + Year" field="season_year" placeholder="e.g. BTS - 2026" />
-              <F label="Color Code" field="color_code" placeholder="e.g. NBL" />
+              {F({ label: "Season + Year", field: "season_year", placeholder: "e.g. BTS - 2026" })}
+              {F({ label: "Color Code", field: "color_code", placeholder: "e.g. NBL" })}
             </div>
           </div>
 
@@ -489,8 +527,8 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <F label="Weight (gm)" field="weight" placeholder="e.g. 880" />
-              <F label="Volume" field="volume" placeholder="e.g. 28L" />
+              {F({ label: "Weight (gm)", field: "weight", placeholder: "e.g. 880" })}
+              {F({ label: "Volume", field: "volume", placeholder: "e.g. 28L" })}
             </div>
           </div>
 
@@ -498,12 +536,12 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
           <div>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Compartments & Zips</p>
             <div className="grid grid-cols-3 gap-3">
-              <F label="Main Compartments" field="main_compartments" placeholder="e.g. 2" />
-              <F label="Pocket Compartments" field="pocket_compartments" placeholder="e.g. 3" />
-              <F label="Number of Zips" field="number_of_zips" placeholder="e.g. 5" />
-              <F label="Laptop Compartment" field="laptop_compartment" placeholder="YES / NO" />
-              <F label="Bottle Slots" field="bottle_slot" placeholder="e.g. 2" />
-              <F label="Rain Cover" field="rain_cover" placeholder="YES / NO" />
+              {F({ label: "Main Compartments", field: "main_compartments", placeholder: "e.g. 2" })}
+              {F({ label: "Pocket Compartments", field: "pocket_compartments", placeholder: "e.g. 3" })}
+              {F({ label: "Number of Zips", field: "number_of_zips", placeholder: "e.g. 5" })}
+              {F({ label: "Laptop Compartment", field: "laptop_compartment", placeholder: "YES / NO" })}
+              {F({ label: "Bottle Slots", field: "bottle_slot", placeholder: "e.g. 2" })}
+              {F({ label: "Rain Cover", field: "rain_cover", placeholder: "YES / NO" })}
             </div>
           </div>
 
@@ -511,12 +549,12 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
           <div>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Construction & Features</p>
             <div className="grid grid-cols-2 gap-3 mb-3">
-              <F label="Back Padded" field="back_padded" placeholder="YES / NO" />
-              <F label="Unique Purpose" field="unique_purpose" placeholder="e.g. EXTENSION" />
+              {F({ label: "Back Padded", field: "back_padded", placeholder: "YES / NO" })}
+              {F({ label: "Unique Purpose", field: "unique_purpose", placeholder: "e.g. EXTENSION" })}
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <F label="Character" field="character_name" placeholder="e.g. NA" />
-              <F label="Theme" field="theme" placeholder="e.g. NA" />
+              {F({ label: "Character", field: "character_name", placeholder: "e.g. NA" })}
+              {F({ label: "Theme", field: "theme", placeholder: "e.g. NA" })}
             </div>
           </div>
 
@@ -524,8 +562,8 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
           <div>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Materials</p>
             <div className="grid grid-cols-2 gap-3 mb-3">
-              <F label="Main Material" field="main_material" placeholder="e.g. PVC POLYSTER" />
-              <F label="Material Spec" field="material_spec" placeholder="e.g. 1680" />
+              {F({ label: "Main Material", field: "main_material", placeholder: "e.g. PVC POLYSTER" })}
+              {F({ label: "Material Spec", field: "material_spec", placeholder: "e.g. 1680" })}
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Additional Materials</Label>

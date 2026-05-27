@@ -59,9 +59,10 @@ export function WorkflowBar({
   const hasNextStage = !isTerminal
 
   const currentStageOwner = STAGE_OWNER_ROLE[product.workflow_stage as WorkflowStage]
+  const isDesignHead = profile.role === 'design_head'
   const isOwner = profile.role === currentStageOwner
-    || (product.workflow_stage === 'design_completed' && profile.role === 'design_head')
-  const canAdvance = (isAdmin || isOwner) && (currentStageCompleted || isAdmin)
+    || (['draft', 'design_completed'].includes(product.workflow_stage) && isDesignHead)
+  const canAdvance = (isAdmin || isOwner) && (currentStageCompleted || isAdmin || isDesignHead)
 
   const prevStage = currentIndex > 0 ? WORKFLOW_STAGES[currentIndex - 1] : null
 

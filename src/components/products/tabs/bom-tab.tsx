@@ -52,9 +52,26 @@ export function BomTab({ product, profile, data, merchandisingData }: BomTabProp
   }
 
   async function markComplete() {
+    const becomingComplete = !data?.is_completed
     setSaving(true)
     const supabase = createClient()
-    await supabase.from('bom_data').update({ items, is_completed: !data?.is_completed, updated_by: profile.id }).eq('product_id', product.id)
+    await supabase.from('bom_data').update({ items, is_completed: becomingComplete, updated_by: profile.id }).eq('product_id', product.id)
+
+    if (becomingComplete && product.workflow_stage === 'bom_finalized') {
+      await supabase.rpc('advance_product_stage', {
+        p_product_id: product.id,
+        p_next_stage: 'marketing_ready',
+        p_user_id: profile.id,
+        p_action: 'marked BOM complete — stage advanced to Marketing',
+        p_department: 'bom',
+      })
+      fetch('/api/notify-stage-advance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: product.id, product_name: product.name, next_stage: 'marketing_ready' }),
+      }).catch(() => {})
+    }
+
     setSaving(false)
     router.refresh()
   }

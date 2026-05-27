@@ -136,16 +136,33 @@ export function DesignTab({ product, profile, data, salesData, files, submission
   }
 
   async function markComplete() {
+    const becomingComplete = !data?.is_completed
     setSaving(true)
     const supabase = createClient()
     await supabase.from('design_data').update({
-      ...form, is_completed: !data?.is_completed, updated_by: profile.id,
+      ...form, is_completed: becomingComplete, updated_by: profile.id,
     }).eq('product_id', product.id)
     await supabase.from('activity_logs').insert({
       product_id: product.id, user_id: profile.id,
-      action: data?.is_completed ? 'marked design as incomplete' : 'marked design as complete',
+      action: becomingComplete ? 'marked design as complete' : 'marked design as incomplete',
       department: 'design',
     })
+
+    if (becomingComplete && product.workflow_stage === 'design_completed') {
+      await supabase.rpc('advance_product_stage', {
+        p_product_id: product.id,
+        p_next_stage: 'merchandising_completed',
+        p_user_id: profile.id,
+        p_action: 'marked design complete — stage advanced to Merchandising',
+        p_department: profile.role,
+      })
+      fetch('/api/notify-stage-advance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: product.id, product_name: product.name, next_stage: 'merchandising_completed' }),
+      }).catch(() => {})
+    }
+
     setSaving(false)
     router.refresh()
   }
@@ -314,6 +331,88 @@ export function DesignTab({ product, profile, data, salesData, files, submission
       <span className="inline-flex items-center gap-1 text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-medium">
         <Clock className="h-3 w-3" /> Awaiting review
       </span>
+    )
+  }
+
+  // Viewer mode: any role that isn't design team or head sees read-only summary
+  if (!isRoleAllowed) {
+    return (
+      <div className="space-y-4 max-w-3xl">
+        {/* Illustrations */}
+        {designFiles.length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Design Illustrations</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 gap-2">
+                {designFiles.map(file => (
+                  <a key={file.id} href={file.file_url} target="_blank" rel="noopener noreferrer"
+                    className="group relative aspect-video rounded-lg overflow-hidden border border-gray-200 bg-gray-50 hover:border-blue-300 transition-colors"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={file.file_url} alt={file.name} className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                      <ExternalLink className="h-5 w-5 text-white" />
+                    </div>
+                  </a>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Tech Pack summary */}
+        {data && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Design Tech Pack</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 gap-x-6 gap-y-3 text-sm">
+                {([
+                  ['Designer', data.designer_name],
+                  ['Farma', data.farma],
+                  ['Season Year', data.season_year],
+                  ['Fabric', data.fabric],
+                  ['Lining', data.lining],
+                  ['Air Mesh', data.air_mesh],
+                  ['Zipper', data.zipper],
+                  ['Puller', data.puller],
+                  ['9mm Patta', data.patta_9mm],
+                  ['Patta 1', data.patta_1],
+                  ['Patta 2', data.patta_2],
+                  ['Lader Lock', data.lader_lock],
+                  ['Branding', data.branding],
+                  ['Screen Print', data.screen_print],
+                  ['Digital Print', data.digital_print],
+                  ['Bartech', data.bartech],
+                  ['Re-sampling By', data.re_sampling_by],
+                ] as [string, string | null | undefined][]).filter(([, v]) => v).map(([label, value]) => (
+                  <div key={label}>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-0.5">{label}</p>
+                    <p className="text-gray-800">{value}</p>
+                  </div>
+                ))}
+              </div>
+              {data.remarks && (
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-0.5">Remarks</p>
+                  <p className="text-sm text-gray-800 whitespace-pre-wrap">{data.remarks}</p>
+                </div>
+              )}
+              {(!data.fabric && !data.designer_name && !data.farma) && (
+                <p className="text-sm text-gray-400 italic">Tech pack not yet uploaded by design team.</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+        {!data && (
+          <div className="py-10 text-center text-gray-400">
+            <p className="text-sm">Design data not yet available.</p>
+          </div>
+        )}
+      </div>
     )
   }
 

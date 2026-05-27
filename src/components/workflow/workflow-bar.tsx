@@ -32,7 +32,7 @@ export function WorkflowBar({
   const [unlockLoading, setUnlockLoading] = useState(false)
 
   const currentIndex = WORKFLOW_STAGES.indexOf(product.workflow_stage as WorkflowStage)
-  const isAdmin = profile.role === 'admin'
+  const isAdmin = ['admin', 'management'].includes(profile.role)
 
   // 5 display stages matching the new hierarchy: Sales → Design → Merch → BOM → Marketing
   const DISPLAY_STAGES = [
@@ -60,6 +60,7 @@ export function WorkflowBar({
 
   const currentStageOwner = STAGE_OWNER_ROLE[product.workflow_stage as WorkflowStage]
   const isOwner = profile.role === currentStageOwner
+    || (product.workflow_stage === 'design_completed' && profile.role === 'design_head')
   const canAdvance = (isAdmin || isOwner) && (currentStageCompleted || isAdmin)
 
   const prevStage = currentIndex > 0 ? WORKFLOW_STAGES[currentIndex - 1] : null

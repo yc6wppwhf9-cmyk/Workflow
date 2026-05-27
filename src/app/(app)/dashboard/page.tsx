@@ -504,9 +504,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // MERCHANDISING / BOM / MARKETING DASHBOARDS
   // ─────────────────────────────────────────────────────────────────────────────
   const deptConfig: Record<string, { stage: WorkflowStage; dataTable: string; label: string; tab: string; color: string }> = {
-    merchandising: { stage: 'design_completed',        dataTable: 'merchandising_data', label: 'Merchandising', tab: 'merchandising', color: 'bg-blue-50 [&>svg]:text-blue-600' },
-    bom:           { stage: 'merchandising_completed', dataTable: 'bom_data',           label: 'BOM',           tab: 'bom',           color: 'bg-orange-50 [&>svg]:text-orange-600' },
-    marketing:     { stage: 'bom_finalized',           dataTable: 'marketing_data',     label: 'Marketing',     tab: 'marketing',     color: 'bg-yellow-50 [&>svg]:text-yellow-600' },
+    merchandising: { stage: 'merchandising_completed', dataTable: 'merchandising_data', label: 'Merchandising', tab: 'merchandising', color: 'bg-blue-50 [&>svg]:text-blue-600' },
+    bom:           { stage: 'bom_finalized',           dataTable: 'bom_data',           label: 'BOM',           tab: 'bom',           color: 'bg-orange-50 [&>svg]:text-orange-600' },
+    marketing:     { stage: 'marketing_ready',         dataTable: 'marketing_data',     label: 'Marketing',     tab: 'marketing',     color: 'bg-yellow-50 [&>svg]:text-yellow-600' },
   }
   const deptCfg = deptConfig[role]
 

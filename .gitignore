@@ -8,6 +8,8 @@ build/
 next-env.d.ts
 
 .vercel
-test-flow.mjs
+supabase/.temp/
+images/
+.claude/
 test-*.mjs
 test-*.js

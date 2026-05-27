@@ -16,9 +16,11 @@ function StageBadge({ stage }: { stage: string }) {
   return <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${color}`}>{label}</span>
 }
 
-function KpiCard({ label, value, sub, icon: Icon, color }: { label: string; value: string | number; sub?: string; icon: React.ElementType; color: string }) {
-  return (
-    <Card>
+function KpiCard({ label, value, sub, icon: Icon, color, href, active }: {
+  label: string; value: string | number; sub?: string; icon: React.ElementType; color: string; href?: string; active?: boolean
+}) {
+  const inner = (
+    <Card className={active ? 'ring-2 ring-blue-500 shadow-md' : href ? 'hover:shadow-md transition-shadow cursor-pointer' : ''}>
       <CardContent className="pt-5">
         <div className="flex items-center justify-between">
           <div>
@@ -33,9 +35,13 @@ function KpiCard({ label, value, sub, icon: Icon, color }: { label: string; valu
       </CardContent>
     </Card>
   )
+  if (href) return <Link href={href}>{inner}</Link>
+  return inner
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ f?: string }> }) {
+  const { f: filter } = await searchParams
+  const show = (key: string) => !filter || filter === key
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   const { data: profile } = await supabase.from('profiles').select('*').eq('id', user!.id).single()
@@ -71,13 +77,13 @@ export default async function DashboardPage() {
         <Header title={`Welcome, ${profile?.full_name?.split(' ')[0] || 'Sales'}`} subtitle="Your products and requirements" />
         <div className="p-6 space-y-6">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <KpiCard label="My Products" value={allMine.length} icon={Package} color="bg-blue-50 [&>svg]:text-blue-600" />
-            <KpiCard label="Needs Input" value={needsInput.length} sub="draft stage" icon={AlertCircle} color="bg-amber-50 [&>svg]:text-amber-500" />
-            <KpiCard label="In Pipeline" value={inPipeline.length} sub="past sales stage" icon={Clock} color="bg-purple-50 [&>svg]:text-purple-600" />
-            <KpiCard label="Live" value={live.length} icon={CheckCircle2} color="bg-green-50 [&>svg]:text-green-600" />
+            <KpiCard label="My Products"  value={allMine.length}    icon={Package}      color="bg-blue-50 [&>svg]:text-blue-600"   href="?f=all"      active={filter === 'all'} />
+            <KpiCard label="Needs Input"  value={needsInput.length} sub="draft stage"   icon={AlertCircle}  color="bg-amber-50 [&>svg]:text-amber-500"  href="?f=needs-input"  active={filter === 'needs-input'} />
+            <KpiCard label="In Pipeline"  value={inPipeline.length} sub="past sales stage" icon={Clock}    color="bg-purple-50 [&>svg]:text-purple-600" href="?f=in-pipeline"  active={filter === 'in-pipeline'} />
+            <KpiCard label="Live"         value={live.length}       icon={CheckCircle2} color="bg-green-50 [&>svg]:text-green-600"  href="?f=live"     active={filter === 'live'} />
           </div>
 
-          {needsInput.length > 0 && (
+          {show('needs-input') && needsInput.length > 0 && (
             <Card className="border-amber-200">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base text-amber-700 flex items-center gap-2">
@@ -116,7 +122,7 @@ export default async function DashboardPage() {
             </Card>
           )}
 
-          <Card>
+          {show('all') && <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-3">
               <CardTitle className="text-base">All My Products</CardTitle>
               <Link href="/products" className="text-sm text-blue-600 hover:underline flex items-center gap-1">View all <ArrowRight className="h-3 w-3" /></Link>
@@ -144,26 +150,74 @@ export default async function DashboardPage() {
                 </tbody>
               </table>
             </CardContent>
-          </Card>
+          </Card>}
 
-          <Card>
-            <CardHeader className="pb-3"><CardTitle className="text-base">My Recent Activity</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              {(recentLogs || []).map(log => {
-                const product = one(log.product) as { name?: string } | null
-                return (
-                  <div key={log.id} className="flex items-start gap-3">
-                    <div className="h-2 w-2 rounded-full bg-green-500 mt-1.5 shrink-0" />
-                    <div>
-                      <p className="text-sm text-gray-900">{log.action}{product?.name && <span className="text-gray-500"> · {product.name}</span>}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{formatDateTime(log.created_at)}</p>
+          {show('in-pipeline') && inPipeline.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3"><CardTitle className="text-base">In Pipeline</CardTitle></CardHeader>
+              <CardContent className="p-0">
+                <table className="w-full text-sm">
+                  <thead><tr className="border-b border-gray-100 bg-gray-50">
+                    <th className="text-left px-6 py-2 text-xs font-semibold text-gray-400 uppercase">Product</th>
+                    <th className="text-left px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Stage</th>
+                    <th className="px-4 py-2"></th>
+                  </tr></thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {inPipeline.map(p => (
+                      <tr key={p.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-3 font-medium text-gray-900">{p.name}</td>
+                        <td className="px-4 py-3"><StageBadge stage={p.workflow_stage} /></td>
+                        <td className="px-4 py-3 text-right"><Link href={`/products/${p.id}`} className="text-xs text-blue-600 hover:underline flex items-center gap-1 justify-end">Open <ArrowRight className="h-3 w-3" /></Link></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          )}
+
+          {show('live') && live.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3"><CardTitle className="text-base text-green-700">Live Products</CardTitle></CardHeader>
+              <CardContent className="p-0">
+                <table className="w-full text-sm">
+                  <thead><tr className="border-b border-gray-100 bg-gray-50">
+                    <th className="text-left px-6 py-2 text-xs font-semibold text-gray-400 uppercase">Product</th>
+                    <th className="px-4 py-2"></th>
+                  </tr></thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {live.map(p => (
+                      <tr key={p.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-3 font-medium text-gray-900">{p.name}</td>
+                        <td className="px-4 py-3 text-right"><Link href={`/products/${p.id}`} className="text-xs text-blue-600 hover:underline flex items-center gap-1 justify-end">Open <ArrowRight className="h-3 w-3" /></Link></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          )}
+
+          {show('all') && (
+            <Card>
+              <CardHeader className="pb-3"><CardTitle className="text-base">My Recent Activity</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                {(recentLogs || []).map(log => {
+                  const product = one(log.product) as { name?: string } | null
+                  return (
+                    <div key={log.id} className="flex items-start gap-3">
+                      <div className="h-2 w-2 rounded-full bg-green-500 mt-1.5 shrink-0" />
+                      <div>
+                        <p className="text-sm text-gray-900">{log.action}{product?.name && <span className="text-gray-500"> · {product.name}</span>}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">{formatDateTime(log.created_at)}</p>
+                      </div>
                     </div>
-                  </div>
-                )
-              })}
-              {(recentLogs || []).length === 0 && <p className="text-sm text-gray-400 text-center py-2">No activity yet.</p>}
-            </CardContent>
-          </Card>
+                  )
+                })}
+                {(recentLogs || []).length === 0 && <p className="text-sm text-gray-400 text-center py-2">No activity yet.</p>}
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     )
@@ -225,13 +279,13 @@ export default async function DashboardPage() {
         <Header title={`My Work, ${profile?.full_name?.split(' ')[0] || 'Designer'}`} subtitle="Design assignments and submission status" />
         <div className="p-6 space-y-6">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <KpiCard label="Assigned to Me" value={assignments.length} icon={UserCheck} color="bg-violet-50 [&>svg]:text-violet-600" />
-            <KpiCard label="Needs Work" value={needsWork} sub="not yet submitted" icon={AlertCircle} color="bg-amber-50 [&>svg]:text-amber-500" />
-            <KpiCard label="In Review" value={pendingReview} sub="awaiting head" icon={Clock} color="bg-blue-50 [&>svg]:text-blue-600" />
-            <KpiCard label="Approval Rate" value={`${approvalRate}%`} sub={`${approvedSubs}/${totalSubs} submissions`} icon={TrendingUp} color="bg-green-50 [&>svg]:text-green-600" />
+            <KpiCard label="Assigned to Me" value={assignments.length} icon={UserCheck} color="bg-violet-50 [&>svg]:text-violet-600" href="?f=all"        active={filter === 'all'} />
+            <KpiCard label="Needs Work"     value={needsWork}          sub="not yet submitted" icon={AlertCircle} color="bg-amber-50 [&>svg]:text-amber-500" href="?f=needs-work"  active={filter === 'needs-work'} />
+            <KpiCard label="In Review"      value={pendingReview}      sub="awaiting head" icon={Clock}      color="bg-blue-50 [&>svg]:text-blue-600"  href="?f=in-review"  active={filter === 'in-review'} />
+            <KpiCard label="Approval Rate"  value={`${approvalRate}%`} sub={`${approvedSubs}/${totalSubs} submissions`} icon={TrendingUp} color="bg-green-50 [&>svg]:text-green-600" />
           </div>
 
-          <Card>
+          {show('all') && <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">My Assigned Products</CardTitle></CardHeader>
             <CardContent className="p-0">
               {assignments.length === 0 ? (
@@ -286,7 +340,46 @@ export default async function DashboardPage() {
                 </table>
               )}
             </CardContent>
-          </Card>
+          </Card>}
+
+          {show('needs-work') && (
+            <Card className="border-amber-200">
+              <CardHeader className="pb-3"><CardTitle className="text-sm text-amber-700 flex items-center gap-2"><AlertCircle className="h-4 w-4" /> Needs Work</CardTitle></CardHeader>
+              <CardContent className="p-0">
+                <table className="w-full text-sm">
+                  <thead><tr className="border-b border-gray-100 bg-gray-50"><th className="text-left px-6 py-2 text-xs font-semibold text-gray-400 uppercase">Product</th><th className="text-center px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Status</th><th className="px-4 py-2"></th></tr></thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {assignments.filter(a => !a.latestSub || a.latestSub.status === 'rejected').map(a => (
+                      <tr key={a.product_id} className="hover:bg-amber-50">
+                        <td className="px-6 py-3 font-medium text-gray-900">{a.product?.name || a.product_id}</td>
+                        <td className="px-4 py-3 text-center">{!a.latestSub ? <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Not started</span> : <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">Rejected</span>}</td>
+                        <td className="px-4 py-3 text-right"><Link href={`/products/${a.product?.id || a.product_id}?tab=design`} className="text-xs text-blue-600 hover:underline flex items-center gap-1 justify-end">Open <ArrowRight className="h-3 w-3" /></Link></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          )}
+
+          {show('in-review') && (
+            <Card className="border-blue-200">
+              <CardHeader className="pb-3"><CardTitle className="text-sm text-blue-700 flex items-center gap-2"><Clock className="h-4 w-4" /> In Review</CardTitle></CardHeader>
+              <CardContent className="p-0">
+                <table className="w-full text-sm">
+                  <thead><tr className="border-b border-gray-100 bg-gray-50"><th className="text-left px-6 py-2 text-xs font-semibold text-gray-400 uppercase">Product</th><th className="px-4 py-2"></th></tr></thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {assignments.filter(a => a.latestSub?.status === 'pending').map(a => (
+                      <tr key={a.product_id} className="hover:bg-blue-50">
+                        <td className="px-6 py-3 font-medium text-gray-900">{a.product?.name || a.product_id}</td>
+                        <td className="px-4 py-3 text-right"><Link href={`/products/${a.product?.id || a.product_id}?tab=design`} className="text-xs text-blue-600 hover:underline flex items-center gap-1 justify-end">Open <ArrowRight className="h-3 w-3" /></Link></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     )
@@ -328,13 +421,13 @@ export default async function DashboardPage() {
         <Header title={`Design Head Dashboard`} subtitle={`Welcome, ${profile?.full_name?.split(' ')[0]}`} />
         <div className="p-6 space-y-6">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <KpiCard label="Pending Reviews" value={pending.length} sub="awaiting your approval" icon={Send} color="bg-amber-50 [&>svg]:text-amber-500" />
-            <KpiCard label="Unassigned" value={unassigned.length} sub="need a designer" icon={AlertCircle} color="bg-red-50 [&>svg]:text-red-500" />
-            <KpiCard label="In Progress" value={assigned.length} sub="assigned & active" icon={Clock} color="bg-blue-50 [&>svg]:text-blue-600" />
-            <KpiCard label="Total Active" value={(productsInDesign || []).length} sub="draft + design stage" icon={Package} color="bg-purple-50 [&>svg]:text-purple-600" />
+            <KpiCard label="Pending Reviews" value={pending.length}   sub="awaiting your approval" icon={Send}       color="bg-amber-50 [&>svg]:text-amber-500"  href="?f=pending"    active={filter === 'pending'} />
+            <KpiCard label="Unassigned"      value={unassigned.length} sub="need a designer"        icon={AlertCircle} color="bg-red-50 [&>svg]:text-red-500"    href="?f=unassigned" active={filter === 'unassigned'} />
+            <KpiCard label="In Progress"     value={assigned.length}   sub="assigned & active"      icon={Clock}       color="bg-blue-50 [&>svg]:text-blue-600"   href="?f=active"     active={filter === 'active'} />
+            <KpiCard label="Total Active"    value={(productsInDesign || []).length} sub="draft + design stage" icon={Package} color="bg-purple-50 [&>svg]:text-purple-600" href="?f=all" active={filter === 'all'} />
           </div>
 
-          {pending.length > 0 && (
+          {show('pending') && pending.length > 0 && (
             <Card className="border-amber-200">
               <CardHeader className="flex flex-row items-center justify-between pb-3">
                 <CardTitle className="text-sm text-amber-700 flex items-center gap-2">
@@ -362,7 +455,7 @@ export default async function DashboardPage() {
             </Card>
           )}
 
-          {unassigned.length > 0 && (
+          {show('unassigned') && unassigned.length > 0 && (
             <Card className="border-red-100">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm text-red-600 flex items-center gap-2">
@@ -437,12 +530,12 @@ export default async function DashboardPage() {
         <Header title={`${deptCfg.label} Dashboard`} subtitle={`Welcome, ${profile?.full_name?.split(' ')[0]}`} />
         <div className="p-6 space-y-6">
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-            <KpiCard label="Waiting for Me" value={pending.length} sub="ready to work on" icon={AlertCircle} color="bg-amber-50 [&>svg]:text-amber-500" />
-            <KpiCard label="Completed" value={completed.length} icon={CheckCircle2} color="bg-green-50 [&>svg]:text-green-600" />
-            <KpiCard label="Total in My Stage" value={products.length} icon={Package} color={deptCfg.color} />
+            <KpiCard label="Waiting for Me"   value={pending.length}   sub="ready to work on" icon={AlertCircle}  color="bg-amber-50 [&>svg]:text-amber-500" href="?f=pending"   active={filter === 'pending'} />
+            <KpiCard label="Completed"         value={completed.length} icon={CheckCircle2}    color="bg-green-50 [&>svg]:text-green-600"                      href="?f=completed" active={filter === 'completed'} />
+            <KpiCard label="Total in My Stage" value={products.length}  icon={Package}         color={deptCfg.color}                                           href="?f=all"       active={filter === 'all'} />
           </div>
 
-          {pending.length > 0 && (
+          {show('pending') && pending.length > 0 && (
             <Card className="border-amber-200">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm text-amber-700 flex items-center gap-2">
@@ -479,7 +572,7 @@ export default async function DashboardPage() {
             </Card>
           )}
 
-          {completed.length > 0 && (
+          {show('completed') && completed.length > 0 && (
             <Card>
               <CardHeader className="pb-3"><CardTitle className="text-base flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-green-500" />Recently Completed</CardTitle></CardHeader>
               <CardContent className="p-0">

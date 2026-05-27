@@ -300,7 +300,7 @@ export function DesignTab({ product, profile, data, files, submissions, designer
   }
 
   return (
-    <div className="max-w-3xl space-y-4">
+    <div className="space-y-4">
 
       {/* ── Design Head: Assignment + Review Queue ─────────────────── */}
       {isHead && (

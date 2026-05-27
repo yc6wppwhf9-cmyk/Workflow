@@ -305,22 +305,26 @@ export function DesignTab({ product, profile, data, files, submissions, designer
       {/* ── Design Head: Assignment + Review Queue ─────────────────── */}
       {isHead && (
         <>
-          {/* Assignment */}
+          {/* Assignment dropdown */}
           <Card className="border-violet-200 bg-violet-50">
             <CardHeader className="pb-2 pt-4">
               <CardTitle className="text-sm flex items-center gap-2 text-violet-900">
-                <UserCheck className="h-4 w-4" /> Assign Designer
+                <UserCheck className="h-4 w-4" />
+                Assign Designer
+                {savingAssign && <Loader2 className="h-4 w-4 animate-spin ml-2" />}
               </CardTitle>
             </CardHeader>
             <CardContent className="pb-4">
-              <div className="flex items-center gap-3">
+              {designers.length === 0 ? (
+                <p className="text-xs text-violet-500">No active designers found.</p>
+              ) : (
                 <Select
                   value={assignedTo}
                   onValueChange={v => { setAssignedTo(v); saveAssignment(v) }}
                   disabled={savingAssign}
                 >
-                  <SelectTrigger className="h-8 text-sm w-60">
-                    <SelectValue placeholder="Select team member…" />
+                  <SelectTrigger className="w-64 bg-white">
+                    <SelectValue placeholder="Select designer..." />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">— Unassigned —</SelectItem>
@@ -329,13 +333,7 @@ export function DesignTab({ product, profile, data, files, submissions, designer
                     ))}
                   </SelectContent>
                 </Select>
-                {savingAssign && <Loader2 className="h-4 w-4 animate-spin text-violet-600" />}
-                {assignedTo && assignedTo !== '__none__' && !savingAssign && (
-                  <span className="text-xs text-violet-700">
-                    Assigned to <strong>{designers.find(d => d.id === assignedTo)?.full_name}</strong>
-                  </span>
-                )}
-              </div>
+              )}
             </CardContent>
           </Card>
 
@@ -523,8 +521,8 @@ export function DesignTab({ product, profile, data, files, submissions, designer
         </Card>
       )}
 
-      {/* ── Tech Pack Upload (gated for team members — head always sees it) ── */}
-      {canEditFields && (
+      {/* ── Tech Pack Upload (team members only) ── */}
+      {isTeamMember && canEditFields && (
         <Card className="border-purple-200 bg-purple-50">
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center justify-between gap-4 flex-wrap">

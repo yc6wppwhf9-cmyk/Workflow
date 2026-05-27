@@ -66,7 +66,8 @@ export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): Pars
   // Supports two layouts:
   //   Transposed (ATTRIBUTES sheet):  col 0 = labels, col 1+ = one value per colour variant
   //   Side-by-side (ATTRIBUTES FORMAT): row 0 = style names, then 3-col groups (label, value, empty)
-  const attrSheet = findSheet(workbook, 'ATTRIBUTES FORMAT') ?? findSheet(workbook, 'ATTRIBUTES')
+  // Prefer the plain ATTRIBUTES sheet (transposed format with COLOR row) over ATTRIBUTES FORMAT
+  const attrSheet = findSheet(workbook, 'ATTRIBUTES') ?? findSheet(workbook, 'ATTRIBUTES FORMAT')
   if (attrSheet) {
     const rows = XLSX.utils.sheet_to_json<string[]>(attrSheet, { header: 1, defval: '' }) as string[][]
 

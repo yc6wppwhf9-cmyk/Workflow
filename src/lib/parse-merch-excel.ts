@@ -96,8 +96,8 @@ export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): Pars
     for (let col = 0; col < numColumns; col++) {
       const baseCol = col * 3
       const styleName = String(rows[0]?.[baseCol] || '').trim()
-      // Skip empty or placeholder columns (value 0)
-      if (!styleName || styleName === '0') continue
+      // Skip empty, placeholder, or purely numeric names (generic/wrong format)
+      if (!styleName || styleName === '0' || /^\d+$/.test(styleName)) continue
 
       const sku: ParsedSKU = {
         styleName, weight: '', color: '', dimensions: '', height: '',
@@ -156,10 +156,10 @@ export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): Pars
           const invName = String(rows[i]?.[col] || '').trim()
           if (!invName || invName === '0' || invName.toUpperCase() === 'NA') continue
           const rawConsump = rows[i]?.[consmpCol]
-          const consumption =
-            rawConsump !== null && rawConsump !== undefined && String(rawConsump).trim() !== '' && String(rawConsump).trim() !== '0'
-              ? String(rawConsump)
-              : ''
+          const numConsump = rawConsump !== null && rawConsump !== undefined ? parseFloat(String(rawConsump)) : NaN
+          const consumption = !isNaN(numConsump) && numConsump !== 0
+            ? parseFloat(numConsump.toFixed(4)).toString()
+            : ''
           items.push({ inv_code: '', inv_name: invName, consumption, unit: '' })
         }
         if (items.length > 0) bomByStyle[styleKey] = items
@@ -181,6 +181,30 @@ export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): Pars
           bomItems.push(...(bomByStyle[styleColumns[0].styleKey] || []))
         }
       }
+    }
+  }
+
+  // ── Fallback: derive SKUs from INV SHEET column names when ATTRIBUTES gave nothing ──
+  // Finds common prefix of all style keys (= product base name), remainder = colour
+  if (skus.length === 0 && Object.keys(bomByStyle).length > 0) {
+    const keys = Object.keys(bomByStyle)
+    let base = keys[0]
+    for (const k of keys.slice(1)) {
+      let i = 0
+      while (i < base.length && i < k.length && base[i] === k[i]) i++
+      base = base.slice(0, i)
+    }
+    base = base.trim()
+    for (const styleKey of keys) {
+      const color = base && styleKey.startsWith(base) ? styleKey.slice(base.length).trim() : styleKey
+      skus.push({
+        styleName: styleKey, color,
+        weight: '', dimensions: '', height: '', numberOfZips: '',
+        pocketCompartment: '', mainCompartment: '', uniquePurpose: '',
+        laptopCompartment: '', rainCover: '', backPadded: '', seasonYear: '',
+        bottleSlot: '', character: '', theme: '', mainMaterial: '', material: '',
+        designerName: '',
+      })
     }
   }
 

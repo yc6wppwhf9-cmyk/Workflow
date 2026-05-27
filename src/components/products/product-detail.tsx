@@ -34,12 +34,12 @@ interface ProductDetailProps {
 
 const TABS = [
   { value: 'overview', label: 'Overview' },
+  { value: 'sales', label: 'Sales' },
   { value: 'design', label: 'Design' },
   { value: 'merchandising', label: 'Merchandising' },
   { value: 'colours', label: 'Colours' },
   { value: 'bom', label: 'BOM' },
   { value: 'marketing', label: 'Marketing' },
-  { value: 'sales', label: 'Sales' },
   { value: 'timeline', label: 'Timeline' },
 ]
 

@@ -16,12 +16,6 @@ interface NewProductFormProps {
   profile: Profile
 }
 
-const DAYS   = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0'))
-const MONTHS = ['01','02','03','04','05','06','07','08','09','10','11','12']
-const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-const currentYear = new Date().getFullYear()
-const YEARS  = Array.from({ length: 5 }, (_, i) => String(currentYear + i))
-
 export function NewProductForm({ profile }: NewProductFormProps) {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -29,11 +23,9 @@ export function NewProductForm({ profile }: NewProductFormProps) {
   const [category, setCategory]   = useState<ProductCategory>('junior-backpacks')
   const [brand, setBrand]         = useState<Brand | ''>('')
   const [channel, setChannel]     = useState('')
-  const [priceRange, setPriceRange]       = useState('499')
-  const [deadlineDay, setDeadlineDay]     = useState('')
-  const [deadlineMonth, setDeadlineMonth] = useState('')
-  const [deadlineYear, setDeadlineYear]   = useState('')
-  const [productSpec, setProductSpec]     = useState('')
+  const [priceRange, setPriceRange]   = useState('499')
+  const [deadlineDate, setDeadlineDate] = useState('')
+  const [productSpec, setProductSpec] = useState('')
   const [images, setImages]       = useState<File[]>([])
   const [previews, setPreviews]   = useState<string[]>([])
   const [saving, setSaving]       = useState(false)
@@ -54,12 +46,6 @@ export function NewProductForm({ profile }: NewProductFormProps) {
   function removeImage(idx: number) {
     setImages(prev => prev.filter((_, i) => i !== idx))
     setPreviews(prev => prev.filter((_, i) => i !== idx))
-  }
-
-  // Build ISO date string from DD/MM/YYYY parts
-  function buildDeadlineDate(): string | null {
-    if (!deadlineDay || !deadlineMonth || !deadlineYear) return null
-    return `${deadlineYear}-${deadlineMonth}-${deadlineDay}`
   }
 
   async function handleSave() {
@@ -93,7 +79,7 @@ export function NewProductForm({ profile }: NewProductFormProps) {
     await supabase.from('sales_data').update({
       channel:               channel               || null,
       price_range:           priceRange            || null,
-      deadline_date:         buildDeadlineDate(),
+      deadline_date:         deadlineDate || null,
       product_specification: productSpec           || null,
       updated_by: profile.id,
     }).eq('product_id', product.id)
@@ -226,26 +212,12 @@ export function NewProductForm({ profile }: NewProductFormProps) {
             </div>
             <div className="space-y-1.5">
               <Label>Deadline Date</Label>
-              <div className="grid grid-cols-3 gap-2">
-                <Select value={deadlineDay} onValueChange={setDeadlineDay}>
-                  <SelectTrigger><SelectValue placeholder="DD" /></SelectTrigger>
-                  <SelectContent>
-                    {DAYS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Select value={deadlineMonth} onValueChange={setDeadlineMonth}>
-                  <SelectTrigger><SelectValue placeholder="MM" /></SelectTrigger>
-                  <SelectContent>
-                    {MONTHS.map((m, i) => <SelectItem key={m} value={m}>{MONTH_NAMES[i]}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Select value={deadlineYear} onValueChange={setDeadlineYear}>
-                  <SelectTrigger><SelectValue placeholder="YYYY" /></SelectTrigger>
-                  <SelectContent>
-                    {YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
+              <Input
+                type="date"
+                value={deadlineDate}
+                onChange={e => setDeadlineDate(e.target.value)}
+                style={{ colorScheme: 'light' }}
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Product Specification</Label>

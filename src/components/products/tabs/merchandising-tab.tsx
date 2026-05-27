@@ -169,39 +169,71 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
         const { default: JSZip } = await import('jszip')
         const zip = await JSZip.loadAsync(arrayBuffer)
 
-        let bestDrawing = '', bestRels = '', bestCount = 0
-        for (let i = 1; i <= 10; i++) {
-          const relsFile = zip.file(`xl/drawings/_rels/drawing${i}.xml.rels`)
-          if (!relsFile) break
-          const relsText = await relsFile.async('string')
-          const count = (relsText.match(/Target="\.\.\/media\//g) || []).length
-          if (count > bestCount) { bestCount = count; bestDrawing = `xl/drawings/drawing${i}.xml`; bestRels = `xl/drawings/_rels/drawing${i}.xml.rels` }
+        // Find the DETAILS PICS sheet's drawing via its own .rels file
+        // sheetNames index matches xl/worksheets/sheet{N+1}.xml (1-based)
+        let picDrawing = '', picRels = ''
+        const detailsPicsIdx = sheetNames.findIndex((n: string) =>
+          n.toUpperCase().replace(/\s+/g, ' ').includes('DETAILS')
+        )
+        if (detailsPicsIdx >= 0) {
+          const sheetNum = detailsPicsIdx + 1
+          const sheetRelsFile = zip.file(`xl/worksheets/_rels/sheet${sheetNum}.xml.rels`)
+          if (sheetRelsFile) {
+            const sheetRelsText = await sheetRelsFile.async('string')
+            const dm = sheetRelsText.match(/Target="\.\.\/drawings\/(drawing\d+\.xml)"/)
+            if (dm) { picDrawing = `xl/drawings/${dm[1]}`; picRels = `xl/drawings/_rels/${dm[1]}.rels` }
+          }
+        }
+        // Fall back to the drawing with the most images
+        if (!picDrawing) {
+          let bestCount = 0
+          for (let i = 1; i <= 10; i++) {
+            const relsFile = zip.file(`xl/drawings/_rels/drawing${i}.xml.rels`)
+            if (!relsFile) break
+            const relsText = await relsFile.async('string')
+            const count = (relsText.match(/Target="\.\.\/media\//g) || []).length
+            if (count > bestCount) { bestCount = count; picDrawing = `xl/drawings/drawing${i}.xml`; picRels = `xl/drawings/_rels/drawing${i}.xml.rels` }
+          }
         }
 
         const rIdToFile: Record<string, string> = {}
-        if (bestRels) {
-          const relsText = await zip.file(bestRels)!.async('string')
+        if (picRels) {
+          const relsText = await zip.file(picRels)!.async('string')
           for (const m of relsText.matchAll(/Id="(rId\d+)"[^>]*Target="\.\.\/media\/(image\d+\.\w+)"/g))
             rIdToFile[m[1]] = m[2]
         }
 
         const imageColourMap = new Map<string, string>()
-        if (bestDrawing) {
-          const drawingText = await zip.file(bestDrawing)!.async('string')
+        if (picDrawing && colourTags.length > 0) {
+          const drawingText = await zip.file(picDrawing)!.async('string')
           const anchors = [...drawingText.matchAll(/<xdr:twoCellAnchor[^>]*>([\s\S]*?)<\/xdr:twoCellAnchor>/g)]
-          const positions: Array<{ row: number; file: string }> = []
+          const positions: Array<{ row: number; col: number; file: string }> = []
           for (const anchor of anchors) {
             const rowMatch = anchor[1].match(/<xdr:from>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/)
+            const colMatch = anchor[1].match(/<xdr:from><xdr:col>(\d+)<\/xdr:col>/)
             const rIdMatch = anchor[1].match(/r:embed="(rId\d+)"/)
             if (rowMatch && rIdMatch) {
               const f = rIdToFile[rIdMatch[1]]
-              if (f) positions.push({ row: parseInt(rowMatch[1]), file: f })
+              if (f) positions.push({ row: parseInt(rowMatch[1]), col: colMatch ? parseInt(colMatch[1]) : 0, file: f })
             }
           }
+          // Group by column first (colour-wise layout is usually column-based in DETAILS PICS)
+          // Fall back to row-based grouping
+          const uniqueCols = [...new Set(positions.map(p => p.col))].sort((a, b) => a - b)
           const uniqueRows = [...new Set(positions.map(p => p.row))].sort((a, b) => a - b)
-          for (const pos of positions) {
-            const idx = uniqueRows.indexOf(pos.row)
-            if (idx < colourTags.length) imageColourMap.set(pos.file, colourTags[idx])
+          const useColBased = uniqueCols.length >= colourTags.length && uniqueCols.length > uniqueRows.length
+          if (useColBased) {
+            const colsPerColour = Math.ceil(uniqueCols.length / colourTags.length)
+            for (const pos of positions) {
+              const colIdx = uniqueCols.indexOf(pos.col)
+              const colourIdx = Math.floor(colIdx / colsPerColour)
+              if (colourIdx < colourTags.length) imageColourMap.set(pos.file, colourTags[colourIdx])
+            }
+          } else {
+            for (const pos of positions) {
+              const idx = uniqueRows.indexOf(pos.row)
+              if (idx < colourTags.length) imageColourMap.set(pos.file, colourTags[idx])
+            }
           }
         }
 

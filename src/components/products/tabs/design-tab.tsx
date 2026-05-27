@@ -364,21 +364,31 @@ export function DesignTab({ product, profile, data, salesData, files, submission
               {designers.length === 0 ? (
                 <p className="text-xs text-violet-500">No active designers found.</p>
               ) : (
-                <Select
-                  value={assignedTo}
-                  onValueChange={v => { setAssignedTo(v); saveAssignment(v) }}
-                  disabled={savingAssign}
-                >
-                  <SelectTrigger className="w-64 bg-white">
-                    <SelectValue placeholder="Select designer..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">— Unassigned —</SelectItem>
-                    {designers.map(d => (
-                      <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center gap-3">
+                  <Select
+                    value={assignedTo}
+                    onValueChange={v => setAssignedTo(v)}
+                    disabled={savingAssign}
+                  >
+                    <SelectTrigger className="w-56 bg-white">
+                      <SelectValue placeholder="Select designer..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">— Unassigned —</SelectItem>
+                      {designers.map(d => (
+                        <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    onClick={() => saveAssignment(assignedTo)}
+                    disabled={savingAssign}
+                    className="bg-violet-600 hover:bg-violet-700"
+                  >
+                    {savingAssign ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="h-4 w-4" />}
+                    Assign
+                  </Button>
+                </div>
               )}
 
               <div className="space-y-1.5">

@@ -18,11 +18,50 @@ interface SalesTabProps {
   data: SalesData | null
 }
 
+function ReadOnlyField({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-0.5">{label}</p>
+      <p className="text-sm text-gray-800">{value || <span className="text-gray-400 italic">Not specified</span>}</p>
+    </div>
+  )
+}
+
 export function SalesTab({ product, profile, data }: SalesTabProps) {
   const router = useRouter()
   const isRoleAllowed = ['admin', 'sales'].includes(profile.role)
   const canEditFields = !data?.is_locked && !data?.is_completed && isRoleAllowed
   const showActions = !data?.is_locked && isRoleAllowed
+
+  // Non-sales/admin roles see a clean read-only summary
+  if (!isRoleAllowed) {
+    const deadlineFormatted = data?.deadline_date
+      ? new Date(data.deadline_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+      : null
+    return (
+      <div className="max-w-2xl">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center justify-between">
+              Sales Requirement
+              {data?.is_completed && (
+                <span className="text-xs font-normal text-green-700 bg-green-100 px-2.5 py-1 rounded-full border border-green-200">Sales Complete</span>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-2 gap-x-6 gap-y-4">
+            <ReadOnlyField label="Channel"       value={data?.channel} />
+            <ReadOnlyField label="Price Range"   value={data?.price_range ? `₹${data.price_range}` : null} />
+            <ReadOnlyField label="Category"      value={product.category} />
+            <ReadOnlyField label="Deadline"      value={deadlineFormatted} />
+            <div className="col-span-2">
+              <ReadOnlyField label="Product Specification" value={data?.product_specification} />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   const [form, setForm] = useState({
     assign_to: data?.assign_to || '',

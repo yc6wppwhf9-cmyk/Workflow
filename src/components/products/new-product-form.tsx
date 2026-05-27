@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Save } from 'lucide-react'
+import { Loader2, Save, ImagePlus, X } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,39 +16,68 @@ interface NewProductFormProps {
   profile: Profile
 }
 
-const EMPTY = {
-  name: '',
-  category: 'junior-backpacks' as ProductCategory,
-  brand: '' as Brand | '',
-  channel: '',
-  assign_to: '',
-  price_range: '',
-  deadline_date: '',
-  product_specification: '',
-}
+const DAYS   = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0'))
+const MONTHS = ['01','02','03','04','05','06','07','08','09','10','11','12']
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+const currentYear = new Date().getFullYear()
+const YEARS  = Array.from({ length: 5 }, (_, i) => String(currentYear + i))
 
 export function NewProductForm({ profile }: NewProductFormProps) {
   const router = useRouter()
-  const [form, setForm] = useState({ ...EMPTY })
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const [category, setCategory]   = useState<ProductCategory>('junior-backpacks')
+  const [brand, setBrand]         = useState<Brand | ''>('')
+  const [channel, setChannel]     = useState('')
+  const [priceRange, setPriceRange]       = useState('499')
+  const [deadlineDay, setDeadlineDay]     = useState('')
+  const [deadlineMonth, setDeadlineMonth] = useState('')
+  const [deadlineYear, setDeadlineYear]   = useState('')
+  const [productSpec, setProductSpec]     = useState('')
+  const [images, setImages]       = useState<File[]>([])
+  const [previews, setPreviews]   = useState<string[]>([])
+  const [saving, setSaving]       = useState(false)
+  const [error, setError]         = useState('')
+
+  function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || [])
+    const imgFiles = files.filter(f => f.type.startsWith('image/'))
+    setImages(prev => [...prev, ...imgFiles])
+    imgFiles.forEach(f => {
+      const reader = new FileReader()
+      reader.onload = ev => setPreviews(prev => [...prev, ev.target?.result as string])
+      reader.readAsDataURL(f)
+    })
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  function removeImage(idx: number) {
+    setImages(prev => prev.filter((_, i) => i !== idx))
+    setPreviews(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  // Build ISO date string from DD/MM/YYYY parts
+  function buildDeadlineDate(): string | null {
+    if (!deadlineDay || !deadlineMonth || !deadlineYear) return null
+    return `${deadlineYear}-${deadlineMonth}-${deadlineDay}`
+  }
 
   async function handleSave() {
-    if (!form.category) { setError('Category is required'); return }
+    if (!category) { setError('Category is required'); return }
     setSaving(true)
     setError('')
 
     const supabase = createClient()
+    const autoName = `${CATEGORY_LABELS[category] || category}${brand ? ' ' + brand : ''} ${Date.now().toString(36).toUpperCase()}`
+    const autoSku  = `PROD-${Date.now().toString(36).toUpperCase()}`
 
     const { data: product, error: productErr } = await supabase
       .from('products')
       .insert({
-        name: form.name.trim() || 'New Product',
-        sku: form.name.trim()
-          ? form.name.trim().toUpperCase().replace(/\s+/g, '-').substring(0, 20)
-          : `PROD-${Date.now().toString(36).toUpperCase()}`,
-        category: form.category,
-        ...(form.brand && { brand: form.brand }),
+        name: autoName,
+        sku: autoSku,
+        category,
+        ...(brand && { brand }),
         created_by: profile.id,
         updated_by: profile.id,
       })
@@ -62,13 +91,33 @@ export function NewProductForm({ profile }: NewProductFormProps) {
     }
 
     await supabase.from('sales_data').update({
-      assign_to:             form.assign_to             || null,
-      channel:               form.channel               || null,
-      price_range:           form.price_range           || null,
-      deadline_date:         form.deadline_date         || null,
-      product_specification: form.product_specification || null,
+      channel:               channel               || null,
+      price_range:           priceRange            || null,
+      deadline_date:         buildDeadlineDate(),
+      product_specification: productSpec           || null,
       updated_by: profile.id,
     }).eq('product_id', product.id)
+
+    // Upload sample images to storage
+    if (images.length > 0) {
+      const uploadPromises = images.map(async (file) => {
+        const ext  = file.name.split('.').pop()
+        const path = `${product.id}/sales/sample-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+        const { error: storErr } = await supabase.storage.from('product-files').upload(path, file, { upsert: true })
+        if (!storErr) {
+          await supabase.from('product_files').insert({
+            product_id:  product.id,
+            name:        file.name,
+            file_url:    path,
+            file_type:   file.type,
+            file_size:   file.size,
+            department:  'sales',
+            uploaded_by: profile.id,
+          })
+        }
+      })
+      await Promise.allSettled(uploadPromises)
+    }
 
     await supabase.from('activity_logs').insert({
       product_id: product.id,
@@ -92,17 +141,8 @@ export function NewProductForm({ profile }: NewProductFormProps) {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-1.5">
-              <Label>Product Name</Label>
-              <Input
-                placeholder="e.g. HELIX 005"
-                value={form.name}
-                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                autoFocus
-              />
-            </div>
-            <div className="space-y-1.5">
               <Label>Category <span className="text-red-500">*</span></Label>
-              <Select value={form.category} onValueChange={v => setForm(f => ({ ...f, category: v as ProductCategory }))}>
+              <Select value={category} onValueChange={v => setCategory(v as ProductCategory)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {(Object.entries(CATEGORY_LABELS) as [ProductCategory, string][]).map(([v, l]) => (
@@ -113,7 +153,7 @@ export function NewProductForm({ profile }: NewProductFormProps) {
             </div>
             <div className="space-y-1.5">
               <Label>Brand</Label>
-              <Select value={form.brand} onValueChange={v => setForm(f => ({ ...f, brand: v as Brand }))}>
+              <Select value={brand} onValueChange={v => setBrand(v as Brand)}>
                 <SelectTrigger><SelectValue placeholder="Select brand" /></SelectTrigger>
                 <SelectContent>
                   {BRANDS.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
@@ -122,12 +162,50 @@ export function NewProductForm({ profile }: NewProductFormProps) {
             </div>
             <div className="space-y-1.5">
               <Label>Channel</Label>
-              <Select value={form.channel} onValueChange={v => setForm(f => ({ ...f, channel: v }))}>
+              <Select value={channel} onValueChange={setChannel}>
                 <SelectTrigger><SelectValue placeholder="Select channel" /></SelectTrigger>
                 <SelectContent>
                   {CHANNELS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Sample images upload */}
+            <div className="space-y-1.5">
+              <Label>Sample Images</Label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handleImageSelect}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-lg py-3 text-sm text-gray-500 hover:border-blue-400 hover:text-blue-500 transition-colors"
+              >
+                <ImagePlus className="h-4 w-4" />
+                Click to upload images
+              </button>
+              {previews.length > 0 && (
+                <div className="grid grid-cols-3 gap-2 mt-2">
+                  {previews.map((src, i) => (
+                    <div key={i} className="relative group aspect-square">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={src} alt="" className="w-full h-full object-cover rounded-md border border-gray-200" />
+                      <button
+                        type="button"
+                        onClick={() => removeImage(i)}
+                        className="absolute top-0.5 right-0.5 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -139,36 +217,43 @@ export function NewProductForm({ profile }: NewProductFormProps) {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-1.5">
-              <Label>Assign To</Label>
-              <Input
-                placeholder="Designer / team member name"
-                value={form.assign_to}
-                onChange={e => setForm(f => ({ ...f, assign_to: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-1.5">
               <Label>Price Range</Label>
               <Input
                 placeholder="e.g. ₹800 – ₹1200"
-                value={form.price_range}
-                onChange={e => setForm(f => ({ ...f, price_range: e.target.value }))}
+                value={priceRange}
+                onChange={e => setPriceRange(e.target.value)}
               />
             </div>
             <div className="space-y-1.5">
               <Label>Deadline Date</Label>
-              <Input
-                type="date"
-                value={form.deadline_date}
-                onChange={e => setForm(f => ({ ...f, deadline_date: e.target.value }))}
-              />
+              <div className="grid grid-cols-3 gap-2">
+                <Select value={deadlineDay} onValueChange={setDeadlineDay}>
+                  <SelectTrigger><SelectValue placeholder="DD" /></SelectTrigger>
+                  <SelectContent>
+                    {DAYS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={deadlineMonth} onValueChange={setDeadlineMonth}>
+                  <SelectTrigger><SelectValue placeholder="MM" /></SelectTrigger>
+                  <SelectContent>
+                    {MONTHS.map((m, i) => <SelectItem key={m} value={m}>{MONTH_NAMES[i]}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={deadlineYear} onValueChange={setDeadlineYear}>
+                  <SelectTrigger><SelectValue placeholder="YYYY" /></SelectTrigger>
+                  <SelectContent>
+                    {YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label>Product Specification</Label>
               <Textarea
                 placeholder="Describe the product requirements, key features, target customer..."
-                value={form.product_specification}
-                onChange={e => setForm(f => ({ ...f, product_specification: e.target.value }))}
-                rows={4}
+                value={productSpec}
+                onChange={e => setProductSpec(e.target.value)}
+                rows={6}
                 className="text-sm"
               />
             </div>

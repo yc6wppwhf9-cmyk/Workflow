@@ -72,36 +72,61 @@ export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): Pars
     const rows = XLSX.utils.sheet_to_json<string[]>(attrSheet, { header: 1, defval: '' }) as string[][]
 
     const fieldMap: Record<string, keyof ParsedSKU> = {
-      'COLOR': 'color',
-      'WEIGHT (GM)': 'weight', 'WEIGHT (Gm)': 'weight', 'WEIGHT (GMS)': 'weight',
-      'HEIGHT (IN)': 'height', 'HEIGHT (In)': 'height',
+      'COLOR': 'color', 'COLOUR': 'color', 'COLORS': 'color', 'COLOURS': 'color',
+      'WEIGHT (GM)': 'weight', 'WEIGHT (GMS)': 'weight', 'WEIGHT (G)': 'weight',
+      'WEIGHT': 'weight',
+      'HEIGHT (IN)': 'height', 'HEIGHT (INCH)': 'height', 'HEIGHT (INCHES)': 'height',
+      'HEIGHT': 'height',
       'DIMENSION (L W D)': 'dimensions', 'DIMENSION (L W D) IN INCH': 'dimensions',
+      'DIMENSIONS (L W D)': 'dimensions', 'DIMENSION': 'dimensions', 'DIMENSIONS': 'dimensions',
+      'SIZE (L W D)': 'dimensions', 'SIZE': 'dimensions',
       'NUMBER OF ZIP': 'numberOfZips', 'NUMBER OF ZIPS': 'numberOfZips',
-      'POCKET COMPARTMENT': 'pocketCompartment',
-      'MAIN COMPARTMENT': 'mainCompartment',
-      'UNIQUE PURPOSE': 'uniquePurpose',
-      'LAPTOP COMPARTMENT': 'laptopCompartment',
-      'RAIN COVER': 'rainCover',
-      'BACK PADDED OR NON': 'backPadded', 'BACK PADDED': 'backPadded',
-      'SEASON + YEAR': 'seasonYear', 'SEASON+YEAR': 'seasonYear',
-      'BOTTLE SLOT': 'bottleSlot', 'BOTTLE SLOTS': 'bottleSlot',
-      'CHARACTER': 'character',
+      'NO OF ZIP': 'numberOfZips', 'NO OF ZIPS': 'numberOfZips', 'NO. OF ZIPS': 'numberOfZips',
+      'POCKET COMPARTMENT': 'pocketCompartment', 'POCKET COMPARTMENTS': 'pocketCompartment',
+      'POCKETS': 'pocketCompartment',
+      'MAIN COMPARTMENT': 'mainCompartment', 'MAIN COMPARTMENTS': 'mainCompartment',
+      'UNIQUE PURPOSE': 'uniquePurpose', 'UNIQUE FEATURE': 'uniquePurpose',
+      'LAPTOP COMPARTMENT': 'laptopCompartment', 'LAPTOP SLEEVE': 'laptopCompartment',
+      'RAIN COVER': 'rainCover', 'RAIN COVER (YES/NO)': 'rainCover',
+      'BACK PADDED OR NON': 'backPadded', 'BACK PADDED': 'backPadded', 'BACK PADDING': 'backPadded',
+      'SEASON + YEAR': 'seasonYear', 'SEASON+YEAR': 'seasonYear', 'SEASON/YEAR': 'seasonYear',
+      'SEASON & YEAR': 'seasonYear', 'SEASON': 'seasonYear',
+      'BOTTLE SLOT': 'bottleSlot', 'BOTTLE SLOTS': 'bottleSlot', 'BOTTLE HOLDER': 'bottleSlot',
+      'CHARACTER': 'character', 'CHARACTER NAME': 'character',
       'THEME': 'theme',
-      'MAIN MATERIAL': 'mainMaterial',
-      'MATERIAL': 'material',
-      'DESIGNER NAME': 'designerName',
+      'MAIN MATERIAL': 'mainMaterial', 'PRIMARY MATERIAL': 'mainMaterial',
+      'MATERIAL': 'material', 'MATERIALS': 'material', 'FABRIC': 'material',
+      'DESIGNER NAME': 'designerName', 'DESIGNER': 'designerName',
     }
 
     const normLabel = (s: string) => s.trim().toUpperCase().replace(/\s+/g, ' ')
-    const isKnownLabel = (s: string) => !!fieldMap[normLabel(s)]
 
-    // Detect layout: if col-0 of first non-empty row is a known field label → transposed
-    const firstCell = String(rows[0]?.[0] || '').trim()
-    const isTransposed = isKnownLabel(firstCell)
+    // Fuzzy field lookup: exact → then "starts with" any known key
+    function resolveField(rawLabel: string): keyof ParsedSKU | undefined {
+      const norm = normLabel(rawLabel)
+      if (fieldMap[norm]) return fieldMap[norm]
+      // Partial: if the label starts with a known key (e.g. "WEIGHT (Gm)" hits "WEIGHT")
+      for (const [key, field] of Object.entries(fieldMap)) {
+        if (norm.startsWith(key) || key.startsWith(norm)) return field
+      }
+      return undefined
+    }
+
+    const isKnownLabel = (s: string) => !!resolveField(s)
+
+    // Detect layout: scan first 10 rows looking for a row where col-0 is a known field label
+    // This handles sheets with a title or blank row before the data starts
+    let transposedStartRow = -1
+    for (let r = 0; r < Math.min(rows.length, 10); r++) {
+      if (isKnownLabel(String(rows[r]?.[0] || ''))) { transposedStartRow = r; break }
+    }
+    const isTransposed = transposedStartRow >= 0
 
     if (isTransposed) {
       // Transposed format: labels in col A, one colour variant per column B, C, D…
-      const numCols = rows[0]?.length || 0
+      // numCols = max columns across all data rows (not just row 0, which may be shorter)
+      let numCols = 0
+      for (const row of rows) { if ((row?.length || 0) > numCols) numCols = row.length }
       for (let c = 1; c < numCols; c++) {
         const sku: ParsedSKU = {
           styleName: '', weight: '', color: '', dimensions: '', height: '',
@@ -110,10 +135,10 @@ export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): Pars
           backPadded: '', seasonYear: '', bottleSlot: '', character: '',
           theme: '', mainMaterial: '', material: '', designerName: '',
         }
-        for (let row = 0; row < rows.length; row++) {
-          const label = normLabel(String(rows[row]?.[0] || ''))
+        for (let row = transposedStartRow; row < rows.length; row++) {
+          const label = String(rows[row]?.[0] || '')
           const value = String(rows[row]?.[c] || '').trim()
-          const field = fieldMap[label]
+          const field = resolveField(label)
           if (field && value && value !== '0') sku[field] = value
         }
         // Must have at least a colour or weight to be a real variant column
@@ -136,9 +161,9 @@ export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): Pars
           theme: '', mainMaterial: '', material: '', designerName: '',
         }
         for (let row = 1; row < rows.length; row++) {
-          const label = normLabel(String(rows[row]?.[baseCol] || ''))
+          const label = String(rows[row]?.[baseCol] || '')
           const value = String(rows[row]?.[baseCol + 1] || '').trim()
-          const field = fieldMap[label]
+          const field = resolveField(label)
           if (field && value && value !== '0') sku[field] = value
         }
         skus.push(sku)

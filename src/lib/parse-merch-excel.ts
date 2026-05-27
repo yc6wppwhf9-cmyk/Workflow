@@ -148,19 +148,19 @@ export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): Pars
         styleColumns.push({ col: c, styleKey: normaliseStyleName(raw), consmpCol: c + 1 })
       }
 
-      // Parse item rows: col A = general item name, style col = variant inv code, consmpCol = consumption
+      // Parse item rows: style col = inv name (e.g. 'FB PU 1000 D 270 BLK'), consmpCol = consumption
+      // inv_code is matched from the database at save time, not stored here
       for (const { col, styleKey, consmpCol } of styleColumns) {
         const items: ParsedBOMItem[] = []
         for (let i = headerRowIdx + 1; i < rows.length; i++) {
-          const invCode = String(rows[i]?.[col] || '').trim()
-          if (!invCode || invCode === '0' || invCode.toUpperCase() === 'NA') continue
-          const invName = String(rows[i]?.[0] || '').trim()  // column A = general item name
+          const invName = String(rows[i]?.[col] || '').trim()
+          if (!invName || invName === '0' || invName.toUpperCase() === 'NA') continue
           const rawConsump = rows[i]?.[consmpCol]
           const consumption =
             rawConsump !== null && rawConsump !== undefined && String(rawConsump).trim() !== '' && String(rawConsump).trim() !== '0'
               ? String(rawConsump)
               : ''
-          items.push({ inv_code: invCode, inv_name: invName || invCode, consumption, unit: '' })
+          items.push({ inv_code: '', inv_name: invName, consumption, unit: '' })
         }
         if (items.length > 0) bomByStyle[styleKey] = items
       }

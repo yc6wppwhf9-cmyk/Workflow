@@ -99,6 +99,7 @@ export interface DesignData {
   id: string
   product_id: string
   assigned_to: string | null
+  head_notes: string | null
   channel: string | null
   designer_name: string | null
   sample_color: string | null

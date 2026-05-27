@@ -143,7 +143,7 @@ export function ProductDetail({
             <OverviewTab product={product} designData={designData} merchandisingData={merchandisingData} bomData={bomData} marketingData={marketingData} salesData={salesData} files={files} />
           </TabsPrimitive.Content>
           <TabsPrimitive.Content value="design">
-            <DesignTab product={product} profile={profile} data={designData} files={files} submissions={designSubmissions} designers={designers} />
+            <DesignTab product={product} profile={profile} data={designData} salesData={salesData} files={files} submissions={designSubmissions} designers={designers} />
           </TabsPrimitive.Content>
           <TabsPrimitive.Content value="merchandising">
             <MerchandisingTab product={product} profile={profile} data={merchandisingData} />

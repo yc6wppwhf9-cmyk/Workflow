@@ -14,19 +14,20 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createClient } from '@/lib/supabase/client'
 import { CATEGORY_LABELS, BRANDS, CHANNELS, type ProductCategory, type Brand } from '@/lib/types'
-import type { Product, Profile, DesignData, ProductFile, DesignSubmission } from '@/lib/types'
+import type { Product, Profile, DesignData, SalesData, ProductFile, DesignSubmission } from '@/lib/types'
 import { parseTechPackRows } from '@/lib/parse-techpack'
 
 interface DesignTabProps {
   product: Product
   profile: Profile
   data: DesignData | null
+  salesData: SalesData | null
   files: ProductFile[]
   submissions: DesignSubmission[]
   designers: Pick<Profile, 'id' | 'full_name'>[]
 }
 
-export function DesignTab({ product, profile, data, files, submissions, designers }: DesignTabProps) {
+export function DesignTab({ product, profile, data, salesData, files, submissions, designers }: DesignTabProps) {
   const router = useRouter()
 
   const isTeamMember = profile.role === 'design'
@@ -79,6 +80,9 @@ export function DesignTab({ product, profile, data, files, submissions, designer
   const [saved, setSaved]         = useState(false)
   const [assignedTo, setAssignedTo] = useState<string>(data?.assigned_to || '__none__')
   const [savingAssign, setSavingAssign] = useState(false)
+  const [headNotes, setHeadNotes] = useState(data?.head_notes || '')
+  const [savingNotes, setSavingNotes] = useState(false)
+  const [notesSaved, setNotesSaved] = useState(false)
 
   // Submission state
   const [submitting, setSubmitting]   = useState(false)
@@ -158,6 +162,15 @@ export function DesignTab({ product, profile, data, files, submissions, designer
     })
     setSavingAssign(false)
     router.refresh()
+  }
+
+  async function saveHeadNotes() {
+    setSavingNotes(true)
+    const supabase = createClient()
+    await supabase.from('design_data').update({ head_notes: headNotes || null, updated_by: profile.id }).eq('product_id', product.id)
+    setSavingNotes(false)
+    setNotesSaved(true)
+    setTimeout(() => setNotesSaved(false), 2000)
   }
 
   async function submitForReview() {
@@ -305,7 +318,40 @@ export function DesignTab({ product, profile, data, files, submissions, designer
       {/* ── Design Head: Assignment + Review Queue ─────────────────── */}
       {isHead && (
         <>
-          {/* Assignment dropdown */}
+          {/* Sales Requirement Summary */}
+          {salesData && (
+            <Card className="border-blue-200 bg-blue-50">
+              <CardHeader className="pb-2 pt-4">
+                <CardTitle className="text-sm text-blue-900">Sales Requirement</CardTitle>
+              </CardHeader>
+              <CardContent className="pb-4 grid grid-cols-3 gap-x-6 gap-y-3">
+                <div>
+                  <p className="text-xs font-semibold text-blue-400 uppercase tracking-wide mb-0.5">Channel</p>
+                  <p className="text-sm text-blue-900">{salesData.channel || <span className="text-blue-300 italic">—</span>}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-blue-400 uppercase tracking-wide mb-0.5">Price Range</p>
+                  <p className="text-sm text-blue-900">{salesData.price_range ? `₹${salesData.price_range}` : <span className="text-blue-300 italic">—</span>}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-blue-400 uppercase tracking-wide mb-0.5">Deadline</p>
+                  <p className="text-sm text-blue-900">
+                    {salesData.deadline_date
+                      ? new Date(salesData.deadline_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                      : <span className="text-blue-300 italic">—</span>}
+                  </p>
+                </div>
+                {salesData.product_specification && (
+                  <div className="col-span-3">
+                    <p className="text-xs font-semibold text-blue-400 uppercase tracking-wide mb-0.5">Product Specification</p>
+                    <p className="text-sm text-blue-900 whitespace-pre-wrap">{salesData.product_specification}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Assignment + Head Notes */}
           <Card className="border-violet-200 bg-violet-50">
             <CardHeader className="pb-2 pt-4">
               <CardTitle className="text-sm flex items-center gap-2 text-violet-900">
@@ -314,7 +360,7 @@ export function DesignTab({ product, profile, data, files, submissions, designer
                 {savingAssign && <Loader2 className="h-4 w-4 animate-spin ml-2" />}
               </CardTitle>
             </CardHeader>
-            <CardContent className="pb-4">
+            <CardContent className="pb-4 space-y-4">
               {designers.length === 0 ? (
                 <p className="text-xs text-violet-500">No active designers found.</p>
               ) : (
@@ -334,6 +380,24 @@ export function DesignTab({ product, profile, data, files, submissions, designer
                   </SelectContent>
                 </Select>
               )}
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-violet-700 font-semibold uppercase tracking-wide">Remarks for Designer</Label>
+                <Textarea
+                  placeholder="Add instructions, references, or notes for the assigned designer..."
+                  value={headNotes}
+                  onChange={e => setHeadNotes(e.target.value)}
+                  rows={3}
+                  className="bg-white text-sm"
+                />
+                <div className="flex items-center gap-2">
+                  <Button size="sm" onClick={saveHeadNotes} disabled={savingNotes} className="h-7 text-xs">
+                    {savingNotes ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                    Save Remarks
+                  </Button>
+                  {notesSaved && <span className="text-xs text-green-600">Saved.</span>}
+                </div>
+              </div>
             </CardContent>
           </Card>
 
@@ -414,6 +478,16 @@ export function DesignTab({ product, profile, data, files, submissions, designer
             </CardContent>
           </Card>
         </>
+      )}
+
+      {/* ── Head Remarks visible to designers ─────────────────────── */}
+      {isTeamMember && data?.head_notes && (
+        <Card className="border-violet-200 bg-violet-50">
+          <CardContent className="pt-4 pb-4">
+            <p className="text-xs font-semibold text-violet-400 uppercase tracking-wide mb-1">Remarks from Design Head</p>
+            <p className="text-sm text-violet-900 whitespace-pre-wrap">{data.head_notes}</p>
+          </CardContent>
+        </Card>
       )}
 
       {/* ── Illustrations ─────────────────────────────────────────── */}

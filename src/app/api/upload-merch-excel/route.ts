@@ -99,8 +99,8 @@ export async function POST(req: NextRequest) {
     fields_updated.push('colour_variants')
   }
 
-  // Update product name from Excel style names (first upload only, or if name looks like a SKU placeholder)
-  if (extracted_product_name && !isReupload) {
+  // Always update product name from Excel (every upload)
+  if (extracted_product_name) {
     updates.push(
       supabase.from('products').update({ name: extracted_product_name, updated_by: user.id }).eq('id', product_id)
     )

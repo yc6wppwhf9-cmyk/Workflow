@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Lock, Save, Plus, X, Upload, FileSpreadsheet, CheckCircle2, Clock } from 'lucide-react'
+import { Loader2, Lock, Save, Plus, X, Upload, FileSpreadsheet, CheckCircle2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -67,10 +67,10 @@ function initForm(data: MerchandisingData | null): FormState {
 export function MerchandisingTab({ product, profile, data }: MerchandisingTabProps) {
   const router = useRouter()
   const isRoleAllowed = ['admin', 'merchandising'].includes(profile.role)
-  const isRightStage = product.workflow_stage === 'merchandising_completed' || profile.role === 'admin'
-  const isWaiting = isRoleAllowed && !isRightStage
-  const canEditFields = !data?.is_locked && !data?.is_completed && isRoleAllowed && isRightStage
-  const showActions = !data?.is_locked && isRoleAllowed && isRightStage
+  const isAtMerchStage = product.workflow_stage === 'merchandising_completed'
+  const isWaiting = false  // merchandising can upload Excel at any stage
+  const canEditFields = !data?.is_locked && !data?.is_completed && isRoleAllowed
+  const showActions = !data?.is_locked && isRoleAllowed && isAtMerchStage  // Mark Complete only at merch stage
 
   const [activeVersion, setActiveVersion] = useState<'attribute' | 'production'>('attribute')
   const [attrForm, setAttrForm] = useState<FormState>(() => initForm(data))
@@ -422,25 +422,6 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
   return (
     <div className="max-w-3xl space-y-4">
 
-      {/* Waiting for prior stages to complete */}
-      {isWaiting && (
-        <Card className="border-amber-200 bg-amber-50">
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-center gap-3 text-amber-800">
-              <Clock className="h-5 w-5 shrink-0 text-amber-500" />
-              <div>
-                <p className="text-sm font-semibold">Awaiting design stage completion</p>
-                <p className="text-xs text-amber-700 mt-0.5">
-                  This product is currently in the <strong>
-                    {product.workflow_stage === 'draft' ? 'Sales' :
-                     product.workflow_stage === 'design_completed' ? 'Design' : product.workflow_stage}
-                  </strong> stage. Merchandising will unlock once design marks their work complete and the stage is advanced.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Excel Upload Card */}
       {canEditFields && (

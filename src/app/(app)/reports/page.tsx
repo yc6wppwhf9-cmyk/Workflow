@@ -57,7 +57,7 @@ export default async function ReportsPage() {
   const [
     { data: productsRaw },
     { data: profiles },
-    { data: designSubmissionsRaw },
+    { data: designFilesRaw },
     { data: activityLogsRaw },
     { data: pendingUnlocks },
   ] = await Promise.all([
@@ -65,7 +65,11 @@ export default async function ReportsPage() {
       .select('id, name, sku, category, workflow_stage, created_at, updated_at, design_data(is_completed, updated_at), sampling_data(is_completed, sample_review_status, updated_at), merchandising_data(is_completed, updated_at), bom_data(is_completed, updated_at, fg_inv_code, cost_given), marketing_data(is_completed, updated_at), sales_data(is_completed, updated_at, deadline_date)'),
     isAdmin ? supabase.from('profiles').select('role, is_active') : Promise.resolve({ data: null, error: null }),
     isManagement
-      ? supabase.from('design_submissions').select('submitted_by, status, created_at, reviewed_at, submitter:profiles!submitted_by(id, full_name)')
+      ? supabase.from('product_files')
+          .select('uploaded_by, review_status, reviewed_at, created_at, uploader:profiles!uploaded_by(id, full_name)')
+          .eq('department', 'design')
+          .like('file_type', 'image/%')
+          .not('review_status', 'is', null)
       : Promise.resolve({ data: null, error: null }),
     isManagement
       ? supabase.from('activity_logs').select('user_id, department, created_at, user:profiles(full_name)').order('created_at', { ascending: false }).limit(500)
@@ -150,15 +154,15 @@ export default async function ReportsPage() {
   })
 
   const designerMap: Record<string, { name: string; total: number; approved: number; rejected: number; pending: number; avgReviewDays: number; reviewSamples: number[] }> = {}
-  for (const row of designSubmissionsRaw || []) {
-    const submitter = one(row.submitter) as { id: string; full_name: string } | null
-    if (!submitter) continue
-    if (!designerMap[submitter.id]) designerMap[submitter.id] = { name: submitter.full_name, total: 0, approved: 0, rejected: 0, pending: 0, avgReviewDays: 0, reviewSamples: [] }
-    designerMap[submitter.id].total++
-    if (row.status === 'approved') designerMap[submitter.id].approved++
-    else if (row.status === 'rejected') designerMap[submitter.id].rejected++
-    else designerMap[submitter.id].pending++
-    if (row.reviewed_at) designerMap[submitter.id].reviewSamples.push(daysBetween(row.created_at, row.reviewed_at))
+  for (const row of designFilesRaw || []) {
+    const uploader = one(row.uploader) as { id: string; full_name: string } | null
+    if (!uploader) continue
+    if (!designerMap[uploader.id]) designerMap[uploader.id] = { name: uploader.full_name, total: 0, approved: 0, rejected: 0, pending: 0, avgReviewDays: 0, reviewSamples: [] }
+    designerMap[uploader.id].total++
+    if (row.review_status === 'approved') designerMap[uploader.id].approved++
+    else if (row.review_status === 'rejected') designerMap[uploader.id].rejected++
+    else designerMap[uploader.id].pending++
+    if (row.reviewed_at) designerMap[uploader.id].reviewSamples.push(daysBetween(row.created_at, row.reviewed_at))
   }
   const designerStats = Object.values(designerMap)
     .map(d => ({ ...d, avgReviewDays: d.reviewSamples.length > 0 ? Math.round(d.reviewSamples.reduce((a, b) => a + b, 0) / d.reviewSamples.length) : 0 }))
@@ -357,21 +361,31 @@ export default async function ReportsPage() {
                     <thead>
                       <tr className="border-b border-gray-100 bg-gray-50">
                         <th className="text-left px-6 py-2 text-xs font-semibold text-gray-400 uppercase">Designer</th>
-                        <th className="text-center px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Submitted</th>
+                        <th className="text-center px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Images</th>
+                        <th className="text-center px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Approved</th>
                         <th className="text-center px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Rejected</th>
-                        <th className="text-right px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Review Avg</th>
+                        <th className="text-center px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Rejection %</th>
+                        <th className="text-right px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Avg Review</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
-                      {designerStats.map(d => (
-                        <tr key={d.name} className="hover:bg-gray-50">
-                          <td className="px-6 py-3 font-medium text-gray-900">{d.name}</td>
-                          <td className="px-4 py-3 text-center">{d.total}</td>
-                          <td className={`px-4 py-3 text-center font-semibold ${d.rejected > 0 ? 'text-red-600' : 'text-gray-500'}`}>{d.rejected}</td>
-                          <td className="px-4 py-3 text-right text-xs text-gray-500">{d.avgReviewDays}d</td>
-                        </tr>
-                      ))}
-                      {designerStats.length === 0 && <tr><td colSpan={4} className="py-6 text-center text-sm text-gray-400">No design submissions yet.</td></tr>}
+                      {designerStats.map(d => {
+                        const reviewed = d.approved + d.rejected
+                        const rejectionRate = reviewed > 0 ? Math.round((d.rejected / reviewed) * 100) : 0
+                        return (
+                          <tr key={d.name} className="hover:bg-gray-50">
+                            <td className="px-6 py-3 font-medium text-gray-900">{d.name}</td>
+                            <td className="px-4 py-3 text-center text-gray-600">{d.total}</td>
+                            <td className="px-4 py-3 text-center font-semibold text-green-600">{d.approved}</td>
+                            <td className={`px-4 py-3 text-center font-semibold ${d.rejected > 0 ? 'text-red-600' : 'text-gray-400'}`}>{d.rejected}</td>
+                            <td className={`px-4 py-3 text-center font-semibold ${rejectionRate >= 50 ? 'text-red-600' : rejectionRate > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+                              {reviewed > 0 ? `${rejectionRate}%` : '—'}
+                            </td>
+                            <td className="px-4 py-3 text-right text-xs text-gray-500">{d.avgReviewDays}d</td>
+                          </tr>
+                        )
+                      })}
+                      {designerStats.length === 0 && <tr><td colSpan={6} className="py-6 text-center text-sm text-gray-400">No reviewed illustrations yet.</td></tr>}
                     </tbody>
                   </table>
                 </CardContent>

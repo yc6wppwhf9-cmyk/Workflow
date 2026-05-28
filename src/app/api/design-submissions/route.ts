@@ -23,6 +23,15 @@ export async function POST(request: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+    // Mark all unreviewed design images as pending
+    await supabase
+      .from('product_files')
+      .update({ review_status: 'pending' })
+      .eq('product_id', product_id)
+      .eq('department', 'design')
+      .is('review_status', null)
+      .like('file_type', 'image/%')
+
     await supabase.from('activity_logs').insert({
       product_id,
       user_id: user.id,

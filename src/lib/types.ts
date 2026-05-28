@@ -264,6 +264,10 @@ export interface ProductFile {
   uploaded_by: string | null
   colour_tag: string | null
   created_at: string
+  review_status: 'pending' | 'approved' | 'rejected' | null
+  review_feedback: string | null
+  reviewed_by: string | null
+  reviewed_at: string | null
   uploader?: Profile
 }
 

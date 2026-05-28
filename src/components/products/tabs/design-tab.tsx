@@ -35,8 +35,8 @@ export function DesignTab({ product, profile, data, salesData, files, submission
   const isRoleAllowed = isTeamMember || isHead
 
   const latestSubmission = submissions[0] ?? null
-  const imageApproved = latestSubmission?.status === 'approved'
   const designFiles = files.filter(f => f.department === 'design' && f.file_type?.startsWith('image/'))
+  const imageApproved = designFiles.length > 0 && designFiles.every(f => f.review_status === 'approved')
 
   // Team members can edit form fields only after images are approved
   // Head / admin always have full edit access
@@ -87,10 +87,10 @@ export function DesignTab({ product, profile, data, salesData, files, submission
   // Submission state
   const [submitting, setSubmitting]   = useState(false)
   const [submitDone, setSubmitDone]   = useState(false)
-  // Review state (for head)
-  const [reviewingId, setReviewingId]     = useState<string | null>(null)
-  const [rejectFeedback, setRejectFeedback] = useState('')
-  const [showRejectBox, setShowRejectBox]   = useState<string | null>(null)
+  // Per-image review state (for head)
+  const [reviewingFileId, setReviewingFileId]           = useState<string | null>(null)
+  const [fileRejectFeedback, setFileRejectFeedback]     = useState<Record<string, string>>({})
+  const [showFileRejectBox, setShowFileRejectBox]       = useState<string | null>(null)
 
   const illustrationRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading]       = useState(false)
@@ -207,16 +207,18 @@ export function DesignTab({ product, profile, data, salesData, files, submission
     router.refresh()
   }
 
-  async function reviewSubmission(submissionId: string, status: 'approved' | 'rejected', feedback?: string) {
-    setReviewingId(submissionId)
-    await fetch(`/api/design-submissions/${submissionId}/review`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status, feedback }),
-    })
-    setReviewingId(null)
-    setShowRejectBox(null)
-    setRejectFeedback('')
+  async function reviewImage(fileId: string, status: 'approved' | 'rejected', feedback?: string) {
+    setReviewingFileId(fileId)
+    const supabase = createClient()
+    await supabase.from('product_files').update({
+      review_status: status,
+      review_feedback: feedback || null,
+      reviewed_by: profile.id,
+      reviewed_at: new Date().toISOString(),
+    }).eq('id', fileId)
+    setReviewingFileId(null)
+    setShowFileRejectBox(null)
+    setFileRejectFeedback(prev => { const next = { ...prev }; delete next[fileId]; return next })
     router.refresh()
   }
 
@@ -515,98 +517,110 @@ export function DesignTab({ product, profile, data, salesData, files, submission
             </CardContent>
           </Card>
 
-          {/* Image Review Queue */}
+          {/* Image Review Queue — per image */}
           <Card className="border-violet-200">
             <CardHeader className="pb-2 pt-4">
               <CardTitle className="text-sm text-violet-900">Design Submissions for Review</CardTitle>
             </CardHeader>
-            <CardContent className="pb-4 space-y-4">
-              {/* Illustration images for review */}
-              {designFiles.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Uploaded Illustrations ({designFiles.length})</p>
-                  <div className="grid grid-cols-4 gap-2">
-                    {designFiles.map(file => (
-                      <a key={file.id} href={file.file_url} target="_blank" rel="noopener noreferrer" className="group relative aspect-square rounded-lg overflow-hidden border border-gray-200 bg-gray-50 hover:border-violet-400 transition-colors">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={file.file_url} alt={file.name} className="w-full h-full object-cover" />
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                          <ExternalLink className="h-5 w-5 text-white" />
-                        </div>
-                        <p className="absolute bottom-0 left-0 right-0 px-1.5 py-1 text-xs text-white bg-black/50 truncate opacity-0 group-hover:opacity-100 transition-opacity">{file.name}</p>
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {submissions.length === 0 ? (
-                <p className="text-sm text-gray-400 py-2">No submissions yet — designer will submit illustrations for review.</p>
-              ) : submissions.map(sub => (
-                <div key={sub.id} className="border border-gray-100 rounded-lg p-3 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-gray-800">
-                        {sub.submitter?.full_name || 'Designer'}
-                      </span>
-                      <span className="text-xs text-gray-400">
-                        {new Date(sub.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-                    <SubmissionStatusBadge s={sub} />
-                  </div>
-                  {sub.feedback && (
-                    <p className="text-xs text-red-600 bg-red-50 rounded px-2 py-1">Feedback: {sub.feedback}</p>
-                  )}
-                  {sub.status === 'pending' && (
-                    <div className="flex items-start gap-2 pt-1">
-                      <Button
-                        size="sm"
-                        className="bg-green-600 hover:bg-green-700 h-7 text-xs"
-                        disabled={reviewingId === sub.id}
-                        onClick={() => reviewSubmission(sub.id, 'approved')}
-                      >
-                        {reviewingId === sub.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
-                        Approve
-                      </Button>
-                      {showRejectBox === sub.id ? (
-                        <div className="flex-1 space-y-1.5">
-                          <Textarea
-                            placeholder="Reason for rejection (optional)…"
-                            rows={2}
-                            className="text-xs"
-                            value={rejectFeedback}
-                            onChange={e => setRejectFeedback(e.target.value)}
-                          />
-                          <div className="flex gap-2">
+            <CardContent className="pb-4 space-y-3">
+              {designFiles.length === 0 ? (
+                <p className="text-sm text-gray-400 py-2">No illustrations uploaded yet — designer will upload and submit.</p>
+              ) : designFiles.map(file => (
+                <div key={file.id} className={`border rounded-lg overflow-hidden ${
+                  file.review_status === 'approved' ? 'border-green-200 bg-green-50' :
+                  file.review_status === 'rejected' ? 'border-red-200 bg-red-50' :
+                  file.review_status === 'pending'  ? 'border-yellow-200 bg-yellow-50' :
+                  'border-gray-200'
+                }`}>
+                  <div className="flex items-start gap-3 p-3">
+                    <a href={file.file_url} target="_blank" rel="noopener noreferrer"
+                      className="relative shrink-0 w-20 h-20 rounded-md overflow-hidden border border-gray-200 bg-gray-50 hover:opacity-90 transition-opacity"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={file.file_url} alt={file.name} className="w-full h-full object-cover" />
+                    </a>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <p className="text-sm font-medium text-gray-800 truncate">{file.name}</p>
+                        {file.review_status === 'approved' && (
+                          <span className="inline-flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium shrink-0">
+                            <CheckCircle2 className="h-3 w-3" /> Approved
+                          </span>
+                        )}
+                        {file.review_status === 'rejected' && (
+                          <span className="inline-flex items-center gap-1 text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium shrink-0">
+                            <XCircle className="h-3 w-3" /> Rejected
+                          </span>
+                        )}
+                        {file.review_status === 'pending' && (
+                          <span className="inline-flex items-center gap-1 text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-medium shrink-0">
+                            <Clock className="h-3 w-3" /> Awaiting review
+                          </span>
+                        )}
+                        {!file.review_status && (
+                          <span className="inline-flex items-center gap-1 text-xs bg-gray-100 text-gray-400 px-2 py-0.5 rounded-full font-medium shrink-0">
+                            Not submitted
+                          </span>
+                        )}
+                      </div>
+                      {file.review_feedback && (
+                        <p className="text-xs text-red-700 mb-2">Feedback: {file.review_feedback}</p>
+                      )}
+                      {file.review_status === 'pending' && (
+                        <div className="flex items-start gap-2 mt-1">
+                          <Button
+                            size="sm"
+                            className="bg-green-600 hover:bg-green-700 h-7 text-xs"
+                            disabled={reviewingFileId === file.id}
+                            onClick={() => reviewImage(file.id, 'approved')}
+                          >
+                            {reviewingFileId === file.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                            Approve
+                          </Button>
+                          {showFileRejectBox === file.id ? (
+                            <div className="flex-1 space-y-1.5">
+                              <Textarea
+                                placeholder="Reason for rejection (optional)…"
+                                rows={2}
+                                className="text-xs bg-white"
+                                value={fileRejectFeedback[file.id] || ''}
+                                onChange={e => setFileRejectFeedback(prev => ({ ...prev, [file.id]: e.target.value }))}
+                              />
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  className="h-7 text-xs"
+                                  disabled={reviewingFileId === file.id}
+                                  onClick={() => reviewImage(file.id, 'rejected', fileRejectFeedback[file.id])}
+                                >
+                                  {reviewingFileId === file.id ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                                  Confirm Reject
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-7 text-xs bg-white" onClick={() => setShowFileRejectBox(null)}>
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
                             <Button
                               size="sm"
-                              variant="destructive"
-                              className="h-7 text-xs"
-                              disabled={reviewingId === sub.id}
-                              onClick={() => reviewSubmission(sub.id, 'rejected', rejectFeedback)}
+                              variant="outline"
+                              className="h-7 text-xs text-red-600 border-red-200 bg-white"
+                              onClick={() => setShowFileRejectBox(file.id)}
                             >
-                              {reviewingId === sub.id ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-                              Confirm Reject
+                              <XCircle className="h-3 w-3" /> Reject
                             </Button>
-                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowRejectBox(null)}>
-                              Cancel
-                            </Button>
-                          </div>
+                          )}
                         </div>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs text-red-600 border-red-200"
-                          onClick={() => { setShowRejectBox(sub.id); setRejectFeedback('') }}
-                        >
-                          <XCircle className="h-3 w-3" /> Reject
-                        </Button>
                       )}
                     </div>
-                  )}
+                  </div>
                 </div>
               ))}
+              {submissions.length > 0 && designFiles.length > 0 && !designFiles.some(f => f.review_status) && (
+                <p className="text-xs text-gray-400 pt-1">Images uploaded but not yet submitted for review by the designer.</p>
+              )}
             </CardContent>
           </Card>
         </>
@@ -648,9 +662,26 @@ export function DesignTab({ product, profile, data, salesData, files, submission
             <div className="space-y-2">
               <div className="grid grid-cols-3 gap-2">
                 {designFiles.map(file => (
-                  <div key={file.id} className="relative group rounded-lg overflow-hidden border border-gray-200 aspect-video bg-gray-50">
+                  <div key={file.id} className={`relative group rounded-lg overflow-hidden aspect-video bg-gray-50 border-2 ${
+                    file.review_status === 'approved' ? 'border-green-400' :
+                    file.review_status === 'rejected' ? 'border-red-400' :
+                    file.review_status === 'pending'  ? 'border-yellow-400' :
+                    'border-gray-200'
+                  }`}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={file.file_url} alt={file.name} className="w-full h-full object-cover" />
+                    {/* Status badge */}
+                    {file.review_status && (
+                      <div className={`absolute top-1.5 left-1.5 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs font-medium ${
+                        file.review_status === 'approved' ? 'bg-green-500 text-white' :
+                        file.review_status === 'rejected' ? 'bg-red-500 text-white' :
+                        'bg-yellow-500 text-white'
+                      }`}>
+                        {file.review_status === 'approved' ? <CheckCircle2 className="h-3 w-3" /> :
+                         file.review_status === 'rejected' ? <XCircle className="h-3 w-3" /> :
+                         <Clock className="h-3 w-3" />}
+                      </div>
+                    )}
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
                       <a href={file.file_url} target="_blank" rel="noopener noreferrer"
                         className="h-7 w-7 rounded-full bg-white flex items-center justify-center hover:bg-gray-100"
@@ -658,13 +689,15 @@ export function DesignTab({ product, profile, data, salesData, files, submission
                       >
                         <ExternalLink className="h-3.5 w-3.5 text-gray-700" />
                       </a>
-                      {canUploadIllos && (
+                      {canUploadIllos && file.review_status !== 'approved' && (
                         <button className="h-7 w-7 rounded-full bg-white flex items-center justify-center hover:bg-red-50" onClick={() => deleteFile(file)}>
                           <Trash2 className="h-3.5 w-3.5 text-red-500" />
                         </button>
                       )}
                     </div>
-                    <p className="absolute bottom-0 left-0 right-0 px-2 py-1 text-xs text-white bg-black/50 truncate opacity-0 group-hover:opacity-100 transition-opacity">{file.name}</p>
+                    {file.review_status === 'rejected' && file.review_feedback && (
+                      <p className="absolute bottom-0 left-0 right-0 px-2 py-1 text-xs text-white bg-red-600/80 truncate">{file.review_feedback}</p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -688,7 +721,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
               <div className="flex items-center gap-3 text-green-700">
                 <CheckCircle2 className="h-5 w-5 shrink-0" />
                 <div>
-                  <p className="text-sm font-semibold">Design approved — upload tech pack below</p>
+                  <p className="text-sm font-semibold">All illustrations approved — upload tech pack below</p>
                   <p className="text-xs text-green-600">Your illustrations were approved by the design head.</p>
                 </div>
               </div>
@@ -696,15 +729,13 @@ export function DesignTab({ product, profile, data, salesData, files, submission
               <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div>
                   <p className="text-sm font-semibold text-gray-800">Submit Illustrations for Review</p>
-                  {latestSubmission?.status === 'pending' && (
+                  {designFiles.some(f => f.review_status === 'pending') && (
                     <p className="text-xs text-yellow-600 mt-0.5 flex items-center gap-1"><Clock className="h-3 w-3" /> Awaiting design head review…</p>
                   )}
-                  {latestSubmission?.status === 'rejected' && (
-                    <p className="text-xs text-red-600 mt-0.5">
-                      Rejected{latestSubmission.feedback ? `: ${latestSubmission.feedback}` : ''} — upload revised images and resubmit.
-                    </p>
+                  {!designFiles.some(f => f.review_status === 'pending') && designFiles.some(f => f.review_status === 'rejected') && (
+                    <p className="text-xs text-red-600 mt-0.5">Some images rejected — remove them, upload revisions, then resubmit.</p>
                   )}
-                  {!latestSubmission && (
+                  {!designFiles.some(f => f.review_status) && (
                     <p className="text-xs text-gray-500 mt-0.5">Upload your design images above, then submit for the design head&apos;s approval.</p>
                   )}
                 </div>
@@ -714,7 +745,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
                   disabled={
                     submitting ||
                     designFiles.length === 0 ||
-                    latestSubmission?.status === 'pending'
+                    designFiles.some(f => f.review_status === 'pending')
                   }
                   className="shrink-0"
                 >

@@ -314,7 +314,7 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
               </Button>
               <Button onClick={submitSampleForReview} disabled={saving || sampleImages.length === 0 || isPending}>
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                Mark Sample Complete
+                Send for Approval
               </Button>
             </div>
           )}

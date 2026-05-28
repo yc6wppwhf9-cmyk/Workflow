@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'management' | 'design' | 'design_head' | 'sampling' | 'merchandising' | 'bom' | 'marketing' | 'sales' | 'viewer'
+export type UserRole = 'admin' | 'management' | 'design' | 'design_head' | 'sampling' | 'merchandising' | 'merchandising_head' | 'bom' | 'marketing' | 'sales' | 'viewer'
 
 export type WorkflowStage =
   | 'draft'
@@ -155,6 +155,8 @@ export interface ColourVariant {
 export interface MerchandisingData {
   id: string
   product_id: string
+  assigned_to: string | null
+  attribute_sheet_handed_over: boolean
   dimensions: { length?: string; width?: string; height?: string; unit?: string } | null
   compartments: string | null
   materials: string[] | null
@@ -318,6 +320,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   design_head: 'Design Head',
   sampling: 'Sampling',
   merchandising: 'Merchandising',
+  merchandising_head: 'Merchandising Head',
   bom: 'BOM',
   marketing: 'Marketing',
   sales: 'Sales',
@@ -331,6 +334,7 @@ export const ROLE_COLORS: Record<UserRole, string> = {
   design_head: 'bg-violet-200 text-violet-800',
   sampling: 'bg-cyan-100 text-cyan-700',
   merchandising: 'bg-blue-100 text-blue-700',
+  merchandising_head: 'bg-teal-200 text-teal-800',
   bom: 'bg-orange-100 text-orange-700',
   marketing: 'bg-yellow-100 text-yellow-700',
   sales: 'bg-green-100 text-green-700',

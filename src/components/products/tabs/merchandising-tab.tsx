@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createClient } from '@/lib/supabase/client'
 import * as XLSX from 'xlsx'
 import { parseMerchExcel, filterSkusForProduct, aggregateMerchFields, buildColourVariants, extractProductBaseName } from '@/lib/parse-merch-excel'
@@ -16,6 +17,7 @@ interface MerchandisingTabProps {
   product: Product
   profile: Profile
   data: MerchandisingData | null
+  merchandisingUsers: Pick<Profile, 'id' | 'full_name'>[]
 }
 
 type FormState = {
@@ -64,13 +66,14 @@ function initForm(data: MerchandisingData | null): FormState {
   }
 }
 
-export function MerchandisingTab({ product, profile, data }: MerchandisingTabProps) {
+export function MerchandisingTab({ product, profile, data, merchandisingUsers }: MerchandisingTabProps) {
   const router = useRouter()
-  const isRoleAllowed = ['admin', 'merchandising'].includes(profile.role)
+  const isTeamMember = profile.role === 'merchandising'
+  const isHead = ['admin', 'merchandising_head'].includes(profile.role)
+  const isAssigned = data?.assigned_to === profile.id
   const isAtMerchStage = product.workflow_stage === 'merchandising_completed'
-  const isWaiting = false  // merchandising can upload Excel at any stage
-  const canEditFields = !data?.is_locked && !data?.is_completed && isRoleAllowed
-  const showActions = !data?.is_locked && isRoleAllowed && isAtMerchStage  // Mark Complete only at merch stage
+  const canEditFields = !data?.is_locked && !data?.is_completed && isHead
+  const showActions = !data?.is_locked && isHead && isAtMerchStage  // Mark Complete only at merch stage
 
   const [activeVersion, setActiveVersion] = useState<'attribute' | 'production'>('attribute')
   const [attrForm, setAttrForm] = useState<FormState>(() => initForm(data))
@@ -84,6 +87,7 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const [assignedTo, setAssignedTo] = useState(data?.assigned_to || '')
 
   const excelInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
@@ -379,6 +383,29 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
     router.refresh()
   }
 
+  async function handleAssign(userId: string) {
+    setAssignedTo(userId)
+    const supabase = createClient()
+    await supabase.from('merchandising_data').update({ assigned_to: userId || null, updated_by: profile.id }).eq('product_id', product.id)
+    await supabase.from('activity_logs').insert({
+      product_id: product.id, user_id: profile.id,
+      action: `assigned merchandising task to ${merchandisingUsers.find(u => u.id === userId)?.full_name || 'team member'}`,
+      department: 'merchandising',
+    })
+  }
+
+  async function toggleHandover() {
+    if (data?.attribute_sheet_handed_over) return
+    const supabase = createClient()
+    await supabase.from('merchandising_data').update({ attribute_sheet_handed_over: true, updated_by: profile.id }).eq('product_id', product.id)
+    await supabase.from('activity_logs').insert({
+      product_id: product.id, user_id: profile.id,
+      action: 'marked attribute sheet as handed over',
+      department: 'merchandising',
+    })
+    router.refresh()
+  }
+
   async function markComplete() {
     const becomingComplete = !data?.is_completed
     setSaving(true)
@@ -422,6 +449,59 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
   return (
     <div className="max-w-3xl space-y-4">
 
+      {/* Head: Assignment Card */}
+      {isHead && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Assign Merchandising Task</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Assign to team member</Label>
+              <Select value={assignedTo} onValueChange={handleAssign} disabled={data?.is_locked || data?.is_completed}>
+                <SelectTrigger className="w-64">
+                  <SelectValue placeholder="Select team member..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {merchandisingUsers.map(u => (
+                    <SelectItem key={u.id} value={u.id}>{u.full_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-sm text-gray-600">
+              Attribute Sheet:{' '}
+              {data?.attribute_sheet_handed_over ? (
+                <span className="text-green-600 font-medium">Handed Over ✓</span>
+              ) : (
+                <span className="text-amber-600">Pending</span>
+              )}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Team Member: Task Card (shown only when assigned) */}
+      {isTeamMember && isAssigned && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="pt-4 pb-4">
+            <div>
+              <p className="text-sm font-semibold text-blue-900">Your Task</p>
+              <p className="text-xs text-blue-700 mt-0.5">Create the attribute sheet and hand it over to the merchandising head.</p>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer select-none mt-3">
+              <input
+                type="checkbox"
+                checked={data?.attribute_sheet_handed_over || false}
+                onChange={toggleHandover}
+                disabled={data?.attribute_sheet_handed_over || false}
+                className="h-4 w-4 rounded border-gray-300"
+              />
+              <span className="text-sm font-medium text-blue-900">Attribute Sheet Handed Over</span>
+            </label>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Excel Upload Card */}
       {canEditFields && (
@@ -631,7 +711,13 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
                 </Button>
               )}
               {!data?.is_completed && (
-                <Button variant="outline" onClick={markComplete} disabled={saving} className="text-green-600 border-green-200">
+                <Button
+                  variant="outline"
+                  onClick={markComplete}
+                  disabled={saving || !data?.attribute_sheet_handed_over}
+                  className="text-green-600 border-green-200"
+                  title={!data?.attribute_sheet_handed_over ? 'Attribute sheet must be handed over first' : ''}
+                >
                   Mark Complete
                 </Button>
               )}

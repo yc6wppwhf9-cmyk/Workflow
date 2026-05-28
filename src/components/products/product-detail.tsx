@@ -33,6 +33,7 @@ interface ProductDetailProps {
   logs: ActivityLog[]
   designSubmissions: DesignSubmission[]
   designers: Pick<Profile, 'id' | 'full_name'>[]
+  merchandisingUsers: Pick<Profile, 'id' | 'full_name'>[]
   defaultTab?: string
 }
 
@@ -53,7 +54,7 @@ const VALID_TABS = new Set(TABS.map(t => t.value))
 export function ProductDetail({
   product, profile, designData, samplingData, merchandisingData,
   bomData, marketingData, salesData, files, logs,
-  designSubmissions, designers,
+  designSubmissions, designers, merchandisingUsers,
   defaultTab,
 }: ProductDetailProps) {
   const initialTab = defaultTab && VALID_TABS.has(defaultTab) ? defaultTab : 'overview'
@@ -158,7 +159,7 @@ export function ProductDetail({
             <SamplingTab product={product} profile={profile} designData={designData} data={samplingData} files={files} />
           </TabsPrimitive.Content>
           <TabsPrimitive.Content value="merchandising">
-            <MerchandisingTab product={product} profile={profile} data={merchandisingData} />
+            <MerchandisingTab product={product} profile={profile} data={merchandisingData} merchandisingUsers={merchandisingUsers} />
           </TabsPrimitive.Content>
           <TabsPrimitive.Content value="colours">
             <ColourVariantsTab

@@ -37,6 +37,7 @@ export default async function ProductPage({
     { data: logs },
     { data: designSubmissions },
     { data: designers },
+    { data: merchandisingUsers },
   ] = await Promise.all([
     supabase.from('design_data').select('*').eq('product_id', id).single(),
     supabase.from('sampling_data').select('*').eq('product_id', id).single(),
@@ -48,6 +49,7 @@ export default async function ProductPage({
     supabase.from('activity_logs').select('*, user:profiles(full_name)').eq('product_id', id).order('created_at', { ascending: false }).limit(50),
     supabase.from('design_submissions').select('*, submitter:profiles!submitted_by(id,full_name)').eq('product_id', id).order('created_at', { ascending: false }),
     supabase.from('profiles').select('id, full_name').eq('role', 'design').eq('is_active', true).order('full_name'),
+    supabase.from('profiles').select('id, full_name').eq('role', 'merchandising').eq('is_active', true).order('full_name'),
   ])
 
   // Convert stored paths to 1-hour signed URLs (bucket is private)
@@ -91,6 +93,7 @@ export default async function ProductPage({
         logs={logs || []}
         designSubmissions={designSubmissions || []}
         designers={designers || []}
+        merchandisingUsers={merchandisingUsers || []}
         defaultTab={tab}
       />
     </div>

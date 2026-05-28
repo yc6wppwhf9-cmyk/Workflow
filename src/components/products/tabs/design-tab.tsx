@@ -474,7 +474,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
                   <Select
                     value={assignedTo}
                     onValueChange={v => setAssignedTo(v)}
-                    disabled={savingAssign}
+                    disabled={savingAssign || !!data?.assigned_to}
                   >
                     <SelectTrigger className="w-56 bg-white">
                       <SelectValue placeholder="Select designer..." />
@@ -488,7 +488,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
                   </Select>
                   <Button
                     onClick={() => saveAssignment(assignedTo)}
-                    disabled={savingAssign}
+                    disabled={savingAssign || !!data?.assigned_to}
                     className="bg-violet-600 hover:bg-violet-700"
                   >
                     {savingAssign ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="h-4 w-4" />}

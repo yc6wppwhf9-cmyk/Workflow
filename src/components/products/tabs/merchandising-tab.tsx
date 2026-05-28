@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Lock, Save, Plus, X, Upload, FileSpreadsheet, CheckCircle2 } from 'lucide-react'
+import { Loader2, Lock, Save, Plus, X, Upload, FileSpreadsheet, CheckCircle2, UserCheck } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -90,6 +90,7 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [assignedTo, setAssignedTo] = useState(data?.assigned_to || '')
+  const [savingAssign, setSavingAssign] = useState(false)
 
   const excelInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
@@ -385,15 +386,18 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
     router.refresh()
   }
 
-  async function handleAssign(userId: string) {
-    setAssignedTo(userId)
+  async function handleAssign() {
+    if (!assignedTo) return
+    setSavingAssign(true)
     const supabase = createClient()
-    await supabase.from('merchandising_data').update({ assigned_to: userId || null, updated_by: profile.id }).eq('product_id', product.id)
+    await supabase.from('merchandising_data').update({ assigned_to: assignedTo, updated_by: profile.id }).eq('product_id', product.id)
     await supabase.from('activity_logs').insert({
       product_id: product.id, user_id: profile.id,
-      action: `assigned merchandising task to ${merchandisingUsers.find(u => u.id === userId)?.full_name || 'team member'}`,
+      action: `assigned merchandising task to ${merchandisingUsers.find(u => u.id === assignedTo)?.full_name || 'team member'}`,
       department: 'merchandising',
     })
+    setSavingAssign(false)
+    router.refresh()
   }
 
   async function toggleHandover() {
@@ -460,16 +464,29 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
           <CardContent className="space-y-3">
             <div className="space-y-1.5">
               <Label className="text-xs">Assign to team member</Label>
-              <Select value={assignedTo} onValueChange={handleAssign} disabled={data?.is_locked || data?.is_completed}>
-                <SelectTrigger className="w-64">
-                  <SelectValue placeholder="Select team member..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {merchandisingUsers.map(u => (
-                    <SelectItem key={u.id} value={u.id}>{u.full_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2">
+                <Select
+                  value={assignedTo}
+                  onValueChange={setAssignedTo}
+                  disabled={!!data?.assigned_to || data?.is_locked || data?.is_completed || savingAssign}
+                >
+                  <SelectTrigger className="w-56">
+                    <SelectValue placeholder="Select team member..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {merchandisingUsers.map(u => (
+                      <SelectItem key={u.id} value={u.id}>{u.full_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  onClick={handleAssign}
+                  disabled={!!data?.assigned_to || !assignedTo || savingAssign}
+                >
+                  {savingAssign ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="h-4 w-4" />}
+                  Assign
+                </Button>
+              </div>
             </div>
             <p className="text-sm text-gray-600">
               Attribute Sheet:{' '}

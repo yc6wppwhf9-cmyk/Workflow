@@ -259,7 +259,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       { data: myAssignments },
       { data: mySubmissions },
       { data: myFiles },
-      { data: pendingSamples },
     ] = await Promise.all([
       supabase.from('design_data')
         .select('product_id, is_completed, product:products(id, name, workflow_stage, created_at, sales_data(deadline_date), sampling_data(sample_review_status, updated_at))')
@@ -273,9 +272,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         .eq('uploaded_by', userId)
         .eq('department', 'design')
         .like('file_type', 'image/%'),
-      supabase.from('sampling_data')
-        .select('product_id, sample_review_status, updated_at, product:products(id, name, workflow_stage)')
-        .eq('sample_review_status', 'pending_review'),
     ])
 
     type MySubRow = NonNullable<typeof mySubmissions>[number]
@@ -311,56 +307,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     const approvalRate = totalSubs > 0 ? Math.round((approvedSubs / totalSubs) * 100) : 0
 
     const pendingReview = assignments.filter(a => a.latestSub?.status === 'pending').length
-    const pendingSampleApproval = (pendingSamples || []).length
     const needsWork = assignments.filter(a => !a.latestSub || a.latestSub.status === 'rejected').length
 
     return (
       <div>
         <Header title={`My Work, ${profile?.full_name?.split(' ')[0] || 'Designer'}`} subtitle="Design assignments and submission status" />
         <div className="p-6 space-y-6">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
             <KpiCard label="Assigned to Me" value={assignments.length} icon={UserCheck} color="bg-violet-50 [&>svg]:text-violet-600" href="?f=all"        active={filter === 'all'} />
             <KpiCard label="Needs Work"     value={needsWork}          sub="not yet submitted" icon={AlertCircle} color="bg-amber-50 [&>svg]:text-amber-500" href="?f=needs-work"  active={filter === 'needs-work'} />
             <KpiCard label="In Review"      value={pendingReview}      sub="awaiting head" icon={Clock}      color="bg-blue-50 [&>svg]:text-blue-600"  href="?f=in-review"  active={filter === 'in-review'} />
-            <KpiCard label="Sample Approval" value={pendingSampleApproval} sub="awaiting me" icon={CheckCircle2} color="bg-cyan-50 [&>svg]:text-cyan-600" href="?f=sample-approval" active={filter === 'sample-approval'} />
           </div>
-
-          {show('sample-approval') && pendingSampleApproval > 0 && (
-            <Card className="border-cyan-200">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base text-cyan-700 flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4" /> Samples Awaiting Your Approval
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-100 bg-gray-50">
-                      <th className="text-left px-6 py-2 text-xs font-semibold text-gray-400 uppercase">Product</th>
-                      <th className="text-left px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Submitted</th>
-                      <th className="px-4 py-2"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {(pendingSamples || []).map(s => {
-                      const prod = one(s.product) as { id: string; name: string } | null
-                      return (
-                        <tr key={s.product_id} className="hover:bg-cyan-50">
-                          <td className="px-6 py-3 font-medium text-gray-900">{prod?.name ?? s.product_id}</td>
-                          <td className="px-4 py-3 text-xs text-gray-500">{s.updated_at ? `${daysSince(s.updated_at)}d ago` : 'Today'}</td>
-                          <td className="px-4 py-3 text-right">
-                            <Link href={`/products/${s.product_id}?tab=sampling`} className="text-xs text-blue-600 hover:underline flex items-center gap-1 justify-end">
-                              Review Sample <ArrowRight className="h-3 w-3" />
-                            </Link>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </CardContent>
-            </Card>
-          )}
 
           {show('all') && <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">My Assigned Products</CardTitle></CardHeader>
@@ -730,6 +687,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     { count: bomComplete },
     { count: marketingComplete },
     { count: salesComplete },
+    { data: pendingSamples },
   ] = await Promise.all([
     supabase.from('products').select('*', { count: 'exact', head: true }),
     supabase.from('products').select('*', { count: 'exact', head: true }).eq('workflow_stage', 'product_live'),
@@ -745,6 +703,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     supabase.from('bom_data').select('*', { count: 'exact', head: true }).eq('is_completed', true),
     supabase.from('marketing_data').select('*', { count: 'exact', head: true }).eq('is_completed', true),
     supabase.from('sales_data').select('*', { count: 'exact', head: true }).eq('is_completed', true),
+    supabase.from('sampling_data')
+      .select('product_id, sample_review_status, updated_at, product:products(id, name, workflow_stage)')
+      .eq('sample_review_status', 'pending_review'),
   ])
 
   const total = totalProducts || 0
@@ -752,6 +713,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const deptDone = (designComplete || 0) + (samplingComplete || 0) + (merchComplete || 0) + (bomComplete || 0) + (marketingComplete || 0) + (salesComplete || 0)
   const deptRate = deptTotal > 0 ? Math.round((deptDone / deptTotal) * 100) : 0
   const isManagementView = ['admin', 'management', 'design_head'].includes(role)
+  const pendingSampleApproval = (pendingSamples || []).length
 
   type ManagementProduct = {
     id: string
@@ -821,6 +783,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <KpiCard label="Total Products" value={total} icon={Package} color="bg-blue-50 [&>svg]:text-blue-600" />
           <KpiCard label="Live Products" value={liveProducts || 0} icon={CheckCircle2} color="bg-green-50 [&>svg]:text-green-600" />
           <KpiCard label="In Progress" value={inProgressProducts || 0} sub="Active pipeline" icon={Clock} color="bg-amber-50 [&>svg]:text-amber-500" />
+          {isManagementView && pendingSampleApproval > 0 && (
+            <KpiCard label="Sample Approval" value={pendingSampleApproval} sub="awaiting approval" icon={CheckCircle2} color="bg-cyan-50 [&>svg]:text-cyan-600" href="?f=sample-approval" active={filter === 'sample-approval'} />
+          )}
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
@@ -837,6 +802,43 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </CardContent>
           </Card>
         </div>
+
+        {isManagementView && show('sample-approval') && pendingSampleApproval > 0 && (
+          <Card className="border-cyan-200">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base text-cyan-700 flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4" /> Samples Awaiting Management Approval
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50">
+                    <th className="text-left px-6 py-2 text-xs font-semibold text-gray-400 uppercase">Product</th>
+                    <th className="text-left px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Submitted</th>
+                    <th className="px-4 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {(pendingSamples || []).map(s => {
+                    const prod = one(s.product) as { id: string; name: string } | null
+                    return (
+                      <tr key={s.product_id} className="hover:bg-cyan-50">
+                        <td className="px-6 py-3 font-medium text-gray-900">{prod?.name ?? s.product_id}</td>
+                        <td className="px-4 py-3 text-xs text-gray-500">{s.updated_at ? `${daysSince(s.updated_at)}d ago` : 'Today'}</td>
+                        <td className="px-4 py-3 text-right">
+                          <Link href={`/products/${s.product_id}?tab=sampling`} className="text-xs text-blue-600 hover:underline flex items-center gap-1 justify-end">
+                            Review Sample <ArrowRight className="h-3 w-3" />
+                          </Link>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+        )}
 
         {isManagementView && (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">

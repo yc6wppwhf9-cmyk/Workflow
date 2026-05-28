@@ -48,7 +48,7 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
 
   const isSampler = ['admin', 'sampling', 'merchandising', 'merchandising_head'].includes(profile.role)
   const isMerchHead = ['admin', 'merchandising_head'].includes(profile.role)
-  const canReview = ['admin', 'design', 'design_head'].includes(profile.role)
+  const canReview = ['admin', 'management'].includes(profile.role)
   const sampleImages = files.filter(f => f.department === 'sampling' && f.file_type?.startsWith('image/'))
   const status = data?.sample_review_status || 'not_started'
   const isApproved = status === 'approved'
@@ -132,7 +132,7 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
     await supabase.from('activity_logs').insert({
       product_id: product.id,
       user_id: profile.id,
-      action: 'marked sample complete and sent to designer for approval',
+      action: 'marked sample complete and sent to management for approval',
       department: 'sampling',
     })
     setSaving(false)
@@ -155,8 +155,8 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
       product_id: product.id,
       user_id: profile.id,
       action: nextStatus === 'approved'
-        ? 'approved sample — awaiting merchandising head to advance stage'
-        : `rejected sample${feedback ? `: ${feedback}` : ''}`,
+        ? 'management approved sample — awaiting merchandising head to advance stage'
+        : `management rejected sample${feedback ? `: ${feedback}` : ''}`,
       department: 'sampling',
     })
 
@@ -289,14 +289,14 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
 
           {isRejected && (
             <div className="rounded-lg border border-red-200 bg-red-50 p-3">
-              <p className="text-xs font-semibold text-red-500 uppercase tracking-wide mb-1">Sample Rejected by Designer</p>
+              <p className="text-xs font-semibold text-red-500 uppercase tracking-wide mb-1">Sample Rejected by Management</p>
               <p className="text-sm text-red-800 whitespace-pre-wrap">{data?.designer_feedback || 'No feedback provided.'}</p>
             </div>
           )}
 
           {isPending && (
             <div className="flex items-center gap-2 rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm text-yellow-700">
-              <Clock className="h-4 w-4" /> Waiting for designer approval.
+              <Clock className="h-4 w-4" /> Waiting for management approval.
             </div>
           )}
 
@@ -324,10 +324,10 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
       {canReview && isPending && (
         <Card className="border-blue-200">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Designer Sample Approval</CardTitle>
+            <CardTitle className="text-base">Management Sample Approval</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <p className="text-sm text-gray-600">Approve the sample to move the product to Merchandising, or reject it with a remark for the sampler.</p>
+            <p className="text-sm text-gray-600">Approve the sample to allow the merchandising head to advance the stage, or reject with a remark for the sampling team.</p>
             <Textarea
               value={feedback}
               onChange={e => setFeedback(e.target.value)}

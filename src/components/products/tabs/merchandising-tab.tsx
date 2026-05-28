@@ -72,7 +72,7 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
   const isHead = ['admin', 'merchandising_head'].includes(profile.role)
   const isAssigned = data?.assigned_to === profile.id
   const isAtMerchStage = product.workflow_stage === 'merchandising_completed'
-  const canEditFields = !data?.is_locked && !data?.is_completed && isHead
+  const canEditFields = !data?.is_locked && !data?.is_completed && isHead && isAtMerchStage
   const showActions = !data?.is_locked && isHead && isAtMerchStage  // Mark Complete only at merch stage
 
   const [activeVersion, setActiveVersion] = useState<'attribute' | 'production'>('attribute')

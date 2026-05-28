@@ -57,7 +57,11 @@ function StageCell({
       {startDate && (
         <p className="text-xs text-gray-500 pl-5">
           {fmt(startDate)}
-          {endDate ? <> → <span className="text-green-600 font-medium">{fmt(endDate)}</span></> : <span className="text-yellow-600"> (ongoing)</span>}
+          {endDate
+            ? <> → <span className="text-green-600 font-medium">{fmt(endDate)}</span></>
+            : status === 'active'
+              ? <span className="text-yellow-600"> (ongoing)</span>
+              : null}
         </p>
       )}
       {extra && <p className="text-xs text-gray-400 pl-5">{extra}</p>}
@@ -296,6 +300,7 @@ export default async function PipelinePage() {
                             person={design.assignedToId ? profileMap.get(design.assignedToId) : null}
                             assignedBy={design.assignEntry?.user_id ? profileMap.get(design.assignEntry.user_id) : null}
                             startDate={design.assignEntry?.created_at || null}
+                            endDate={design.doneEntry?.created_at || null}
                           />
                         </td>
                         {/* ── Design: 1st Submit ── */}
@@ -326,6 +331,7 @@ export default async function PipelinePage() {
                             status={sampling.status}
                             person={sampling.data?.sampler_name}
                             startDate={sampling.submitEntry?.created_at || null}
+                            endDate={sampling.doneEntry?.created_at || null}
                           />
                         </td>
                         {/* ── Sampling: Mgmt Approved / Done ── */}
@@ -349,6 +355,7 @@ export default async function PipelinePage() {
                             person={merch.data?.assigned_to ? profileMap.get(merch.data.assigned_to) : null}
                             assignedBy={merch.assignEntry?.user_id ? profileMap.get(merch.assignEntry.user_id) : null}
                             startDate={merch.assignEntry?.created_at || null}
+                            endDate={merch.doneEntry?.created_at || null}
                           />
                         </td>
                         {/* ── Merch: Submitted ── */}

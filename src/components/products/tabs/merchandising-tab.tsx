@@ -218,28 +218,54 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
               if (f) positions.push({ row: parseInt(rowMatch[1]), col: colMatch ? parseInt(colMatch[1]) : 0, file: f })
             }
           }
-          const uniqueCols = [...new Set(positions.map(p => p.col))].sort((a, b) => a - b)
-          const uniqueRows = [...new Set(positions.map(p => p.row))].sort((a, b) => a - b)
 
-          // DETAILS PICS layout: one header row per colour, then one row of images
-          // (5 columns = 5 angles). Each unique image ROW = one colour.
-          // Filter out placeholder "Color" tags from ATTRIBUTES so index mapping stays clean.
           const effectiveTags = colourTags.filter(t => t.toLowerCase() !== 'color' && t.toLowerCase() !== 'colour')
           const tagsToMap = effectiveTags.length > 0 ? effectiveTags : colourTags
+          const tagsLower = tagsToMap.map(t => t.toLowerCase())
 
-          if (uniqueRows.length >= uniqueCols.length) {
-            // Row-based: each unique row group = one colour (columns = different angles)
+          // PRIMARY: read text cells in DETAILS PICS sheet — find rows that contain colour name labels.
+          // Each group of images sits directly below its colour label row.
+          const colourLabelRows: Array<{ row: number; colourTag: string }> = []
+          if (detailsPicsIdx >= 0) {
+            const detailsSheet = wb.Sheets[sheetNames[detailsPicsIdx]]
+            if (detailsSheet) {
+              const cellData = XLSX.utils.sheet_to_json<string[]>(detailsSheet, { header: 1, defval: '' }) as string[][]
+              for (let r = 0; r < cellData.length; r++) {
+                for (const cell of cellData[r]) {
+                  const cellStr = String(cell || '').trim().toLowerCase()
+                  if (!cellStr || cellStr.length > 60) continue
+                  const idx = tagsLower.findIndex(t => cellStr === t || cellStr.includes(t) || t.includes(cellStr))
+                  if (idx >= 0) { colourLabelRows.push({ row: r, colourTag: tagsToMap[idx] }); break }
+                }
+              }
+            }
+          }
+
+          if (colourLabelRows.length > 0) {
+            // Map each image to the nearest colour label that appears at or before its row
             for (const pos of positions) {
-              const idx = uniqueRows.indexOf(pos.row)
-              if (idx < tagsToMap.length) imageColourMap.set(pos.file, tagsToMap[idx])
+              let bestRow = -1, matched = ''
+              for (const { row, colourTag } of colourLabelRows) {
+                if (row <= pos.row && row > bestRow) { bestRow = row; matched = colourTag }
+              }
+              if (matched) imageColourMap.set(pos.file, matched)
             }
           } else {
-            // Column-based: each unique column = one colour (rows = different angles)
-            const colsPerColour = Math.max(1, Math.round(uniqueCols.length / tagsToMap.length))
-            for (const pos of positions) {
-              const colIdx = uniqueCols.indexOf(pos.col)
-              const colourIdx = Math.floor(colIdx / colsPerColour)
-              if (colourIdx < tagsToMap.length) imageColourMap.set(pos.file, tagsToMap[colourIdx])
+            // Fallback: position-based (row count vs col count)
+            const uniqueCols = [...new Set(positions.map(p => p.col))].sort((a, b) => a - b)
+            const uniqueRows = [...new Set(positions.map(p => p.row))].sort((a, b) => a - b)
+            if (uniqueRows.length >= uniqueCols.length) {
+              for (const pos of positions) {
+                const idx = uniqueRows.indexOf(pos.row)
+                if (idx < tagsToMap.length) imageColourMap.set(pos.file, tagsToMap[idx])
+              }
+            } else {
+              const colsPerColour = Math.max(1, Math.round(uniqueCols.length / tagsToMap.length))
+              for (const pos of positions) {
+                const colIdx = uniqueCols.indexOf(pos.col)
+                const colourIdx = Math.floor(colIdx / colsPerColour)
+                if (colourIdx < tagsToMap.length) imageColourMap.set(pos.file, tagsToMap[colourIdx])
+              }
             }
           }
         }

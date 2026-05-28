@@ -151,7 +151,12 @@ function ColorCard({
 }
 
 export function ColourVariantsTab({ variants, files }: ColourVariantsTabProps) {
-  if (variants.length === 0) {
+  // Strip ATTRIBUTES template placeholder tags like "Color" / "Colour"
+  const PLACEHOLDER = /^colou?rs?$/i
+  const realVariants = variants.filter(v => !PLACEHOLDER.test((v.colourTag || '').trim()))
+  const displayVariants = realVariants.length > 0 ? realVariants : variants
+
+  if (displayVariants.length === 0) {
     return (
       <div className="max-w-3xl">
         <div className="text-center py-16 border-2 border-dashed border-gray-200 rounded-xl">
@@ -183,8 +188,8 @@ export function ColourVariantsTab({ variants, files }: ColourVariantsTabProps) {
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-200 px-4 py-2.5">
           <Palette className="h-4 w-4 text-blue-500" />
-          <span className="text-sm font-semibold text-gray-900">{variants.length}</span>
-          <span className="text-sm text-gray-500">colour variant{variants.length !== 1 ? 's' : ''}</span>
+          <span className="text-sm font-semibold text-gray-900">{displayVariants.length}</span>
+          <span className="text-sm text-gray-500">colour variant{displayVariants.length !== 1 ? 's' : ''}</span>
         </div>
         {filesByColor.size > 0 && (
           <div className="text-xs text-gray-400">
@@ -195,7 +200,7 @@ export function ColourVariantsTab({ variants, files }: ColourVariantsTabProps) {
 
       {/* Variant cards grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {variants.map((variant, i) => (
+        {displayVariants.map((variant, i) => (
           <ColorCard
             key={variant.styleName || i}
             variant={variant}

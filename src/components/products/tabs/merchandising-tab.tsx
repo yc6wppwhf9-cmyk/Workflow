@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Lock, Save, Plus, X, Upload, FileSpreadsheet, CheckCircle2, UserCheck } from 'lucide-react'
+import { Loader2, Lock, Save, Plus, X, Upload, FileSpreadsheet, CheckCircle2, UserCheck, Send } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -71,11 +71,15 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
   const isTeamMember = profile.role === 'merchandising'
   const isHead = ['admin', 'merchandising_head'].includes(profile.role)
   const isAssigned = data?.assigned_to === profile.id
+  const isSubmitted = !!data?.attribute_sheet_handed_over
   const isAtMerchStage = product.workflow_stage === 'merchandising_completed'
-  const canEditFields = !data?.is_locked && !data?.is_completed && isHead && isAtMerchStage
+  // Team member can upload before submitting; head can always upload
+  const canUploadExcel = isAtMerchStage && !data?.is_locked && !data?.is_completed && ((isTeamMember && isAssigned && !isSubmitted) || isHead)
+  // Only head can edit the form fields
+  const canEditFormFields = isAtMerchStage && !data?.is_locked && !data?.is_completed && isHead
   const showActions = !data?.is_locked && isHead && isAtMerchStage
-  // Attribute form: head always sees it; everyone else only after marked complete
-  const showAttributeForm = isHead || !!data?.is_completed
+  // Attribute form visible to head and assigned team member (read-only for team)
+  const showAttributeForm = isHead || (isTeamMember && isAssigned) || !!data?.is_completed
 
   const [activeVersion, setActiveVersion] = useState<'attribute' | 'production'>('attribute')
   const [attrForm, setAttrForm] = useState<FormState>(() => initForm(data))
@@ -409,15 +413,16 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
     router.refresh()
   }
 
-  async function toggleHandover() {
-    if (data?.attribute_sheet_handed_over) return
+  async function submitForReview() {
+    setSaving(true)
     const supabase = createClient()
     await supabase.from('merchandising_data').update({ attribute_sheet_handed_over: true, updated_by: profile.id }).eq('product_id', product.id)
     await supabase.from('activity_logs').insert({
       product_id: product.id, user_id: profile.id,
-      action: 'marked attribute sheet as handed over',
+      action: 'submitted attribute sheet for merchandising head review',
       department: 'merchandising',
     })
+    setSaving(false)
     router.refresh()
   }
 
@@ -455,7 +460,7 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
         placeholder={placeholder || ''}
         value={(form[field] as string) || ''}
         onChange={e => set(field, e.target.value)}
-        disabled={!canEditFields}
+        disabled={!canEditFormFields}
         className="h-8 text-sm"
       />
     </div>
@@ -499,10 +504,10 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
             </div>
             <p className="text-sm text-gray-600">
               Attribute Sheet:{' '}
-              {data?.attribute_sheet_handed_over ? (
-                <span className="text-green-600 font-medium">Handed Over ✓</span>
+              {isSubmitted ? (
+                <span className="text-green-600 font-medium">Submitted for Review ✓</span>
               ) : (
-                <span className="text-amber-600">Pending</span>
+                <span className="text-amber-600">Not yet submitted</span>
               )}
             </p>
           </CardContent>
@@ -512,22 +517,33 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
       {/* Team Member: Task Card */}
       {isTeamMember && (
         isAssigned ? (
-          <Card className="border-blue-200 bg-blue-50">
+          <Card className={isSubmitted ? 'border-green-200 bg-green-50' : 'border-blue-200 bg-blue-50'}>
             <CardContent className="pt-4 pb-4">
-              <div>
-                <p className="text-sm font-semibold text-blue-900">Your Task</p>
-                <p className="text-xs text-blue-700 mt-0.5">Create the attribute sheet and hand it over to the merchandising head.</p>
-              </div>
-              <label className="flex items-center gap-2 cursor-pointer select-none mt-3">
-                <input
-                  type="checkbox"
-                  checked={data?.attribute_sheet_handed_over || false}
-                  onChange={toggleHandover}
-                  disabled={data?.attribute_sheet_handed_over || false}
-                  className="h-4 w-4 rounded border-gray-300"
-                />
-                <span className="text-sm font-medium text-blue-900">Attribute Sheet Handed Over</span>
-              </label>
+              {isSubmitted ? (
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-green-900">Submitted for Review</p>
+                    <p className="text-xs text-green-700 mt-0.5">The merchandising head will review and mark it complete.</p>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-sm font-semibold text-blue-900">Your Task</p>
+                  <p className="text-xs text-blue-700 mt-0.5">Upload the attribute Excel below, verify the data, then submit for head review.</p>
+                  <Button
+                    size="sm"
+                    className="mt-3"
+                    onClick={submitForReview}
+                    disabled={saving || !data?.weight}
+                    title={!data?.weight ? 'Upload the attribute Excel first' : ''}
+                  >
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    Submit for Review
+                  </Button>
+                  {!data?.weight && <p className="text-xs text-blue-600 mt-1">Upload the Excel first to enable submit.</p>}
+                </div>
+              )}
             </CardContent>
           </Card>
         ) : (
@@ -541,7 +557,7 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
         )
       )}
 
-      {/* Placeholder for team members / other roles before completion */}
+      {/* Placeholder for other roles before completion */}
       {!showAttributeForm && !isTeamMember && (
         <Card>
           <CardContent className="py-8 text-center">
@@ -550,8 +566,8 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
         </Card>
       )}
 
-      {/* Excel Upload Card — head only, at merch stage */}
-      {canEditFields && (
+      {/* Excel Upload Card — team member (before submit) and head */}
+      {canUploadExcel && (
         <Card className="border-green-200 bg-green-50">
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -650,7 +666,7 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
                     placeholder="0"
                     value={(form.dimensions as Record<string, string>)[dim] || ''}
                     onChange={e => set('dimensions', { ...form.dimensions, [dim]: e.target.value })}
-                    disabled={!canEditFields}
+                    disabled={!canEditFormFields}
                     className="h-8 text-sm"
                   />
                 </div>
@@ -661,7 +677,7 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
                   placeholder="inches"
                   value={form.dimensions?.unit || ''}
                   onChange={e => set('dimensions', { ...form.dimensions, unit: e.target.value })}
-                  disabled={!canEditFields}
+                  disabled={!canEditFormFields}
                   className="h-8 text-sm"
                 />
               </div>
@@ -711,7 +727,7 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
                 {form.materials.map((m, i) => (
                   <span key={i} className="flex items-center gap-1 bg-blue-50 text-blue-700 text-xs px-2.5 py-1 rounded-full">
                     {m}
-                    {canEditFields && (
+                    {canEditFormFields && (
                       <button onClick={() => set('materials', form.materials.filter((_, j) => j !== i))}>
                         <X className="h-3 w-3 hover:text-red-500" />
                       </button>
@@ -719,7 +735,7 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
                   </span>
                 ))}
               </div>
-              {canEditFields && (
+              {canEditFormFields && (
                 <div className="flex gap-2">
                   <Input
                     placeholder="Add material..."
@@ -751,7 +767,7 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
           )}
           {showActions && (
             <div className="flex items-center gap-3 pt-2 border-t border-gray-100">
-              {canEditFields && (
+              {canEditFormFields && (
                 <Button onClick={handleSave} disabled={saving}>
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   Save Changes

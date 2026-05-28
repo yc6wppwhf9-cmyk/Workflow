@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createClient } from '@/lib/supabase/client'
+import { DateInput } from '@/components/ui/date-input'
 import { CATEGORY_LABELS, BRANDS, CHANNELS, type Profile, type ProductCategory, type Brand } from '@/lib/types'
 
 interface NewProductFormProps {
@@ -212,13 +213,7 @@ export function NewProductForm({ profile }: NewProductFormProps) {
             </div>
             <div className="space-y-1.5">
               <Label>Deadline Date</Label>
-              <Input
-                type="date"
-                value={deadlineDate}
-                onChange={e => setDeadlineDate(e.target.value)}
-                style={{ colorScheme: 'light' }}
-                lang="en-IN"
-              />
+              <DateInput value={deadlineDate} onChange={setDeadlineDate} />
             </div>
             <div className="space-y-1.5">
               <Label>Product Specification</Label>

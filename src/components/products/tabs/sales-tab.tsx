@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createClient } from '@/lib/supabase/client'
+import { DateInput } from '@/components/ui/date-input'
 import { CHANNELS, CATEGORY_LABELS, type Product, type Profile, type SalesData, type ProductCategory } from '@/lib/types'
 
 interface SalesTabProps {
@@ -210,10 +211,9 @@ export function SalesTab({ product, profile, data }: SalesTabProps) {
           {/* Deadline Date */}
           <div className="space-y-1.5">
             <Label>Deadline Date</Label>
-            <Input
-              type="date"
+            <DateInput
               value={form.deadline_date}
-              onChange={e => set('deadline_date', e.target.value)}
+              onChange={v => set('deadline_date', v)}
               disabled={!canEditFields}
               className="w-48"
             />

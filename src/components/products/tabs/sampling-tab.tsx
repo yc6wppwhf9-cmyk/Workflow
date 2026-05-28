@@ -46,7 +46,8 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
   const [uploading, setUploading] = useState(false)
   const [reviewing, setReviewing] = useState(false)
 
-  const isSampler = ['admin', 'sampling', 'merchandising', 'merchandising_head'].includes(profile.role)
+  const isSampler = ['admin', 'sampling', 'merchandising'].includes(profile.role)
+  const canUploadSample = isSampler || profile.role === 'merchandising_head'
   const assignedDesignerId = designData?.assigned_to
   const isAssignedDesigner = profile.role === 'design' && !!assignedDesignerId && profile.id === assignedDesignerId
   const canReview = profile.role === 'admin' || isAssignedDesigner
@@ -225,7 +226,7 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
       <Card className={isRejected ? 'border-red-200' : isPending ? 'border-yellow-200' : isApproved ? 'border-green-200' : ''}>
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="text-base">Sample Images</CardTitle>
-          {isSampler && !isApproved && (
+          {canUploadSample && !isApproved && (
             <>
               <Button size="sm" variant="outline" onClick={() => sampleInputRef.current?.click()} disabled={uploading}>
                 {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
@@ -251,7 +252,7 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
                     <a href={file.file_url} target="_blank" rel="noopener noreferrer" className="h-8 w-8 rounded-full bg-white flex items-center justify-center">
                       <ExternalLink className="h-4 w-4 text-gray-700" />
                     </a>
-                    {isSampler && !isApproved && (
+                    {canUploadSample && !isApproved && (
                       <button className="h-8 w-8 rounded-full bg-white flex items-center justify-center" onClick={() => deleteFile(file)}>
                         <Trash2 className="h-4 w-4 text-red-500" />
                       </button>

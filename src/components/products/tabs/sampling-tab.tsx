@@ -46,7 +46,7 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
   const [uploading, setUploading] = useState(false)
   const [reviewing, setReviewing] = useState(false)
 
-  const isSampler = ['admin', 'sampling', 'merchandising'].includes(profile.role)
+  const isSampler = ['admin', 'sampling', 'merchandising', 'merchandising_head'].includes(profile.role)
   const assignedDesignerId = designData?.assigned_to
   const isAssignedDesigner = profile.role === 'design' && !!assignedDesignerId && profile.id === assignedDesignerId
   const canReview = profile.role === 'admin' || isAssignedDesigner

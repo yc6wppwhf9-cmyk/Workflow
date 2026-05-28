@@ -12,6 +12,7 @@ import {
   LogOut,
   ChevronRight,
   TrendingUp,
+  GitBranch,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -28,6 +29,7 @@ const navItems = [
 
 const managementItems = [
   { href: '/management', label: 'Management', icon: TrendingUp },
+  { href: '/pipeline', label: 'Pipeline', icon: GitBranch },
 ]
 
 const adminItems = [

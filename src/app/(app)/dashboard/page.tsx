@@ -57,6 +57,7 @@ function stageOwnerLabel(stage: string) {
   switch (stage) {
     case 'draft': return 'Sales'
     case 'design_completed': return 'Design'
+    case 'sampling_completed': return 'Sampling'
     case 'merchandising_completed': return 'Merchandising'
     case 'bom_finalized': return 'BOM'
     case 'marketing_ready': return 'Marketing'
@@ -260,7 +261,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       { data: myFiles },
     ] = await Promise.all([
       supabase.from('design_data')
-        .select('product_id, is_completed, product:products(id, name, workflow_stage, created_at, sales_data(deadline_date))')
+        .select('product_id, is_completed, product:products(id, name, workflow_stage, created_at, sales_data(deadline_date), sampling_data(sample_review_status, updated_at))')
         .eq('assigned_to', userId),
       supabase.from('design_submissions')
         .select('product_id, status, created_at, feedback, reviewed_at')
@@ -286,12 +287,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     }
 
     const assignments = (myAssignments || []).map(a => {
-      const prod = one(a.product) as { id: string; name: string; workflow_stage: string; created_at: string; sales_data?: { deadline_date?: string | null }[] | null } | null
+      const prod = one(a.product) as { id: string; name: string; workflow_stage: string; created_at: string; sales_data?: { deadline_date?: string | null }[] | null; sampling_data?: { sample_review_status?: string | null; updated_at?: string | null }[] | null } | null
       const deadline = prod?.sales_data ? (one(prod.sales_data) as { deadline_date?: string | null } | null)?.deadline_date ?? null : null
+      const sample = prod?.sampling_data ? (one(prod.sampling_data) as { sample_review_status?: string | null; updated_at?: string | null } | null) : null
       return {
         ...a,
         product: prod,
         deadline,
+        sample,
         latestSub: latestSubByProduct[a.product_id] ?? null,
         imagesUploaded: imagesByProduct[a.product_id] ?? 0,
       }
@@ -304,6 +307,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     const approvalRate = totalSubs > 0 ? Math.round((approvedSubs / totalSubs) * 100) : 0
 
     const pendingReview = assignments.filter(a => a.latestSub?.status === 'pending').length
+    const pendingSampleApproval = assignments.filter(a => a.product?.workflow_stage === 'sampling_completed' && a.sample?.sample_review_status === 'pending_review').length
     const needsWork = assignments.filter(a => !a.latestSub || a.latestSub.status === 'rejected').length
 
     return (
@@ -314,8 +318,42 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             <KpiCard label="Assigned to Me" value={assignments.length} icon={UserCheck} color="bg-violet-50 [&>svg]:text-violet-600" href="?f=all"        active={filter === 'all'} />
             <KpiCard label="Needs Work"     value={needsWork}          sub="not yet submitted" icon={AlertCircle} color="bg-amber-50 [&>svg]:text-amber-500" href="?f=needs-work"  active={filter === 'needs-work'} />
             <KpiCard label="In Review"      value={pendingReview}      sub="awaiting head" icon={Clock}      color="bg-blue-50 [&>svg]:text-blue-600"  href="?f=in-review"  active={filter === 'in-review'} />
-            <KpiCard label="Approval Rate"  value={`${approvalRate}%`} sub={`${approvedSubs}/${totalSubs} submissions`} icon={TrendingUp} color="bg-green-50 [&>svg]:text-green-600" />
+            <KpiCard label="Sample Approval" value={pendingSampleApproval} sub="awaiting me" icon={CheckCircle2} color="bg-cyan-50 [&>svg]:text-cyan-600" href="?f=sample-approval" active={filter === 'sample-approval'} />
           </div>
+
+          {show('sample-approval') && pendingSampleApproval > 0 && (
+            <Card className="border-cyan-200">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base text-cyan-700 flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4" /> Samples Awaiting Your Approval
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 bg-gray-50">
+                      <th className="text-left px-6 py-2 text-xs font-semibold text-gray-400 uppercase">Product</th>
+                      <th className="text-left px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Submitted</th>
+                      <th className="px-4 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {assignments.filter(a => a.product?.workflow_stage === 'sampling_completed' && a.sample?.sample_review_status === 'pending_review').map(a => (
+                      <tr key={a.product_id} className="hover:bg-cyan-50">
+                        <td className="px-6 py-3 font-medium text-gray-900">{a.product?.name}</td>
+                        <td className="px-4 py-3 text-xs text-gray-500">{a.sample?.updated_at ? `${daysSince(a.sample.updated_at)}d ago` : 'Today'}</td>
+                        <td className="px-4 py-3 text-right">
+                          <Link href={`/products/${a.product_id}?tab=sampling`} className="text-xs text-blue-600 hover:underline flex items-center gap-1 justify-end">
+                            Review Sample <ArrowRight className="h-3 w-3" />
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          )}
 
           {show('all') && <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">My Assigned Products</CardTitle></CardHeader>
@@ -531,6 +569,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // MERCHANDISING / BOM / MARKETING DASHBOARDS
   // ─────────────────────────────────────────────────────────────────────────────
   const deptConfig: Record<string, { stage: WorkflowStage; dataTable: string; label: string; tab: string; color: string }> = {
+    sampling:      { stage: 'sampling_completed',      dataTable: 'sampling_data',      label: 'Sampling',      tab: 'sampling',      color: 'bg-cyan-50 [&>svg]:text-cyan-600' },
     merchandising: { stage: 'merchandising_completed', dataTable: 'merchandising_data', label: 'Merchandising', tab: 'merchandising', color: 'bg-blue-50 [&>svg]:text-blue-600' },
     bom:           { stage: 'bom_finalized',           dataTable: 'bom_data',           label: 'BOM',           tab: 'bom',           color: 'bg-orange-50 [&>svg]:text-orange-600' },
     marketing:     { stage: 'marketing_ready',         dataTable: 'marketing_data',     label: 'Marketing',     tab: 'marketing',     color: 'bg-yellow-50 [&>svg]:text-yellow-600' },
@@ -679,6 +718,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     { data: recentLogs },
     { data: managementProducts },
     { count: designComplete },
+    { count: samplingComplete },
     { count: merchComplete },
     { count: bomComplete },
     { count: marketingComplete },
@@ -690,9 +730,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     supabase.from('products').select('id, name, sku, workflow_stage, created_at, bom_data(fg_inv_code)').order('created_at', { ascending: false }).limit(6),
     supabase.from('activity_logs').select('*, user:profiles(full_name), product:products(name, sku)').order('created_at', { ascending: false }).limit(8),
     supabase.from('products')
-      .select('id, name, sku, workflow_stage, created_at, updated_at, design_data(is_completed, updated_at), merchandising_data(is_completed, updated_at), bom_data(is_completed, updated_at, fg_inv_code), marketing_data(is_completed, updated_at), sales_data(is_completed, updated_at, deadline_date)')
+      .select('id, name, sku, workflow_stage, created_at, updated_at, design_data(is_completed, updated_at), sampling_data(is_completed, sample_review_status, updated_at), merchandising_data(is_completed, updated_at), bom_data(is_completed, updated_at, fg_inv_code), marketing_data(is_completed, updated_at), sales_data(is_completed, updated_at, deadline_date)')
       .order('updated_at', { ascending: true }),
     supabase.from('design_data').select('*', { count: 'exact', head: true }).eq('is_completed', true),
+    supabase.from('sampling_data').select('*', { count: 'exact', head: true }).eq('sample_review_status', 'approved'),
     supabase.from('merchandising_data').select('*', { count: 'exact', head: true }).eq('is_completed', true),
     supabase.from('bom_data').select('*', { count: 'exact', head: true }).eq('is_completed', true),
     supabase.from('marketing_data').select('*', { count: 'exact', head: true }).eq('is_completed', true),
@@ -700,8 +741,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   ])
 
   const total = totalProducts || 0
-  const deptTotal = total * 5
-  const deptDone = (designComplete || 0) + (merchComplete || 0) + (bomComplete || 0) + (marketingComplete || 0) + (salesComplete || 0)
+  const deptTotal = total * 6
+  const deptDone = (designComplete || 0) + (samplingComplete || 0) + (merchComplete || 0) + (bomComplete || 0) + (marketingComplete || 0) + (salesComplete || 0)
   const deptRate = deptTotal > 0 ? Math.round((deptDone / deptTotal) * 100) : 0
   const isManagementView = ['admin', 'management', 'design_head'].includes(role)
 
@@ -713,6 +754,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     created_at: string
     updated_at: string
     design_data: { is_completed: boolean; updated_at: string }[] | null
+    sampling_data?: { is_completed: boolean; sample_review_status: string; updated_at: string }[] | null
     merchandising_data: { is_completed: boolean; updated_at: string }[] | null
     bom_data: { is_completed: boolean; updated_at: string; fg_inv_code: string | null }[] | null
     marketing_data: { is_completed: boolean; updated_at: string }[] | null
@@ -743,6 +785,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     .map(p => ({
       ...p,
       designDone: !!(one(p.design_data) as { is_completed: boolean } | null)?.is_completed,
+      samplingDone: !!(one(p.sampling_data) as { is_completed: boolean; sample_review_status: string } | null)?.is_completed && (one(p.sampling_data) as { sample_review_status: string } | null)?.sample_review_status === 'approved',
       merchDone: !!(one(p.merchandising_data) as { is_completed: boolean } | null)?.is_completed,
       bomDone: !!(one(p.bom_data) as { is_completed: boolean } | null)?.is_completed,
       marketingDone: !!(one(p.marketing_data) as { is_completed: boolean } | null)?.is_completed,
@@ -881,8 +924,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               </CardHeader>
               <CardContent className="space-y-3">
                 {launchReadiness.length > 0 ? launchReadiness.map(p => {
-                  const done = [p.designDone, p.merchDone, p.bomDone, p.marketingDone, p.salesDone].filter(Boolean).length
-                  const pct = Math.round((done / 5) * 100)
+                  const done = [p.designDone, p.samplingDone, p.merchDone, p.bomDone, p.marketingDone, p.salesDone].filter(Boolean).length
+                  const pct = Math.round((done / 6) * 100)
                   return (
                     <div key={p.id}>
                       <div className="flex items-center justify-between mb-1">

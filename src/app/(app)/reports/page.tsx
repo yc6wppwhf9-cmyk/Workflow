@@ -35,6 +35,7 @@ function stageOwnerLabel(stage: string) {
   switch (stage) {
     case 'draft': return 'Sales'
     case 'design_completed': return 'Design'
+    case 'sampling_completed': return 'Sampling'
     case 'merchandising_completed': return 'Merchandising'
     case 'bom_finalized': return 'BOM'
     case 'marketing_ready': return 'Marketing'
@@ -61,7 +62,7 @@ export default async function ReportsPage() {
     { data: pendingUnlocks },
   ] = await Promise.all([
     supabase.from('products')
-      .select('id, name, sku, category, workflow_stage, created_at, updated_at, design_data(is_completed, updated_at), merchandising_data(is_completed, updated_at), bom_data(is_completed, updated_at, fg_inv_code, cost_given), marketing_data(is_completed, updated_at), sales_data(is_completed, updated_at, deadline_date)'),
+      .select('id, name, sku, category, workflow_stage, created_at, updated_at, design_data(is_completed, updated_at), sampling_data(is_completed, sample_review_status, updated_at), merchandising_data(is_completed, updated_at), bom_data(is_completed, updated_at, fg_inv_code, cost_given), marketing_data(is_completed, updated_at), sales_data(is_completed, updated_at, deadline_date)'),
     isAdmin ? supabase.from('profiles').select('role, is_active') : Promise.resolve({ data: null, error: null }),
     isManagement
       ? supabase.from('design_submissions').select('submitted_by, status, created_at, reviewed_at, submitter:profiles!submitted_by(id, full_name)')
@@ -83,6 +84,7 @@ export default async function ReportsPage() {
     created_at: string
     updated_at: string
     design_data: { is_completed: boolean; updated_at: string }[] | null
+    sampling_data: { is_completed: boolean; sample_review_status: string; updated_at: string }[] | null
     merchandising_data: { is_completed: boolean; updated_at: string }[] | null
     bom_data: { is_completed: boolean; updated_at: string; fg_inv_code: string | null; cost_given: boolean }[] | null
     marketing_data: { is_completed: boolean; updated_at: string }[] | null
@@ -121,6 +123,7 @@ export default async function ReportsPage() {
       ...p,
       sales: one(p.sales_data) as { deadline_date: string | null; is_completed: boolean } | null,
       designDone: !!(one(p.design_data) as { is_completed: boolean } | null)?.is_completed,
+      samplingDone: !!(one(p.sampling_data) as { is_completed: boolean; sample_review_status: string } | null)?.is_completed && (one(p.sampling_data) as { sample_review_status: string } | null)?.sample_review_status === 'approved',
       merchDone: !!(one(p.merchandising_data) as { is_completed: boolean } | null)?.is_completed,
       bomDone: !!(one(p.bom_data) as { is_completed: boolean } | null)?.is_completed,
       marketingDone: !!(one(p.marketing_data) as { is_completed: boolean } | null)?.is_completed,
@@ -320,8 +323,8 @@ export default async function ReportsPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {launchForecast.map(p => {
-                      const done = [p.designDone, p.merchDone, p.bomDone, p.marketingDone, p.salesDone].filter(Boolean).length
-                      const pct = Math.round((done / 5) * 100)
+                      const done = [p.designDone, p.samplingDone, p.merchDone, p.bomDone, p.marketingDone, p.salesDone].filter(Boolean).length
+                      const pct = Math.round((done / 6) * 100)
                       return (
                         <tr key={p.id} className="hover:bg-gray-50">
                           <td className="px-6 py-3"><Link href={`/products/${p.id}`} className="font-medium text-gray-900 hover:text-blue-600">{p.name || p.sku}</Link></td>

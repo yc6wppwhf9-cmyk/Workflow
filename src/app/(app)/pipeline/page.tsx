@@ -119,6 +119,7 @@ export default async function PipelinePage() {
 
   // ── Activity log lookups (first occurrence per product per action type) ────
   type LogEntry = { created_at: string; user_id: string | null }
+  const salesLog          = new Map<string, LogEntry>()
   const designAssignLog   = new Map<string, LogEntry>()
   const designDoneLog     = new Map<string, LogEntry>()
   const samplingSubmitLog = new Map<string, LogEntry>()
@@ -135,6 +136,7 @@ export default async function PipelinePage() {
     const a = log.action?.toLowerCase() || ''
     const entry: LogEntry = { created_at: log.created_at, user_id: log.user_id }
 
+    if (a.includes('created product with sales requirement') && !salesLog.has(pid)) salesLog.set(pid, entry)
     if (a.startsWith('assigned design to') && !designAssignLog.has(pid))       designAssignLog.set(pid, entry)
     if (a.includes('marked design complete') && !designDoneLog.has(pid))       designDoneLog.set(pid, entry)
     if (a.includes('marked sample complete') && !samplingSubmitLog.has(pid))   samplingSubmitLog.set(pid, entry)
@@ -199,11 +201,13 @@ export default async function PipelinePage() {
       : 'pending'
 
     const totalDays = diffDays(product.created_at, new Date().toISOString())
+    const salesEntry = salesLog.get(pid) || null
 
     return {
       product,
       stageIdx,
       totalDays,
+      salesEntry,
       design: { status: designStatus, assignedToId: designAssignedTo, assignEntry: designAssignEntry, firstSubmit: designFirstSubmit, approvedAt: designApprovedAt, doneEntry: designDoneEntry },
       sampling: { status: samplingStatus, data: sampling, submitEntry: samplingSubmitEntry, doneEntry: samplingDoneEntry },
       merch: { status: merchStatus, data: merch, assignEntry: merchAssignEntry, submitEntry: merchSubmitEntry, doneEntry: merchDoneEntry },
@@ -244,6 +248,8 @@ export default async function PipelinePage() {
                       {/* Product */}
                       <th className="text-left px-5 py-2.5 text-xs font-semibold text-gray-500 uppercase bg-gray-50 sticky left-0 z-10 min-w-[180px]">Product</th>
                       <th className="text-center px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase bg-gray-50 whitespace-nowrap">Created</th>
+                      {/* Sales */}
+                      <th className="text-center px-3 py-2.5 text-xs font-semibold text-rose-600 uppercase bg-rose-50 border-l border-rose-100 whitespace-nowrap">Sales</th>
                       {/* Design */}
                       <th colSpan={3} className="text-center px-3 py-2.5 text-xs font-semibold text-blue-600 uppercase bg-blue-50 border-l border-blue-100">Design</th>
                       {/* Sampling */}
@@ -259,6 +265,8 @@ export default async function PipelinePage() {
                     <tr className="border-b-2 border-gray-200 text-xs text-gray-400 font-medium">
                       <th className="px-5 py-2 bg-gray-50 sticky left-0 z-10" />
                       <th className="px-3 py-2 bg-gray-50" />
+                      {/* Sales sub-header */}
+                      <th className="px-3 py-2 bg-rose-50 border-l border-rose-100 font-medium whitespace-nowrap text-left">Submitted By / On</th>
                       {/* Design sub-headers */}
                       <th className="px-3 py-2 bg-blue-50 border-l border-blue-100 font-medium whitespace-nowrap text-left">Assigned To / By</th>
                       <th className="px-3 py-2 bg-blue-50 font-medium whitespace-nowrap text-left">1st Submit</th>
@@ -277,7 +285,7 @@ export default async function PipelinePage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {rows.map(({ product, totalDays, design, sampling, merch, bom }) => (
+                    {rows.map(({ product, totalDays, salesEntry, design, sampling, merch, bom }) => (
                       <tr key={product.id} className="hover:bg-gray-50 align-top">
                         {/* Product name */}
                         <td className="px-5 py-3 sticky left-0 bg-white border-r border-gray-100 z-10">
@@ -290,6 +298,24 @@ export default async function PipelinePage() {
                           <p className="text-xs text-gray-600 whitespace-nowrap">{fmt(product.created_at)}</p>
                           {product.created_by && (
                             <p className="text-xs text-gray-400 mt-0.5">{profileMap.get(product.created_by) || '—'}</p>
+                          )}
+                        </td>
+
+                        {/* ── Sales: Submitted By / On ── */}
+                        <td className="px-3 py-3 border-l border-rose-50">
+                          {salesEntry ? (
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-1.5">
+                                <CheckCircle2 className="h-3.5 w-3.5 text-rose-500 shrink-0" />
+                                <span className="text-xs font-semibold text-gray-800">{salesEntry.user_id ? profileMap.get(salesEntry.user_id) || '—' : '—'}</span>
+                              </div>
+                              <p className="text-xs text-gray-500 pl-5 whitespace-nowrap">{fmt(salesEntry.created_at)}</p>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5 text-gray-300">
+                              <Minus className="h-3.5 w-3.5 shrink-0" />
+                              <span className="text-xs">—</span>
+                            </div>
                           )}
                         </td>
 

@@ -141,25 +141,11 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
 
   async function reviewSample(nextStatus: 'approved' | 'rejected') {
     setReviewing(true)
-    const supabase = createClient()
-    await supabase.from('sampling_data').update({
-      sample_review_status: nextStatus,
-      designer_feedback: nextStatus === 'rejected' ? feedback || null : null,
-      reviewed_by: profile.id,
-      reviewed_at: new Date().toISOString(),
-      is_completed: nextStatus === 'approved',
-      updated_by: profile.id,
-    }).eq('product_id', product.id)
-
-    await supabase.from('activity_logs').insert({
-      product_id: product.id,
-      user_id: profile.id,
-      action: nextStatus === 'approved'
-        ? 'management approved sample — awaiting merchandising head to advance stage'
-        : `management rejected sample${feedback ? `: ${feedback}` : ''}`,
-      department: 'sampling',
+    await fetch('/api/sampling-review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_id: product.id, status: nextStatus, feedback }),
     })
-
     setFeedback('')
     setReviewing(false)
     router.refresh()

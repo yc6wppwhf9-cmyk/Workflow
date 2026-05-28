@@ -20,10 +20,10 @@ export function NewProductForm({ profile }: NewProductFormProps) {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const [category, setCategory]   = useState<ProductCategory>('junior-backpacks')
+  const [category, setCategory]   = useState<ProductCategory | ''>('')
   const [brand, setBrand]         = useState<Brand | ''>('')
   const [channel, setChannel]     = useState('')
-  const [priceRange, setPriceRange]   = useState('499')
+  const [priceRange, setPriceRange]   = useState('')
   const [deadlineDate, setDeadlineDate] = useState('')
   const [productSpec, setProductSpec] = useState('')
   const [images, setImages]       = useState<File[]>([])
@@ -54,7 +54,7 @@ export function NewProductForm({ profile }: NewProductFormProps) {
     setError('')
 
     const supabase = createClient()
-    const autoName = `${CATEGORY_LABELS[category] || category}${brand ? ' ' + brand : ''} ${Date.now().toString(36).toUpperCase()}`
+    const autoName = `${category ? (CATEGORY_LABELS[category as ProductCategory] || category) : 'Product'}${brand ? ' ' + brand : ''} ${Date.now().toString(36).toUpperCase()}`
     const autoSku  = `PROD-${Date.now().toString(36).toUpperCase()}`
 
     const { data: product, error: productErr } = await supabase
@@ -62,7 +62,7 @@ export function NewProductForm({ profile }: NewProductFormProps) {
       .insert({
         name: autoName,
         sku: autoSku,
-        category,
+        ...(category && { category }),
         ...(brand && { brand }),
         created_by: profile.id,
         updated_by: profile.id,
@@ -128,8 +128,8 @@ export function NewProductForm({ profile }: NewProductFormProps) {
           <CardContent className="space-y-4">
             <div className="space-y-1.5">
               <Label>Category <span className="text-red-500">*</span></Label>
-              <Select value={category} onValueChange={v => setCategory(v as ProductCategory)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Select value={category} onValueChange={v => setCategory(v as ProductCategory | '')}>
+                <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
                 <SelectContent>
                   {(Object.entries(CATEGORY_LABELS) as [ProductCategory, string][]).map(([v, l]) => (
                     <SelectItem key={v} value={v}>{l}</SelectItem>
@@ -217,6 +217,7 @@ export function NewProductForm({ profile }: NewProductFormProps) {
                 value={deadlineDate}
                 onChange={e => setDeadlineDate(e.target.value)}
                 style={{ colorScheme: 'light' }}
+                lang="en-IN"
               />
             </div>
             <div className="space-y-1.5">

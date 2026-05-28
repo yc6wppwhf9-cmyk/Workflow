@@ -558,7 +558,7 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
         </Card>
       )}
 
-      <Card>
+      {isHead && <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-0">
           <div className="flex items-center gap-2">
             <button
@@ -724,7 +724,7 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
             </div>
           )}
         </CardContent>
-      </Card>
+      </Card>}
     </div>
   )
 }

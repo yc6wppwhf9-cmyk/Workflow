@@ -46,9 +46,7 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
   const [uploading, setUploading] = useState(false)
   const [reviewing, setReviewing] = useState(false)
 
-  const isSampler = ['admin', 'sampling', 'merchandising'].includes(profile.role)
-  const canUploadSample = isSampler || profile.role === 'merchandising_head'
-  const isMerchHead = ['admin', 'merchandising_head'].includes(profile.role)
+  const isSampler = ['admin', 'sampling', 'merchandising', 'merchandising_head'].includes(profile.role)
   const assignedDesignerId = designData?.assigned_to
   const isAssignedDesigner = profile.role === 'design' && !!assignedDesignerId && profile.id === assignedDesignerId
   const canReview = profile.role === 'admin' || isAssignedDesigner
@@ -158,32 +156,28 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
       product_id: product.id,
       user_id: profile.id,
       action: nextStatus === 'approved'
-        ? 'approved sample — awaiting merchandising head to mark complete'
+        ? 'approved sample — stage advanced to Merchandising'
         : `rejected sample${feedback ? `: ${feedback}` : ''}`,
       department: 'sampling',
     })
 
+    if (nextStatus === 'approved' && product.workflow_stage === 'sampling_completed') {
+      await supabase.rpc('advance_product_stage', {
+        p_product_id: product.id,
+        p_next_stage: 'merchandising_completed',
+        p_user_id: profile.id,
+        p_action: 'designer approved sample — stage advanced to Merchandising',
+        p_department: profile.role,
+      })
+      fetch('/api/notify-stage-advance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: product.id, product_name: product.name, next_stage: 'merchandising_completed' }),
+      }).catch(() => {})
+    }
+
     setFeedback('')
     setReviewing(false)
-    router.refresh()
-  }
-
-  async function markSamplingComplete() {
-    setSaving(true)
-    const supabase = createClient()
-    await supabase.rpc('advance_product_stage', {
-      p_product_id: product.id,
-      p_next_stage: 'merchandising_completed',
-      p_user_id: profile.id,
-      p_action: 'merchandising head marked sampling complete — stage advanced to Merchandising',
-      p_department: 'merchandising_head',
-    })
-    fetch('/api/notify-stage-advance', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ product_id: product.id, product_name: product.name, next_stage: 'merchandising_completed' }),
-    }).catch(() => {})
-    setSaving(false)
     router.refresh()
   }
 
@@ -231,7 +225,7 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
       <Card className={isRejected ? 'border-red-200' : isPending ? 'border-yellow-200' : isApproved ? 'border-green-200' : ''}>
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="text-base">Sample Images</CardTitle>
-          {canUploadSample && !isApproved && (
+          {isSampler && !isApproved && (
             <>
               <Button size="sm" variant="outline" onClick={() => sampleInputRef.current?.click()} disabled={uploading}>
                 {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
@@ -257,7 +251,7 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
                     <a href={file.file_url} target="_blank" rel="noopener noreferrer" className="h-8 w-8 rounded-full bg-white flex items-center justify-center">
                       <ExternalLink className="h-4 w-4 text-gray-700" />
                     </a>
-                    {canUploadSample && !isApproved && (
+                    {isSampler && !isApproved && (
                       <button className="h-8 w-8 rounded-full bg-white flex items-center justify-center" onClick={() => deleteFile(file)}>
                         <Trash2 className="h-4 w-4 text-red-500" />
                       </button>
@@ -351,20 +345,6 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
         </Card>
       )}
 
-      {isMerchHead && isApproved && product.workflow_stage === 'sampling_completed' && (
-        <Card className="border-green-200">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Mark Sampling Complete</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-gray-600">The sample has been approved by the designer. Confirm to advance the product to the Merchandising stage.</p>
-            <Button onClick={markSamplingComplete} disabled={saving}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-              Mark Sampling Complete
-            </Button>
-          </CardContent>
-        </Card>
-      )}
     </div>
   )
 }

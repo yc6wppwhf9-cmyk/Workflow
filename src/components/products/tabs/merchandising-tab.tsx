@@ -220,21 +220,26 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
           }
           const uniqueCols = [...new Set(positions.map(p => p.col))].sort((a, b) => a - b)
           const uniqueRows = [...new Set(positions.map(p => p.row))].sort((a, b) => a - b)
-          // Use column-based mapping whenever there are multiple columns — each unique column
-          // index maps directly to a colour. This handles the common case where the DETAILS PICS
-          // sheet has one column per colour with multiple image rows (angles) per colour.
-          // Row-based is only used when all images are stacked in a single column.
-          if (uniqueCols.length > 1) {
-            const colsPerColour = Math.max(1, Math.round(uniqueCols.length / colourTags.length))
+
+          // DETAILS PICS layout: one header row per colour, then one row of images
+          // (5 columns = 5 angles). Each unique image ROW = one colour.
+          // Filter out placeholder "Color" tags from ATTRIBUTES so index mapping stays clean.
+          const effectiveTags = colourTags.filter(t => t.toLowerCase() !== 'color' && t.toLowerCase() !== 'colour')
+          const tagsToMap = effectiveTags.length > 0 ? effectiveTags : colourTags
+
+          if (uniqueRows.length >= uniqueCols.length) {
+            // Row-based: each unique row group = one colour (columns = different angles)
+            for (const pos of positions) {
+              const idx = uniqueRows.indexOf(pos.row)
+              if (idx < tagsToMap.length) imageColourMap.set(pos.file, tagsToMap[idx])
+            }
+          } else {
+            // Column-based: each unique column = one colour (rows = different angles)
+            const colsPerColour = Math.max(1, Math.round(uniqueCols.length / tagsToMap.length))
             for (const pos of positions) {
               const colIdx = uniqueCols.indexOf(pos.col)
               const colourIdx = Math.floor(colIdx / colsPerColour)
-              if (colourIdx < colourTags.length) imageColourMap.set(pos.file, colourTags[colourIdx])
-            }
-          } else {
-            for (const pos of positions) {
-              const idx = uniqueRows.indexOf(pos.row)
-              if (idx < colourTags.length) imageColourMap.set(pos.file, colourTags[idx])
+              if (colourIdx < tagsToMap.length) imageColourMap.set(pos.file, tagsToMap[colourIdx])
             }
           }
         }

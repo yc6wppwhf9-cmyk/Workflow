@@ -36,7 +36,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
 
   const latestSubmission = submissions[0] ?? null
   const designFiles = files.filter(f => f.department === 'design' && f.file_type?.startsWith('image/'))
-  const imageApproved = designFiles.length > 0 && designFiles.every(f => f.review_status === 'approved')
+  const imageApproved = designFiles.some(f => f.review_status === 'approved') && !designFiles.some(f => f.review_status === 'pending')
 
   // Team members can edit form fields only after images are approved
   // Head / admin always have full edit access

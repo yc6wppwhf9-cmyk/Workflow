@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { CheckCircle2, Clock, ExternalLink, Loader2, Send, Trash2, Upload, XCircle } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
@@ -38,6 +39,7 @@ function getStoragePath(fileUrl: string) {
 export function SamplingTab({ product, profile, designData, data, files }: SamplingTabProps) {
   const router = useRouter()
   const sampleInputRef = useRef<HTMLInputElement>(null)
+  const [samplerName, setSamplerName] = useState(data?.sampler_name || '')
   const [remarks, setRemarks] = useState(data?.sampler_remarks || '')
   const [feedback, setFeedback] = useState('')
   const [saving, setSaving] = useState(false)
@@ -58,6 +60,7 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
     setSaving(true)
     const supabase = createClient()
     await supabase.from('sampling_data').update({
+      sampler_name: samplerName || null,
       sampler_remarks: remarks || null,
       updated_by: profile.id,
     }).eq('product_id', product.id)
@@ -118,6 +121,7 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
     setSaving(true)
     const supabase = createClient()
     await supabase.from('sampling_data').update({
+      sampler_name: samplerName || null,
       sampler_remarks: remarks || null,
       sample_review_status: 'pending_review',
       designer_feedback: null,
@@ -257,6 +261,17 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
               ))}
             </div>
           )}
+
+          <div className="space-y-1.5">
+            <Label>Sampler Name</Label>
+            <Input
+              value={samplerName}
+              onChange={e => setSamplerName(e.target.value)}
+              disabled={!isSampler || isApproved}
+              placeholder="Name of the person who made the sample"
+              className="h-8 text-sm"
+            />
+          </div>
 
           <div className="space-y-1.5">
             <Label>Sampler Remarks</Label>

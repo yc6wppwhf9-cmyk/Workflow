@@ -187,6 +187,7 @@ export interface MerchandisingData {
 export interface SamplingData {
   id: string
   product_id: string
+  sampler_name: string | null
   sampler_remarks: string | null
   sample_review_status: 'not_started' | 'pending_review' | 'approved' | 'rejected'
   designer_feedback: string | null

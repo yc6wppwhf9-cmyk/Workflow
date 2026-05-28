@@ -2,69 +2,99 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Header } from '@/components/layout/header'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { CheckCircle2, Clock, Minus, GitBranch } from 'lucide-react'
+import { CheckCircle2, Clock, Circle, ExternalLink, GitBranch } from 'lucide-react'
 import { STAGE_LABELS } from '@/lib/types'
 
-function fmt(d: string | null) {
+function fmt(d: string | null | undefined) {
   if (!d) return null
   return new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })
 }
 
 function diffDays(from: string | null, to: string | null): number | null {
   if (!from || !to) return null
-  const ms = new Date(to).getTime() - new Date(from).getTime()
-  return Math.max(0, Math.round(ms / (1000 * 60 * 60 * 24)))
+  return Math.max(0, Math.round((new Date(to).getTime() - new Date(from).getTime()) / 86400000))
 }
 
-type StageStatus = 'done' | 'active' | 'pending'
+type MilestoneStatus = 'done' | 'active' | 'pending'
 
-function StageCell({
-  status,
-  person,
-  assignedBy,
-  startDate,
-  endDate,
-  extra,
-}: {
-  status: StageStatus
+const DEPT_COLORS: Record<string, { bg: string; border: string; text: string; dot: string }> = {
+  sales:         { bg: 'bg-rose-50',    border: 'border-rose-200',    text: 'text-rose-700',    dot: 'bg-rose-400' },
+  design:        { bg: 'bg-blue-50',    border: 'border-blue-200',    text: 'text-blue-700',    dot: 'bg-blue-400' },
+  sampling:      { bg: 'bg-purple-50',  border: 'border-purple-200',  text: 'text-purple-700',  dot: 'bg-purple-400' },
+  merchandising: { bg: 'bg-teal-50',    border: 'border-teal-200',    text: 'text-teal-700',    dot: 'bg-teal-400' },
+  bom:           { bg: 'bg-orange-50',  border: 'border-orange-200',  text: 'text-orange-700',  dot: 'bg-orange-400' },
+  marketing:     { bg: 'bg-pink-50',    border: 'border-pink-200',    text: 'text-pink-700',    dot: 'bg-pink-400' },
+}
+
+interface Milestone {
+  id: string
+  dept: string
+  label: string
+  status: MilestoneStatus
   person?: string | null
-  assignedBy?: string | null
-  startDate?: string | null
-  endDate?: string | null
-  extra?: string | null
-}) {
-  if (status === 'pending') {
-    return (
-      <div className="flex items-center gap-1.5 text-gray-300">
-        <Minus className="h-3.5 w-3.5 shrink-0" />
-        <span className="text-xs">—</span>
-      </div>
-    )
-  }
+  byPerson?: string | null   // "assigned by" (secondary person)
+  date?: string | null
+}
 
+function MilestoneRow({ m, isLast }: { m: Milestone; isLast: boolean }) {
+  const c = DEPT_COLORS[m.dept]
   return (
-    <div className="space-y-0.5 min-w-[130px]">
-      <div className="flex items-center gap-1.5">
-        {status === 'done'
-          ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
-          : <Clock className="h-3.5 w-3.5 text-yellow-500 shrink-0 animate-pulse" />}
-        {person && <span className="text-xs font-semibold text-gray-800 truncate max-w-[110px]">{person}</span>}
+    <div className="flex gap-3">
+      {/* Icon + connector line */}
+      <div className="flex flex-col items-center">
+        <div className={`h-6 w-6 rounded-full flex items-center justify-center shrink-0 z-10 ${
+          m.status === 'done'   ? 'bg-green-100' :
+          m.status === 'active' ? 'bg-yellow-100' : 'bg-gray-100'
+        }`}>
+          {m.status === 'done'   && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+          {m.status === 'active' && <Clock className="h-4 w-4 text-yellow-500" />}
+          {m.status === 'pending' && <Circle className="h-4 w-4 text-gray-300" />}
+        </div>
+        {!isLast && <div className="w-px flex-1 bg-gray-200 mt-1" />}
       </div>
-      {assignedBy && (
-        <p className="text-xs text-gray-400 pl-5">by {assignedBy}</p>
-      )}
-      {startDate && (
-        <p className="text-xs text-gray-500 pl-5 whitespace-nowrap">
-          {fmt(startDate)}
-          {endDate
-            ? <> → <span className="text-green-600 font-medium">{fmt(endDate)}</span></>
-            : status === 'active'
-              ? <span className="text-yellow-600"> (ongoing)</span>
-              : null}
-        </p>
-      )}
-      {extra && <p className="text-xs text-gray-400 pl-5">{extra}</p>}
+
+      {/* Content */}
+      <div className={`pb-4 flex-1 min-w-0`}>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className={`text-sm font-medium ${
+              m.status === 'done' ? 'text-gray-800' :
+              m.status === 'active' ? 'text-gray-900' : 'text-gray-400'
+            }`}>{m.label}</p>
+            {(m.person || m.byPerson) && m.status !== 'pending' && (
+              <p className="text-xs text-gray-500 mt-0.5">
+                {m.person && <span className="font-medium text-gray-700">{m.person}</span>}
+                {m.byPerson && <span className="text-gray-400"> · by {m.byPerson}</span>}
+              </p>
+            )}
+          </div>
+          {m.date && m.status !== 'pending' && (
+            <span className="text-xs text-gray-400 whitespace-nowrap shrink-0">{fmt(m.date)}</span>
+          )}
+          {m.status === 'active' && !m.date && (
+            <span className="text-xs text-yellow-500 whitespace-nowrap shrink-0">In progress</span>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function DeptSection({ dept, title, milestones }: { dept: string; title: string; milestones: Milestone[] }) {
+  const c = DEPT_COLORS[dept]
+  const allDone = milestones.every(m => m.status === 'done')
+  const anyActive = milestones.some(m => m.status === 'active' || m.status === 'done')
+  return (
+    <div className={`rounded-lg border ${c.border} ${anyActive ? c.bg : 'bg-gray-50 border-gray-100'} px-4 pt-3 pb-1`}>
+      <p className={`text-xs font-semibold uppercase tracking-wider mb-3 ${anyActive ? c.text : 'text-gray-400'}`}>
+        {title}
+        {allDone && <span className="ml-2 text-green-600">✓</span>}
+      </p>
+      <div>
+        {milestones.map((m, i) => (
+          <MilestoneRow key={m.id} m={m} isLast={i === milestones.length - 1} />
+        ))}
+      </div>
     </div>
   )
 }
@@ -81,7 +111,6 @@ export default async function PipelinePage() {
     { data: designSubmissions },
     { data: samplingRows },
     { data: merchandisingRows },
-    { data: bomRows },
     { data: activityLogs },
     { data: allProfiles },
   ] = await Promise.all([
@@ -90,11 +119,10 @@ export default async function PipelinePage() {
       .order('created_at', { ascending: false }),
     supabase.from('design_data').select('product_id, assigned_to'),
     supabase.from('design_submissions')
-      .select('product_id, submitted_by, status, created_at, reviewed_at')
+      .select('product_id, submitted_by, status, created_at, reviewed_at, reviewed_by')
       .order('created_at', { ascending: true }),
-    supabase.from('sampling_data').select('product_id, sampler_name, reviewed_at, is_completed'),
+    supabase.from('sampling_data').select('product_id, sampler_name, reviewed_at, reviewed_by'),
     supabase.from('merchandising_data').select('product_id, assigned_to, is_completed'),
-    supabase.from('bom_data').select('product_id, is_completed'),
     supabase.from('activity_logs')
       .select('product_id, created_at, action, user_id')
       .order('created_at', { ascending: true }),
@@ -104,6 +132,7 @@ export default async function PipelinePage() {
   // ── Lookup maps ────────────────────────────────────────────────────────────
   const profileMap = new Map<string, string>()
   for (const p of allProfiles || []) profileMap.set(p.id, p.full_name)
+  const name = (id?: string | null) => (id ? profileMap.get(id) || '—' : null)
 
   const designMap = new Map<string, string | null>()
   for (const d of designRows || []) designMap.set(d.product_id, d.assigned_to)
@@ -114,105 +143,197 @@ export default async function PipelinePage() {
   const merchMap = new Map<string, typeof merchandisingRows extends (infer T)[] | null ? T : never>()
   for (const m of merchandisingRows || []) merchMap.set(m.product_id, m)
 
-  const bomMap = new Map<string, boolean>()
-  for (const b of bomRows || []) bomMap.set(b.product_id, b.is_completed)
-
-  // ── Activity log lookups (first occurrence per product per action type) ────
+  // ── Activity log maps: first occurrence per product per action type ────────
   type LogEntry = { created_at: string; user_id: string | null }
-  const salesLog          = new Map<string, LogEntry>()
-  const designAssignLog   = new Map<string, LogEntry>()
-  const designDoneLog     = new Map<string, LogEntry>()
-  const samplingSubmitLog = new Map<string, LogEntry>()
-  const samplingMgmtLog   = new Map<string, LogEntry>()
-  const samplingDoneLog   = new Map<string, LogEntry>()
-  const merchAssignLog    = new Map<string, LogEntry>()
-  const merchSubmitLog    = new Map<string, LogEntry>()
-  const merchDoneLog      = new Map<string, LogEntry>()
-  const bomDoneLog        = new Map<string, LogEntry>()
+  type LogMap = Map<string, LogEntry>
+  const L = () => new Map<string, LogEntry>() as LogMap
+
+  const salesCreateLog    = L()
+  const salesCompleteLog  = L()
+  const designAssignLog   = L()
+  const illUploadLog      = L()
+  const illSubmitLog      = L()
+  const illApproveLog     = L()
+  const designCompleteLog = L()
+  const sampSubmitLog     = L()
+  const sampApproveLog    = L()
+  const sampDoneLog       = L()
+  const merchAssignLog    = L()
+  const merchSubmitLog    = L()
+  const merchDoneLog      = L()
+  const bomDoneLog        = L()
 
   for (const log of activityLogs || []) {
     const pid = log.product_id
     if (!pid) continue
-    const a = log.action?.toLowerCase() || ''
-    const entry: LogEntry = { created_at: log.created_at, user_id: log.user_id }
+    const a = (log.action || '').toLowerCase()
+    const e: LogEntry = { created_at: log.created_at, user_id: log.user_id }
 
-    if (a.includes('created product with sales requirement') && !salesLog.has(pid)) salesLog.set(pid, entry)
-    if (a.startsWith('assigned design to') && !designAssignLog.has(pid))       designAssignLog.set(pid, entry)
-    if (a.includes('marked design complete') && !designDoneLog.has(pid))       designDoneLog.set(pid, entry)
-    if (a.includes('marked sample complete') && !samplingSubmitLog.has(pid))   samplingSubmitLog.set(pid, entry)
-    if (a.includes('management approved sample') && !samplingMgmtLog.has(pid)) samplingMgmtLog.set(pid, entry)
-    if (a.includes('sampling complete') && a.includes('stage advanced') && !samplingDoneLog.has(pid)) samplingDoneLog.set(pid, entry)
-    if (a.startsWith('assigned merchandising') && !merchAssignLog.has(pid))    merchAssignLog.set(pid, entry)
-    if (a.includes('submitted attribute sheet') && !merchSubmitLog.has(pid))   merchSubmitLog.set(pid, entry)
-    if (a.includes('marked merchandising complete') && !merchDoneLog.has(pid)) merchDoneLog.set(pid, entry)
-    if (a.includes('marked bom complete') && !bomDoneLog.has(pid))             bomDoneLog.set(pid, entry)
+    if (a.includes('created product with sales') && !salesCreateLog.has(pid))   salesCreateLog.set(pid, e)
+    if (a.includes('marked sales complete') && !salesCompleteLog.has(pid))      salesCompleteLog.set(pid, e)
+    if (a.startsWith('assigned design to') && !designAssignLog.has(pid))        designAssignLog.set(pid, e)
+    if (a.startsWith('uploaded') && a.includes('illustration') && !illUploadLog.has(pid)) illUploadLog.set(pid, e)
+    if (a.includes('submitted design illustrations') && !illSubmitLog.has(pid)) illSubmitLog.set(pid, e)
+    if (a.includes('design submission approved') && !illApproveLog.has(pid))    illApproveLog.set(pid, e)
+    if (a.includes('marked design complete') && !designCompleteLog.has(pid))    designCompleteLog.set(pid, e)
+    if (a.includes('marked sample complete') && !sampSubmitLog.has(pid))        sampSubmitLog.set(pid, e)
+    if (a.includes('management approved sample') && !sampApproveLog.has(pid))   sampApproveLog.set(pid, e)
+    if (a.includes('sampling complete') && a.includes('stage advanced') && !sampDoneLog.has(pid)) sampDoneLog.set(pid, e)
+    if (a.startsWith('assigned merchandising') && !merchAssignLog.has(pid))     merchAssignLog.set(pid, e)
+    if (a.includes('submitted attribute sheet') && !merchSubmitLog.has(pid))    merchSubmitLog.set(pid, e)
+    if (a.includes('marked merchandising complete') && !merchDoneLog.has(pid))  merchDoneLog.set(pid, e)
+    if (a.includes('marked bom complete') && !bomDoneLog.has(pid))              bomDoneLog.set(pid, e)
   }
 
-  // ── Design submissions per product ─────────────────────────────────────────
-  const dsFirstSubmit  = new Map<string, string>()
-  const dsApprovedAt   = new Map<string, string>()
+  // Design submissions: first submit + first approval
+  const dsFirstSubmit = new Map<string, string>()
+  const dsFirstApprove = new Map<string, { at: string; by: string | null }>()
   for (const sub of designSubmissions || []) {
     if (!dsFirstSubmit.has(sub.product_id)) dsFirstSubmit.set(sub.product_id, sub.created_at)
-    if (sub.status === 'approved' && !dsApprovedAt.has(sub.product_id)) dsApprovedAt.set(sub.product_id, sub.reviewed_at || sub.created_at)
+    if (sub.status === 'approved' && !dsFirstApprove.has(sub.product_id)) {
+      dsFirstApprove.set(sub.product_id, { at: sub.reviewed_at || sub.created_at, by: sub.reviewed_by })
+    }
   }
 
-  // ── Build pipeline rows ────────────────────────────────────────────────────
-  const rows = (products || []).map(product => {
+  // ── Build milestone list for each product ─────────────────────────────────
+  const stageOrder = ['draft','design_completed','sampling_completed','merchandising_completed','bom_finalized','marketing_ready','sales_priced','product_live']
+
+  const pipelineRows = (products || []).map(product => {
     const pid = product.id
-    const stage = product.workflow_stage
+    const si = stageOrder.indexOf(product.workflow_stage)
+    const past = (s: string) => si > stageOrder.indexOf(s)
+    const atOrPast = (s: string) => si >= stageOrder.indexOf(s)
 
-    const stageOrder = ['draft','design_completed','sampling_completed','merchandising_completed','bom_finalized','marketing_ready','sales_priced','product_live']
-    const stageIdx = stageOrder.indexOf(stage)
-    const past = (s: string) => stageIdx > stageOrder.indexOf(s)
-    const at   = (s: string) => stage === s
+    const designedTo = designMap.get(pid)
+    const sampling   = samplingMap.get(pid)
+    const merch      = merchMap.get(pid)
+    const dsApprove  = dsFirstApprove.get(pid)
 
-    // Design
-    const designAssignedTo    = designMap.get(pid)
-    const designAssignEntry   = designAssignLog.get(pid)
-    const designDoneEntry     = designDoneLog.get(pid)
-    const designFirstSubmit   = dsFirstSubmit.get(pid) || null
-    const designApprovedAt    = dsApprovedAt.get(pid) || null
-    const designStatus: StageStatus = past('design_completed') || at('design_completed')
-      ? (designDoneEntry ? 'done' : 'active')
-      : (designAssignedTo || designAssignEntry ? 'active' : 'pending')
-
-    // Sampling
-    const sampling            = samplingMap.get(pid)
-    const samplingSubmitEntry = samplingSubmitLog.get(pid)
-    const samplingDoneEntry   = samplingDoneLog.get(pid)
-    const samplingStatus: StageStatus = past('sampling_completed') || at('sampling_completed')
-      ? (samplingDoneEntry ? 'done' : 'active')
-      : (samplingSubmitEntry ? 'active' : 'pending')
-
-    // Merchandising
-    const merch             = merchMap.get(pid)
-    const merchAssignEntry  = merchAssignLog.get(pid)
-    const merchSubmitEntry  = merchSubmitLog.get(pid)
-    const merchDoneEntry    = merchDoneLog.get(pid)
-    const merchStatus: StageStatus = past('merchandising_completed') || at('merchandising_completed')
-      ? (merchDoneEntry ? 'done' : 'active')
-      : (merch?.assigned_to || merchAssignEntry ? 'active' : 'pending')
-
-    // BOM
-    const bomDoneEntry = bomDoneLog.get(pid)
-    const bomDone = bomMap.get(pid) || false
-    const bomStatus: StageStatus = past('bom_finalized') || at('bom_finalized')
-      ? (bomDone || bomDoneEntry ? 'done' : 'active')
-      : 'pending'
-
-    const totalDays = diffDays(product.created_at, new Date().toISOString())
-    const salesEntry = salesLog.get(pid) || null
-
-    return {
-      product,
-      stageIdx,
-      totalDays,
-      salesEntry,
-      design: { status: designStatus, assignedToId: designAssignedTo, assignEntry: designAssignEntry, firstSubmit: designFirstSubmit, approvedAt: designApprovedAt, doneEntry: designDoneEntry },
-      sampling: { status: samplingStatus, data: sampling, submitEntry: samplingSubmitEntry, doneEntry: samplingDoneEntry },
-      merch: { status: merchStatus, data: merch, assignEntry: merchAssignEntry, submitEntry: merchSubmitEntry, doneEntry: merchDoneEntry },
-      bom: { status: bomStatus, doneEntry: bomDoneEntry },
+    const ms = (id: string, dept: string, label: string, opts: {
+      logEntry?: LogEntry | null
+      date?: string | null
+      person?: string | null
+      byPerson?: string | null
+      doneIf: boolean
+      activeIf: boolean
+    }): Milestone => {
+      const status: MilestoneStatus = opts.doneIf ? 'done' : opts.activeIf ? 'active' : 'pending'
+      return {
+        id, dept, label, status,
+        date: opts.date ?? opts.logEntry?.created_at ?? null,
+        person: opts.person ?? null,
+        byPerson: opts.byPerson ?? null,
+      }
     }
+
+    const milestones: Milestone[] = [
+      // ── SALES ──────────────────────────────────────────────────────────────
+      ms('sales_created', 'sales', 'Product created by Sales', {
+        logEntry: salesCreateLog.get(pid),
+        person: name(salesCreateLog.get(pid)?.user_id ?? product.created_by),
+        doneIf: !!salesCreateLog.has(pid) || !!product.created_by,
+        activeIf: false,
+      }),
+      ms('sales_complete', 'sales', 'Requirements shared with Design team', {
+        logEntry: salesCompleteLog.get(pid),
+        person: name(salesCompleteLog.get(pid)?.user_id),
+        doneIf: atOrPast('design_completed'),
+        activeIf: product.workflow_stage === 'draft',
+      }),
+      // ── DESIGN ─────────────────────────────────────────────────────────────
+      ms('design_assigned', 'design', 'Designer assigned', {
+        logEntry: designAssignLog.get(pid),
+        person: name(designedTo),
+        byPerson: name(designAssignLog.get(pid)?.user_id),
+        doneIf: !!designedTo || !!designAssignLog.has(pid),
+        activeIf: atOrPast('design_completed') && !designedTo,
+      }),
+      ms('ill_uploaded', 'design', 'Illustrations uploaded', {
+        logEntry: illUploadLog.get(pid),
+        person: name(illUploadLog.get(pid)?.user_id ?? designedTo),
+        doneIf: !!illUploadLog.has(pid),
+        activeIf: !!designedTo && !illUploadLog.has(pid) && atOrPast('design_completed'),
+      }),
+      ms('ill_submitted', 'design', 'Sent to design head for review', {
+        logEntry: illSubmitLog.get(pid),
+        date: dsFirstSubmit.get(pid) ?? null,
+        person: name(illSubmitLog.get(pid)?.user_id ?? designedTo),
+        doneIf: !!dsFirstSubmit.has(pid) || !!illSubmitLog.has(pid),
+        activeIf: !!illUploadLog.has(pid) && !dsFirstSubmit.has(pid),
+      }),
+      ms('ill_approved', 'design', 'Illustrations approved by Design Head', {
+        date: dsApprove?.at ?? null,
+        person: name(dsApprove?.by ?? illApproveLog.get(pid)?.user_id),
+        doneIf: !!dsApprove || !!illApproveLog.has(pid),
+        activeIf: !!dsFirstSubmit.has(pid) && !dsApprove,
+      }),
+      ms('design_done', 'design', 'Tech pack filled — Design completed', {
+        logEntry: designCompleteLog.get(pid),
+        person: name(designCompleteLog.get(pid)?.user_id),
+        doneIf: !!designCompleteLog.has(pid) || atOrPast('sampling_completed'),
+        activeIf: !!dsApprove && !designCompleteLog.has(pid),
+      }),
+      // ── SAMPLING ───────────────────────────────────────────────────────────
+      ms('samp_started', 'sampling', 'Sampling started', {
+        date: sampSubmitLog.get(pid)?.created_at ?? (atOrPast('sampling_completed') ? product.created_at : null),
+        person: sampling?.sampler_name,
+        doneIf: !!sampSubmitLog.has(pid) || atOrPast('merchandising_completed'),
+        activeIf: atOrPast('sampling_completed') && !sampSubmitLog.has(pid),
+      }),
+      ms('samp_submitted', 'sampling', 'Sample sent for management approval', {
+        logEntry: sampSubmitLog.get(pid),
+        person: name(sampSubmitLog.get(pid)?.user_id),
+        doneIf: !!sampSubmitLog.has(pid),
+        activeIf: atOrPast('sampling_completed') && !sampSubmitLog.has(pid),
+      }),
+      ms('samp_approved', 'sampling', 'Sample approved by management', {
+        logEntry: sampApproveLog.get(pid),
+        person: name(sampApproveLog.get(pid)?.user_id ?? sampling?.reviewed_by),
+        date: sampApproveLog.get(pid)?.created_at ?? sampling?.reviewed_at ?? null,
+        doneIf: !!sampApproveLog.has(pid) || !!sampling?.reviewed_at,
+        activeIf: !!sampSubmitLog.has(pid) && !sampApproveLog.has(pid),
+      }),
+      ms('samp_done', 'sampling', 'Sampling completed — sent to Merchandising', {
+        logEntry: sampDoneLog.get(pid),
+        person: name(sampDoneLog.get(pid)?.user_id),
+        doneIf: !!sampDoneLog.has(pid) || atOrPast('merchandising_completed'),
+        activeIf: !!sampApproveLog.has(pid) && !sampDoneLog.has(pid),
+      }),
+      // ── MERCHANDISING ──────────────────────────────────────────────────────
+      ms('merch_assigned', 'merchandising', 'Merchandising task assigned', {
+        logEntry: merchAssignLog.get(pid),
+        person: name(merch?.assigned_to),
+        byPerson: name(merchAssignLog.get(pid)?.user_id),
+        doneIf: !!merch?.assigned_to || !!merchAssignLog.has(pid),
+        activeIf: atOrPast('merchandising_completed') && !merch?.assigned_to,
+      }),
+      ms('merch_submitted', 'merchandising', 'Attribute sheet submitted to head', {
+        logEntry: merchSubmitLog.get(pid),
+        person: name(merchSubmitLog.get(pid)?.user_id),
+        doneIf: !!merchSubmitLog.has(pid),
+        activeIf: !!merch?.assigned_to && !merchSubmitLog.has(pid) && atOrPast('merchandising_completed'),
+      }),
+      ms('merch_done', 'merchandising', 'Merchandising completed — sent to BOM', {
+        logEntry: merchDoneLog.get(pid),
+        person: name(merchDoneLog.get(pid)?.user_id),
+        doneIf: !!merchDoneLog.has(pid) || atOrPast('bom_finalized'),
+        activeIf: (!!merch?.assigned_to || !!merchSubmitLog.has(pid)) && !merchDoneLog.has(pid) && atOrPast('merchandising_completed'),
+      }),
+      // ── BOM ────────────────────────────────────────────────────────────────
+      ms('bom_done', 'bom', 'BOM completed — sent to Marketing', {
+        logEntry: bomDoneLog.get(pid),
+        person: name(bomDoneLog.get(pid)?.user_id),
+        doneIf: !!bomDoneLog.has(pid) || atOrPast('marketing_ready'),
+        activeIf: atOrPast('bom_finalized') && !bomDoneLog.has(pid),
+      }),
+      // ── MARKETING ──────────────────────────────────────────────────────────
+      ms('marketing', 'marketing', 'Marketing stage', {
+        doneIf: atOrPast('sales_priced'),
+        activeIf: product.workflow_stage === 'marketing_ready',
+      }),
+    ]
+
+    return { product, milestones, totalDays: diffDays(product.created_at, new Date().toISOString()) }
   })
 
   const stageColor: Record<string, string> = {
@@ -226,223 +347,58 @@ export default async function PipelinePage() {
     product_live: 'bg-green-100 text-green-700',
   }
 
+  const DEPT_SECTIONS: { dept: string; title: string; ids: string[] }[] = [
+    { dept: 'sales',         title: 'Sales',         ids: ['sales_created','sales_complete'] },
+    { dept: 'design',        title: 'Design',        ids: ['design_assigned','ill_uploaded','ill_submitted','ill_approved','design_done'] },
+    { dept: 'sampling',      title: 'Sampling',      ids: ['samp_started','samp_submitted','samp_approved','samp_done'] },
+    { dept: 'merchandising', title: 'Merchandising', ids: ['merch_assigned','merch_submitted','merch_done'] },
+    { dept: 'bom',           title: 'BOM',           ids: ['bom_done'] },
+    { dept: 'marketing',     title: 'Marketing',     ids: ['marketing'] },
+  ]
+
   return (
     <div>
-      <Header title="Product Pipeline" subtitle="Full lifecycle tracking — who assigned what, when, and when it was completed" />
-      <div className="p-6">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <GitBranch className="h-4 w-4 text-gray-400" />
-              All Products ({rows.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {rows.length === 0 ? (
-              <p className="text-sm text-gray-400 px-6 py-4">No products yet.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm border-collapse">
-                  <thead>
-                    <tr className="border-b border-gray-100">
-                      {/* Product */}
-                      <th className="text-left px-5 py-2.5 text-xs font-semibold text-gray-500 uppercase bg-gray-50 sticky left-0 z-10 min-w-[180px]">Product</th>
-                      <th className="text-center px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase bg-gray-50 whitespace-nowrap">Created</th>
-                      {/* Sales */}
-                      <th className="text-center px-3 py-2.5 text-xs font-semibold text-rose-600 uppercase bg-rose-50 border-l border-rose-100 whitespace-nowrap">Sales</th>
-                      {/* Design */}
-                      <th colSpan={3} className="text-center px-3 py-2.5 text-xs font-semibold text-blue-600 uppercase bg-blue-50 border-l border-blue-100">Design</th>
-                      {/* Sampling */}
-                      <th colSpan={2} className="text-center px-3 py-2.5 text-xs font-semibold text-purple-600 uppercase bg-purple-50 border-l border-purple-100">Sampling</th>
-                      {/* Merchandising */}
-                      <th colSpan={3} className="text-center px-3 py-2.5 text-xs font-semibold text-teal-600 uppercase bg-teal-50 border-l border-teal-100">Merchandising</th>
-                      {/* BOM */}
-                      <th className="text-center px-3 py-2.5 text-xs font-semibold text-orange-600 uppercase bg-orange-50 border-l border-orange-100">BOM</th>
-                      {/* Stage / Days */}
-                      <th className="text-center px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase bg-gray-50 whitespace-nowrap">Stage</th>
-                      <th className="text-center px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase bg-gray-50">Days</th>
-                    </tr>
-                    <tr className="border-b-2 border-gray-200 text-xs text-gray-400 font-medium">
-                      <th className="px-5 py-2 bg-gray-50 sticky left-0 z-10" />
-                      <th className="px-3 py-2 bg-gray-50" />
-                      {/* Sales sub-header */}
-                      <th className="px-3 py-2 bg-rose-50 border-l border-rose-100 font-medium whitespace-nowrap text-left">Submitted By / On</th>
-                      {/* Design sub-headers */}
-                      <th className="px-3 py-2 bg-blue-50 border-l border-blue-100 font-medium whitespace-nowrap text-left">Assigned To / By</th>
-                      <th className="px-3 py-2 bg-blue-50 font-medium whitespace-nowrap text-left">1st Submit</th>
-                      <th className="px-3 py-2 bg-blue-50 font-medium whitespace-nowrap text-left">Approved / Done</th>
-                      {/* Sampling sub-headers */}
-                      <th className="px-3 py-2 bg-purple-50 border-l border-purple-100 font-medium whitespace-nowrap text-left">Sampler / Submitted</th>
-                      <th className="px-3 py-2 bg-purple-50 font-medium whitespace-nowrap text-left">Mgmt Approved / Done</th>
-                      {/* Merch sub-headers */}
-                      <th className="px-3 py-2 bg-teal-50 border-l border-teal-100 font-medium whitespace-nowrap text-left">Assigned To / By</th>
-                      <th className="px-3 py-2 bg-teal-50 font-medium whitespace-nowrap text-left">Submitted</th>
-                      <th className="px-3 py-2 bg-teal-50 font-medium whitespace-nowrap text-left">Completed</th>
-                      {/* BOM */}
-                      <th className="px-3 py-2 bg-orange-50 border-l border-orange-100 font-medium whitespace-nowrap text-left">Completed</th>
-                      <th className="px-3 py-2 bg-gray-50" />
-                      <th className="px-3 py-2 bg-gray-50" />
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {rows.map(({ product, totalDays, salesEntry, design, sampling, merch, bom }) => (
-                      <tr key={product.id} className="hover:bg-gray-50 align-top">
-                        {/* Product name */}
-                        <td className="px-5 py-3 sticky left-0 bg-white border-r border-gray-100 z-10">
-                          <Link href={`/products/${product.id}`} className="font-medium text-gray-900 hover:text-blue-600 text-sm line-clamp-2 block max-w-[200px]">
-                            {product.name}
-                          </Link>
-                        </td>
-                        {/* Created */}
-                        <td className="px-3 py-3 text-center">
-                          <p className="text-xs text-gray-600 whitespace-nowrap">{fmt(product.created_at)}</p>
-                          {product.created_by && (
-                            <p className="text-xs text-gray-400 mt-0.5">{profileMap.get(product.created_by) || '—'}</p>
-                          )}
-                        </td>
+      <Header title="Product Pipeline" subtitle="Full lifecycle milestone tracking for every product" />
+      <div className="p-6 space-y-6">
 
-                        {/* ── Sales: Submitted By / On ── */}
-                        <td className="px-3 py-3 border-l border-rose-50">
-                          {salesEntry ? (
-                            <div className="space-y-0.5">
-                              <div className="flex items-center gap-1.5">
-                                <CheckCircle2 className="h-3.5 w-3.5 text-rose-500 shrink-0" />
-                                <span className="text-xs font-semibold text-gray-800">{salesEntry.user_id ? profileMap.get(salesEntry.user_id) || '—' : '—'}</span>
-                              </div>
-                              <p className="text-xs text-gray-500 pl-5 whitespace-nowrap">{fmt(salesEntry.created_at)}</p>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-1.5 text-gray-300">
-                              <Minus className="h-3.5 w-3.5 shrink-0" />
-                              <span className="text-xs">—</span>
-                            </div>
-                          )}
-                        </td>
+        {pipelineRows.length === 0 && (
+          <p className="text-sm text-gray-400">No products yet.</p>
+        )}
 
-                        {/* ── Design: Assigned To / By ── */}
-                        <td className="px-3 py-3 border-l border-blue-50">
-                          <StageCell
-                            status={design.status}
-                            person={design.assignedToId ? profileMap.get(design.assignedToId) : null}
-                            assignedBy={design.assignEntry?.user_id ? profileMap.get(design.assignEntry.user_id) : null}
-                            startDate={design.assignEntry?.created_at || null}
-                            endDate={design.doneEntry?.created_at || null}
-                          />
-                        </td>
-                        {/* ── Design: 1st Submit ── */}
-                        <td className="px-3 py-3">
-                          {design.firstSubmit ? (
-                            <p className="text-xs text-gray-600 whitespace-nowrap">{fmt(design.firstSubmit)}</p>
-                          ) : (
-                            <span className="text-gray-300 text-xs">—</span>
-                          )}
-                        </td>
-                        {/* ── Design: Approved / Done ── */}
-                        <td className="px-3 py-3">
-                          {design.approvedAt ? (
-                            <div>
-                              <p className="text-xs text-green-600 font-medium whitespace-nowrap">Images: {fmt(design.approvedAt)}</p>
-                              {design.doneEntry && <p className="text-xs text-green-700 font-semibold whitespace-nowrap mt-0.5">Done: {fmt(design.doneEntry.created_at)}</p>}
-                            </div>
-                          ) : design.doneEntry ? (
-                            <p className="text-xs text-green-700 font-semibold whitespace-nowrap">Done: {fmt(design.doneEntry.created_at)}</p>
-                          ) : (
-                            <span className="text-gray-300 text-xs">—</span>
-                          )}
-                        </td>
+        {pipelineRows.map(({ product, milestones, totalDays }) => {
+          const msMap = new Map(milestones.map(m => [m.id, m]))
 
-                        {/* ── Sampling: Sampler / Submitted ── */}
-                        <td className="px-3 py-3 border-l border-purple-50">
-                          <StageCell
-                            status={sampling.status}
-                            person={sampling.data?.sampler_name}
-                            startDate={sampling.submitEntry?.created_at || null}
-                          />
-                        </td>
-                        {/* ── Sampling: Mgmt Approved / Done ── */}
-                        <td className="px-3 py-3">
-                          {sampling.data?.reviewed_at ? (
-                            <div>
-                              <p className="text-xs text-green-600 font-medium whitespace-nowrap">Approved: {fmt(sampling.data.reviewed_at)}</p>
-                              {sampling.doneEntry && <p className="text-xs text-green-700 font-semibold whitespace-nowrap mt-0.5">Done: {fmt(sampling.doneEntry.created_at)}</p>}
-                            </div>
-                          ) : sampling.doneEntry ? (
-                            <p className="text-xs text-green-700 font-semibold">Done: {fmt(sampling.doneEntry.created_at)}</p>
-                          ) : (
-                            <span className="text-gray-300 text-xs">—</span>
-                          )}
-                        </td>
-
-                        {/* ── Merch: Assigned To / By ── */}
-                        <td className="px-3 py-3 border-l border-teal-50">
-                          <StageCell
-                            status={merch.status}
-                            person={merch.data?.assigned_to ? profileMap.get(merch.data.assigned_to) : null}
-                            assignedBy={merch.assignEntry?.user_id ? profileMap.get(merch.assignEntry.user_id) : null}
-                            startDate={merch.assignEntry?.created_at || null}
-                          />
-                        </td>
-                        {/* ── Merch: Submitted ── */}
-                        <td className="px-3 py-3">
-                          {merch.submitEntry ? (
-                            <p className="text-xs text-gray-600 whitespace-nowrap">{fmt(merch.submitEntry.created_at)}</p>
-                          ) : (
-                            <span className="text-gray-300 text-xs">—</span>
-                          )}
-                        </td>
-                        {/* ── Merch: Completed ── */}
-                        <td className="px-3 py-3">
-                          {merch.doneEntry ? (
-                            <div className="space-y-0.5">
-                              <div className="flex items-center gap-1.5">
-                                <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
-                                <span className="text-xs font-semibold text-gray-800">{merch.doneEntry.user_id ? profileMap.get(merch.doneEntry.user_id) : '—'}</span>
-                              </div>
-                              <p className="text-xs text-green-700 font-medium pl-5 whitespace-nowrap">{fmt(merch.doneEntry.created_at)}</p>
-                            </div>
-                          ) : (
-                            <span className="text-gray-300 text-xs">—</span>
-                          )}
-                        </td>
-
-                        {/* ── BOM: Completed ── */}
-                        <td className="px-3 py-3 border-l border-orange-50">
-                          {bom.doneEntry ? (
-                            <div className="space-y-0.5">
-                              <div className="flex items-center gap-1.5">
-                                <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
-                                <span className="text-xs font-semibold text-gray-800">{bom.doneEntry.user_id ? profileMap.get(bom.doneEntry.user_id) : '—'}</span>
-                              </div>
-                              <p className="text-xs text-green-700 font-medium pl-5 whitespace-nowrap">{fmt(bom.doneEntry.created_at)}</p>
-                            </div>
-                          ) : bom.status === 'active' ? (
-                            <span className="inline-flex items-center gap-1 text-xs text-yellow-600">
-                              <Clock className="h-3 w-3 animate-pulse" /> In progress
-                            </span>
-                          ) : (
-                            <span className="text-gray-300 text-xs">—</span>
-                          )}
-                        </td>
-
-                        {/* Stage */}
-                        <td className="px-3 py-3 text-center">
-                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${stageColor[product.workflow_stage] || 'bg-gray-100 text-gray-500'}`}>
-                            {STAGE_LABELS[product.workflow_stage as keyof typeof STAGE_LABELS] || product.workflow_stage}
-                          </span>
-                        </td>
-
-                        {/* Total days */}
-                        <td className="px-3 py-3 text-center">
-                          <span className="text-xs text-gray-500">{totalDays !== null ? `${totalDays}d` : '—'}</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          return (
+            <div key={product.id} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              {/* Product header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gray-50">
+                <div className="flex items-center gap-3 min-w-0">
+                  <GitBranch className="h-4 w-4 text-gray-400 shrink-0" />
+                  <Link href={`/products/${product.id}`} className="font-semibold text-gray-900 hover:text-blue-600 truncate flex items-center gap-1.5">
+                    {product.name}
+                    <ExternalLink className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                  </Link>
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ${stageColor[product.workflow_stage] || 'bg-gray-100 text-gray-500'}`}>
+                    {STAGE_LABELS[product.workflow_stage as keyof typeof STAGE_LABELS] || product.workflow_stage}
+                  </span>
+                </div>
+                <div className="text-xs text-gray-400 shrink-0 ml-4">
+                  Day {totalDays ?? 0} · Started {fmt(product.created_at)}
+                </div>
               </div>
-            )}
-          </CardContent>
-        </Card>
+
+              {/* Pipeline body */}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 p-4">
+                {DEPT_SECTIONS.map(({ dept, title, ids }) => {
+                  const sectionMilestones = ids.map(id => msMap.get(id)).filter(Boolean) as Milestone[]
+                  return (
+                    <DeptSection key={dept} dept={dept} title={title} milestones={sectionMilestones} />
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

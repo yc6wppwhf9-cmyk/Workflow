@@ -297,11 +297,11 @@ export const WORKFLOW_STAGES: WorkflowStage[] = [
 
 export const STAGE_LABELS: Record<WorkflowStage, string> = {
   draft: 'Sales',
-  design_completed: 'Design Completed',
+  design_completed: 'Design',
   sampling_completed: 'Sampling',
-  merchandising_completed: 'Merchandising Completed',
-  bom_finalized: 'BOM Finalized',
-  marketing_ready: 'Marketing Completed',
+  merchandising_completed: 'Merchandising',
+  bom_finalized: 'BOM',
+  marketing_ready: 'Marketing',
   sales_priced: 'Sales Priced',
   product_live: 'Product Live',
 }

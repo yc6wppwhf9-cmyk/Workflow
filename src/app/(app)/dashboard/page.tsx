@@ -259,6 +259,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       { data: myAssignments },
       { data: mySubmissions },
       { data: myFiles },
+      { data: pendingSamples },
     ] = await Promise.all([
       supabase.from('design_data')
         .select('product_id, is_completed, product:products(id, name, workflow_stage, created_at, sales_data(deadline_date), sampling_data(sample_review_status, updated_at))')
@@ -272,6 +273,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         .eq('uploaded_by', userId)
         .eq('department', 'design')
         .like('file_type', 'image/%'),
+      supabase.from('sampling_data')
+        .select('product_id, sample_review_status, updated_at, product:products(id, name, workflow_stage)')
+        .eq('sample_review_status', 'pending_review'),
     ])
 
     type MySubRow = NonNullable<typeof mySubmissions>[number]
@@ -307,7 +311,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     const approvalRate = totalSubs > 0 ? Math.round((approvedSubs / totalSubs) * 100) : 0
 
     const pendingReview = assignments.filter(a => a.latestSub?.status === 'pending').length
-    const pendingSampleApproval = assignments.filter(a => a.product?.workflow_stage === 'sampling_completed' && a.sample?.sample_review_status === 'pending_review').length
+    const pendingSampleApproval = (pendingSamples || []).length
     const needsWork = assignments.filter(a => !a.latestSub || a.latestSub.status === 'rejected').length
 
     return (
@@ -338,17 +342,20 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {assignments.filter(a => a.product?.workflow_stage === 'sampling_completed' && a.sample?.sample_review_status === 'pending_review').map(a => (
-                      <tr key={a.product_id} className="hover:bg-cyan-50">
-                        <td className="px-6 py-3 font-medium text-gray-900">{a.product?.name}</td>
-                        <td className="px-4 py-3 text-xs text-gray-500">{a.sample?.updated_at ? `${daysSince(a.sample.updated_at)}d ago` : 'Today'}</td>
-                        <td className="px-4 py-3 text-right">
-                          <Link href={`/products/${a.product_id}?tab=sampling`} className="text-xs text-blue-600 hover:underline flex items-center gap-1 justify-end">
-                            Review Sample <ArrowRight className="h-3 w-3" />
-                          </Link>
-                        </td>
-                      </tr>
-                    ))}
+                    {(pendingSamples || []).map(s => {
+                      const prod = one(s.product) as { id: string; name: string } | null
+                      return (
+                        <tr key={s.product_id} className="hover:bg-cyan-50">
+                          <td className="px-6 py-3 font-medium text-gray-900">{prod?.name ?? s.product_id}</td>
+                          <td className="px-4 py-3 text-xs text-gray-500">{s.updated_at ? `${daysSince(s.updated_at)}d ago` : 'Today'}</td>
+                          <td className="px-4 py-3 text-right">
+                            <Link href={`/products/${s.product_id}?tab=sampling`} className="text-xs text-blue-600 hover:underline flex items-center gap-1 justify-end">
+                              Review Sample <ArrowRight className="h-3 w-3" />
+                            </Link>
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </CardContent>

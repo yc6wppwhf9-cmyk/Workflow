@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { matchConsumptionToBom } from '@/lib/parse-cutting-sheet'
 
 // This route receives pre-parsed JSON from the browser.
 // The browser handles: Excel parsing, image extraction, Supabase Storage uploads.
 // This route only handles: DB field updates + activity log.
+
+// Admin client bypasses RLS for cross-department writes (e.g. merch upload pre-filling bom_data)
+const adminSupabase = createAdminClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -132,7 +139,7 @@ export async function POST(req: NextRequest) {
         bomRows = matchConsumptionToBom(bomRows, cutting_items)
       }
       updates.push(
-        supabase.from('bom_data').update({ items: bomRows, updated_by: user.id }).eq('product_id', product_id)
+        adminSupabase.from('bom_data').update({ items: bomRows, updated_by: user.id }).eq('product_id', product_id)
       )
       fields_updated.push('bom_items')
     }

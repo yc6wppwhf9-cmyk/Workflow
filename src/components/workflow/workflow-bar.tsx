@@ -8,13 +8,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
-import { WORKFLOW_STAGES, STAGE_LABELS, STAGE_OWNER_ROLE, type WorkflowStage, type Product, type Profile, type DesignData, type MerchandisingData, type BomData, type MarketingData, type SalesData } from '@/lib/types'
+import { WORKFLOW_STAGES, STAGE_LABELS, STAGE_OWNER_ROLE, type WorkflowStage, type Product, type Profile, type DesignData, type SamplingData, type MerchandisingData, type BomData, type MarketingData, type SalesData } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 interface WorkflowBarProps {
   product: Product
   profile: Profile
   designData: DesignData | null
+  samplingData: SamplingData | null
   merchandisingData: MerchandisingData | null
   bomData: BomData | null
   marketingData: MarketingData | null
@@ -22,7 +23,7 @@ interface WorkflowBarProps {
 }
 
 export function WorkflowBar({
-  product, profile, designData, merchandisingData,
+  product, profile, designData, samplingData, merchandisingData,
   bomData, marketingData, salesData,
 }: WorkflowBarProps) {
   const router = useRouter()
@@ -38,15 +39,17 @@ export function WorkflowBar({
   const DISPLAY_STAGES = [
     { label: 'Sales',         doneAfter: 0 },  // done when past draft
     { label: 'Design',        doneAfter: 1 },
-    { label: 'Merchandising', doneAfter: 2 },
-    { label: 'BOM',           doneAfter: 3 },
-    { label: 'Marketing',     doneAfter: 4 },
+    { label: 'Sampling',      doneAfter: 2 },
+    { label: 'Merchandising', doneAfter: 3 },
+    { label: 'BOM',           doneAfter: 4 },
+    { label: 'Marketing',     doneAfter: 5 },
   ]
 
   const isCurrentStageComplete = () => {
     switch (product.workflow_stage as WorkflowStage) {
       case 'draft':                  return salesData?.is_completed || false
       case 'design_completed':       return designData?.is_completed || false
+      case 'sampling_completed':     return !!samplingData?.is_completed && samplingData.sample_review_status === 'approved'
       case 'merchandising_completed': return merchandisingData?.is_completed || false
       case 'bom_finalized':          return bomData?.is_completed || false
       case 'marketing_ready':        return marketingData?.is_completed || false

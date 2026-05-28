@@ -81,6 +81,15 @@ export async function POST(req: NextRequest) {
       )
       fields_updated.push('dimensions', 'compartments', 'materials', 'weight', 'colour_variants')
     }
+  } else if (enrichedVariants.length > 0 && !isReupload) {
+    // No SKU fields matched, but we still have colour variants — save them separately
+    updates.push(
+      supabase.from('merchandising_data').update({
+        colour_variants: enrichedVariants,
+        updated_by: user.id,
+      }).eq('product_id', product_id)
+    )
+    fields_updated.push('colour_variants')
   }
 
   // Update product name from Excel style names (first upload only, or if name looks like a SKU placeholder)

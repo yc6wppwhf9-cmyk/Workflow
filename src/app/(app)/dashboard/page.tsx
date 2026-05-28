@@ -39,6 +39,33 @@ function KpiCard({ label, value, sub, icon: Icon, color, href, active }: {
   return inner
 }
 
+function daysSince(date?: string | null) {
+  if (!date) return 0
+  return Math.max(0, Math.floor((Date.now() - new Date(date).getTime()) / 86400000))
+}
+
+function isOverdue(date?: string | null) {
+  if (!date) return false
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const target = new Date(date)
+  target.setHours(0, 0, 0, 0)
+  return target < today
+}
+
+function stageOwnerLabel(stage: string) {
+  switch (stage) {
+    case 'draft': return 'Sales'
+    case 'design_completed': return 'Design'
+    case 'merchandising_completed': return 'Merchandising'
+    case 'bom_finalized': return 'BOM'
+    case 'marketing_ready': return 'Marketing'
+    case 'sales_priced': return 'Admin'
+    case 'product_live': return 'Live'
+    default: return 'Unknown'
+  }
+}
+
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ f?: string }> }) {
   const { f: filter } = await searchParams
   const show = (key: string) => !filter || filter === key
@@ -650,6 +677,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     { count: inProgressProducts },
     { data: recentProducts },
     { data: recentLogs },
+    { data: managementProducts },
     { count: designComplete },
     { count: merchComplete },
     { count: bomComplete },
@@ -661,6 +689,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     supabase.from('products').select('*', { count: 'exact', head: true }).not('workflow_stage', 'in', '(draft,product_live)'),
     supabase.from('products').select('id, name, sku, workflow_stage, created_at, bom_data(fg_inv_code)').order('created_at', { ascending: false }).limit(6),
     supabase.from('activity_logs').select('*, user:profiles(full_name), product:products(name, sku)').order('created_at', { ascending: false }).limit(8),
+    supabase.from('products')
+      .select('id, name, sku, workflow_stage, created_at, updated_at, design_data(is_completed, updated_at), merchandising_data(is_completed, updated_at), bom_data(is_completed, updated_at, fg_inv_code), marketing_data(is_completed, updated_at), sales_data(is_completed, updated_at, deadline_date)')
+      .order('updated_at', { ascending: true }),
     supabase.from('design_data').select('*', { count: 'exact', head: true }).eq('is_completed', true),
     supabase.from('merchandising_data').select('*', { count: 'exact', head: true }).eq('is_completed', true),
     supabase.from('bom_data').select('*', { count: 'exact', head: true }).eq('is_completed', true),
@@ -672,6 +703,65 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const deptTotal = total * 5
   const deptDone = (designComplete || 0) + (merchComplete || 0) + (bomComplete || 0) + (marketingComplete || 0) + (salesComplete || 0)
   const deptRate = deptTotal > 0 ? Math.round((deptDone / deptTotal) * 100) : 0
+  const isManagementView = ['admin', 'management', 'design_head'].includes(role)
+
+  type ManagementProduct = {
+    id: string
+    name: string | null
+    sku: string | null
+    workflow_stage: string
+    created_at: string
+    updated_at: string
+    design_data: { is_completed: boolean; updated_at: string }[] | null
+    merchandising_data: { is_completed: boolean; updated_at: string }[] | null
+    bom_data: { is_completed: boolean; updated_at: string; fg_inv_code: string | null }[] | null
+    marketing_data: { is_completed: boolean; updated_at: string }[] | null
+    sales_data: { is_completed: boolean; updated_at: string; deadline_date: string | null }[] | null
+  }
+  const mgmtProducts = (managementProducts || []) as unknown as ManagementProduct[]
+  const activeMgmtProducts = mgmtProducts.filter(p => p.workflow_stage !== 'product_live')
+  const stageCounts = activeMgmtProducts.reduce<Record<string, number>>((acc, p) => {
+    acc[p.workflow_stage] = (acc[p.workflow_stage] || 0) + 1
+    return acc
+  }, {})
+  const bottlenecks = Object.entries(stageCounts)
+    .map(([stage, count]) => ({ stage, count, owner: stageOwnerLabel(stage) }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5)
+  const stuckProducts = activeMgmtProducts
+    .map(p => ({ ...p, ageDays: daysSince(p.updated_at || p.created_at) }))
+    .filter(p => p.ageDays >= 7)
+    .sort((a, b) => b.ageDays - a.ageDays)
+    .slice(0, 6)
+  const overdueProducts = activeMgmtProducts
+    .map(p => ({ ...p, sales: one(p.sales_data) as { deadline_date: string | null; is_completed?: boolean } | null }))
+    .filter(p => isOverdue(p.sales?.deadline_date))
+    .sort((a, b) => new Date(a.sales?.deadline_date || '').getTime() - new Date(b.sales?.deadline_date || '').getTime())
+    .slice(0, 6)
+  const launchReadiness = mgmtProducts
+    .filter(p => ['bom_finalized', 'marketing_ready', 'sales_priced'].includes(p.workflow_stage))
+    .map(p => ({
+      ...p,
+      designDone: !!(one(p.design_data) as { is_completed: boolean } | null)?.is_completed,
+      merchDone: !!(one(p.merchandising_data) as { is_completed: boolean } | null)?.is_completed,
+      bomDone: !!(one(p.bom_data) as { is_completed: boolean } | null)?.is_completed,
+      marketingDone: !!(one(p.marketing_data) as { is_completed: boolean } | null)?.is_completed,
+      salesDone: !!(one(p.sales_data) as { is_completed: boolean } | null)?.is_completed,
+      fgInv: (one(p.bom_data) as { fg_inv_code: string | null } | null)?.fg_inv_code,
+    }))
+    .slice(0, 6)
+  const exceptions = mgmtProducts
+    .flatMap(p => {
+      const bom = one(p.bom_data) as { fg_inv_code: string | null; is_completed: boolean } | null
+      const sales = one(p.sales_data) as { deadline_date: string | null; is_completed: boolean } | null
+      const issues: string[] = []
+      if (!p.sku) issues.push('Missing SKU')
+      if (['bom_finalized', 'marketing_ready', 'sales_priced', 'product_live'].includes(p.workflow_stage) && !bom?.fg_inv_code) issues.push('Missing FG INV')
+      if (p.workflow_stage !== 'product_live' && !sales?.deadline_date) issues.push('No deadline')
+      if (issues.length === 0) return []
+      return [{ ...p, issues }]
+    })
+    .slice(0, 6)
 
   return (
     <div>
@@ -697,6 +787,117 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </CardContent>
           </Card>
         </div>
+
+        {isManagementView && (
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-blue-600" /> Bottleneck Stages
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {bottlenecks.length > 0 ? bottlenecks.map(item => {
+                  const pct = activeMgmtProducts.length > 0 ? Math.round((item.count / activeMgmtProducts.length) * 100) : 0
+                  return (
+                    <div key={item.stage}>
+                      <div className="flex items-center justify-between mb-1">
+                        <div>
+                          <StageBadge stage={item.stage} />
+                          <span className="ml-2 text-xs text-gray-500">{item.owner}</span>
+                        </div>
+                        <span className="text-sm font-semibold text-gray-900">{item.count}</span>
+                      </div>
+                      <Progress value={pct} className="h-2" />
+                    </div>
+                  )
+                }) : <p className="text-sm text-gray-400">No active bottlenecks.</p>}
+              </CardContent>
+            </Card>
+
+            <Card className={overdueProducts.length > 0 ? 'border-red-100' : ''}>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-red-500" /> Critical Exceptions
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {overdueProducts.slice(0, 3).map(p => (
+                  <div key={`overdue-${p.id}`} className="flex items-center justify-between border-b border-gray-50 pb-3 last:border-0 last:pb-0">
+                    <div>
+                      <Link href={`/products/${p.id}`} className="text-sm font-medium text-gray-900 hover:text-blue-600">{p.name || p.sku}</Link>
+                      <p className="text-xs text-red-600">Deadline crossed on {new Date(p.sales?.deadline_date || '').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</p>
+                    </div>
+                    <StageBadge stage={p.workflow_stage} />
+                  </div>
+                ))}
+                {exceptions.slice(0, Math.max(0, 4 - overdueProducts.length)).map(p => (
+                  <div key={`exception-${p.id}`} className="flex items-center justify-between border-b border-gray-50 pb-3 last:border-0 last:pb-0">
+                    <div>
+                      <Link href={`/products/${p.id}`} className="text-sm font-medium text-gray-900 hover:text-blue-600">{p.name || p.sku || 'Unnamed product'}</Link>
+                      <p className="text-xs text-amber-600">{p.issues.join(', ')}</p>
+                    </div>
+                    <StageBadge stage={p.workflow_stage} />
+                  </div>
+                ))}
+                {overdueProducts.length === 0 && exceptions.length === 0 && <p className="text-sm text-gray-400">No critical exceptions found.</p>}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-amber-500" /> Aging Watchlist
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 bg-gray-50">
+                      <th className="text-left px-6 py-2 text-xs font-semibold text-gray-400 uppercase">Product</th>
+                      <th className="text-left px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Stage</th>
+                      <th className="text-right px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Idle</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {stuckProducts.map(p => (
+                      <tr key={p.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-3"><Link href={`/products/${p.id}`} className="font-medium text-gray-900 hover:text-blue-600">{p.name || p.sku}</Link></td>
+                        <td className="px-4 py-3"><StageBadge stage={p.workflow_stage} /></td>
+                        <td className="px-4 py-3 text-right text-xs font-semibold text-amber-600">{p.ageDays}d</td>
+                      </tr>
+                    ))}
+                    {stuckProducts.length === 0 && <tr><td colSpan={3} className="text-center py-6 text-sm text-gray-400">Nothing idle for 7+ days.</td></tr>}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-green-600" /> Launch Readiness
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {launchReadiness.length > 0 ? launchReadiness.map(p => {
+                  const done = [p.designDone, p.merchDone, p.bomDone, p.marketingDone, p.salesDone].filter(Boolean).length
+                  const pct = Math.round((done / 5) * 100)
+                  return (
+                    <div key={p.id}>
+                      <div className="flex items-center justify-between mb-1">
+                        <Link href={`/products/${p.id}`} className="text-sm font-medium text-gray-900 hover:text-blue-600">{p.name || p.sku}</Link>
+                        <span className="text-xs font-semibold text-gray-500">{pct}%</span>
+                      </div>
+                      <Progress value={pct} className="h-2" />
+                      <p className="text-xs text-gray-400 mt-1">{p.fgInv ? `FG INV ${p.fgInv}` : 'FG INV pending'}</p>
+                    </div>
+                  )
+                }) : <p className="text-sm text-gray-400">No products near launch yet.</p>}
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">

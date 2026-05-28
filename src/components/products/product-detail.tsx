@@ -7,6 +7,7 @@ import * as TabsPrimitive from '@radix-ui/react-tabs'
 import { WorkflowBar } from '@/components/workflow/workflow-bar'
 import { OverviewTab } from '@/components/products/tabs/overview-tab'
 import { DesignTab } from '@/components/products/tabs/design-tab'
+import { SamplingTab } from '@/components/products/tabs/sampling-tab'
 import { MerchandisingTab } from '@/components/products/tabs/merchandising-tab'
 import { BomTab } from '@/components/products/tabs/bom-tab'
 import { MarketingTab } from '@/components/products/tabs/marketing-tab'
@@ -15,7 +16,7 @@ import { TimelineTab } from '@/components/products/tabs/timeline-tab'
 import { ColourVariantsTab } from '@/components/products/tabs/colour-variants-tab'
 import { cn } from '@/lib/utils'
 import type {
-  Product, Profile, DesignData, MerchandisingData,
+  Product, Profile, DesignData, SamplingData, MerchandisingData,
   BomData, MarketingData, SalesData, ProductFile, ActivityLog, DesignSubmission,
 } from '@/lib/types'
 
@@ -23,6 +24,7 @@ interface ProductDetailProps {
   product: Product
   profile: Profile
   designData: DesignData | null
+  samplingData: SamplingData | null
   merchandisingData: MerchandisingData | null
   bomData: BomData | null
   marketingData: MarketingData | null
@@ -38,6 +40,7 @@ const TABS = [
   { value: 'overview', label: 'Overview' },
   { value: 'sales', label: 'Sales' },
   { value: 'design', label: 'Design' },
+  { value: 'sampling', label: 'Sampling' },
   { value: 'merchandising', label: 'Merchandising' },
   { value: 'colours', label: 'Colours' },
   { value: 'bom', label: 'BOM' },
@@ -48,7 +51,7 @@ const TABS = [
 const VALID_TABS = new Set(TABS.map(t => t.value))
 
 export function ProductDetail({
-  product, profile, designData, merchandisingData,
+  product, profile, designData, samplingData, merchandisingData,
   bomData, marketingData, salesData, files, logs,
   designSubmissions, designers,
   defaultTab,
@@ -68,6 +71,11 @@ export function ProductDetail({
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'design_data', filter: `product_id=eq.${product.id}` },
+        () => router.refresh()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'sampling_data', filter: `product_id=eq.${product.id}` },
         () => router.refresh()
       )
       .on(
@@ -113,6 +121,7 @@ export function ProductDetail({
         product={product}
         profile={profile}
         designData={designData}
+        samplingData={samplingData}
         merchandisingData={merchandisingData}
         bomData={bomData}
         marketingData={marketingData}
@@ -144,6 +153,9 @@ export function ProductDetail({
           </TabsPrimitive.Content>
           <TabsPrimitive.Content value="design">
             <DesignTab product={product} profile={profile} data={designData} salesData={salesData} files={files} submissions={designSubmissions} designers={designers} />
+          </TabsPrimitive.Content>
+          <TabsPrimitive.Content value="sampling">
+            <SamplingTab product={product} profile={profile} designData={designData} data={samplingData} files={files} />
           </TabsPrimitive.Content>
           <TabsPrimitive.Content value="merchandising">
             <MerchandisingTab product={product} profile={profile} data={merchandisingData} />

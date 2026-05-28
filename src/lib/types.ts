@@ -1,8 +1,9 @@
-export type UserRole = 'admin' | 'management' | 'design' | 'design_head' | 'merchandising' | 'bom' | 'marketing' | 'sales' | 'viewer'
+export type UserRole = 'admin' | 'management' | 'design' | 'design_head' | 'sampling' | 'merchandising' | 'bom' | 'marketing' | 'sales' | 'viewer'
 
 export type WorkflowStage =
   | 'draft'
   | 'design_completed'
+  | 'sampling_completed'
   | 'merchandising_completed'
   | 'bom_finalized'
   | 'marketing_ready'
@@ -183,6 +184,20 @@ export interface MerchandisingData {
   updated_at: string
 }
 
+export interface SamplingData {
+  id: string
+  product_id: string
+  sampler_remarks: string | null
+  sample_review_status: 'not_started' | 'pending_review' | 'approved' | 'rejected'
+  designer_feedback: string | null
+  reviewed_by: string | null
+  reviewed_at: string | null
+  is_completed: boolean
+  is_locked: boolean
+  updated_by: string | null
+  updated_at: string
+}
+
 export interface BomItem {
   inv_code: string
   inv_name: string
@@ -267,6 +282,7 @@ export interface ActivityLog {
 export const WORKFLOW_STAGES: WorkflowStage[] = [
   'draft',
   'design_completed',
+  'sampling_completed',
   'merchandising_completed',
   'bom_finalized',
   'marketing_ready',
@@ -275,6 +291,7 @@ export const WORKFLOW_STAGES: WorkflowStage[] = [
 export const STAGE_LABELS: Record<WorkflowStage, string> = {
   draft: 'Sales',
   design_completed: 'Design Completed',
+  sampling_completed: 'Sampling',
   merchandising_completed: 'Merchandising Completed',
   bom_finalized: 'BOM Finalized',
   marketing_ready: 'Marketing Completed',
@@ -285,6 +302,7 @@ export const STAGE_LABELS: Record<WorkflowStage, string> = {
 export const STAGE_COLORS: Record<WorkflowStage, string> = {
   draft: 'bg-green-100 text-green-700',
   design_completed: 'bg-purple-100 text-purple-700',
+  sampling_completed: 'bg-cyan-100 text-cyan-700',
   merchandising_completed: 'bg-blue-100 text-blue-700',
   bom_finalized: 'bg-orange-100 text-orange-700',
   marketing_ready: 'bg-yellow-100 text-yellow-700',
@@ -297,6 +315,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   management: 'Management',
   design: 'Design',
   design_head: 'Design Head',
+  sampling: 'Sampling',
   merchandising: 'Merchandising',
   bom: 'BOM',
   marketing: 'Marketing',
@@ -309,6 +328,7 @@ export const ROLE_COLORS: Record<UserRole, string> = {
   management: 'bg-indigo-100 text-indigo-700',
   design: 'bg-purple-100 text-purple-700',
   design_head: 'bg-violet-200 text-violet-800',
+  sampling: 'bg-cyan-100 text-cyan-700',
   merchandising: 'bg-blue-100 text-blue-700',
   bom: 'bg-orange-100 text-orange-700',
   marketing: 'bg-yellow-100 text-yellow-700',
@@ -320,6 +340,7 @@ export const ROLE_COLORS: Record<UserRole, string> = {
 export const STAGE_OWNER_ROLE: Partial<Record<WorkflowStage, UserRole>> = {
   draft: 'sales',
   design_completed: 'design',
+  sampling_completed: 'sampling',
   merchandising_completed: 'merchandising',
   bom_finalized: 'bom',
   marketing_ready: 'marketing',

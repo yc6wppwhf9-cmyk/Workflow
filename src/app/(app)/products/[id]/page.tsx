@@ -28,6 +28,7 @@ export default async function ProductPage({
 
   const [
     { data: designData },
+    { data: samplingData },
     { data: merchandisingData },
     { data: bomData },
     { data: marketingData },
@@ -38,6 +39,7 @@ export default async function ProductPage({
     { data: designers },
   ] = await Promise.all([
     supabase.from('design_data').select('*').eq('product_id', id).single(),
+    supabase.from('sampling_data').select('*').eq('product_id', id).single(),
     supabase.from('merchandising_data').select('*').eq('product_id', id).single(),
     supabase.from('bom_data').select('*').eq('product_id', id).single(),
     supabase.from('marketing_data').select('*').eq('product_id', id).single(),
@@ -80,6 +82,7 @@ export default async function ProductPage({
         product={product}
         profile={profile as Profile}
         designData={designData}
+        samplingData={samplingData}
         merchandisingData={merchandisingData}
         bomData={bomData}
         marketingData={marketingData}

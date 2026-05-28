@@ -151,7 +151,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
     if (becomingComplete && product.workflow_stage === 'design_completed') {
       await supabase.rpc('advance_product_stage', {
         p_product_id: product.id,
-        p_next_stage: 'merchandising_completed',
+        p_next_stage: 'sampling_completed',
         p_user_id: profile.id,
         p_action: 'marked design complete — stage advanced to Merchandising',
         p_department: profile.role,
@@ -159,7 +159,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
       fetch('/api/notify-stage-advance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product_id: product.id, product_name: product.name, next_stage: 'merchandising_completed' }),
+        body: JSON.stringify({ product_id: product.id, product_name: product.name, next_stage: 'sampling_completed' }),
       }).catch(() => {})
     }
 

@@ -218,11 +218,12 @@ export function MerchandisingTab({ product, profile, data }: MerchandisingTabPro
               if (f) positions.push({ row: parseInt(rowMatch[1]), col: colMatch ? parseInt(colMatch[1]) : 0, file: f })
             }
           }
-          // Group by column first (colour-wise layout is usually column-based in DETAILS PICS)
-          // Fall back to row-based grouping
           const uniqueCols = [...new Set(positions.map(p => p.col))].sort((a, b) => a - b)
           const uniqueRows = [...new Set(positions.map(p => p.row))].sort((a, b) => a - b)
-          const useColBased = uniqueCols.length >= colourTags.length && uniqueCols.length > uniqueRows.length
+          // Column-based when enough columns exist for all colours (e.g. 5 cols for 5 colours).
+          // The previous condition also required cols > rows, which wrongly switched to row-based
+          // when there were more image rows than colour columns (e.g. 8 images × 5 colours).
+          const useColBased = uniqueCols.length >= colourTags.length
           if (useColBased) {
             const colsPerColour = Math.ceil(uniqueCols.length / colourTags.length)
             for (const pos of positions) {

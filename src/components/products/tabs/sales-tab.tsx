@@ -243,14 +243,11 @@ export function SalesTab({ product, profile, data }: SalesTabProps) {
                   Save Changes
                 </Button>
               )}
-              <Button
-                variant="outline"
-                onClick={markComplete}
-                disabled={saving}
-                className={data?.is_completed ? 'text-orange-600 border-orange-200' : 'text-green-600 border-green-200'}
-              >
-                {data?.is_completed ? 'Mark Incomplete' : 'Mark Sales Complete'}
-              </Button>
+              {!data?.is_completed && (
+                <Button variant="outline" onClick={markComplete} disabled={saving} className="text-green-600 border-green-200">
+                  Mark Sales Complete
+                </Button>
+              )}
             </div>
           )}
         </CardContent>

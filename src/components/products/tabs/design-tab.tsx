@@ -938,11 +938,11 @@ export function DesignTab({ product, profile, data, salesData, files, submission
                   Save Changes
                 </Button>
               )}
-              <Button variant="outline" onClick={markComplete} disabled={saving}
-                className={data?.is_completed ? 'text-orange-600 border-orange-200' : 'text-green-600 border-green-200'}
-              >
-                {data?.is_completed ? 'Mark Incomplete' : 'Mark Complete'}
-              </Button>
+              {!data?.is_completed && (
+                <Button variant="outline" onClick={markComplete} disabled={saving} className="text-green-600 border-green-200">
+                  Mark Complete
+                </Button>
+              )}
             </div>
           )}
         </CardContent>

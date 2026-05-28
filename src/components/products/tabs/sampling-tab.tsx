@@ -284,10 +284,10 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
             />
           </div>
 
-          {isRejected && data?.designer_feedback && (
+          {isRejected && (
             <div className="rounded-lg border border-red-200 bg-red-50 p-3">
-              <p className="text-xs font-semibold text-red-500 uppercase tracking-wide mb-1">Designer Rejection Remark</p>
-              <p className="text-sm text-red-800 whitespace-pre-wrap">{data.designer_feedback}</p>
+              <p className="text-xs font-semibold text-red-500 uppercase tracking-wide mb-1">Sample Rejected by Designer</p>
+              <p className="text-sm text-red-800 whitespace-pre-wrap">{data?.designer_feedback || 'No feedback provided.'}</p>
             </div>
           )}
 

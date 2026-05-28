@@ -268,11 +268,11 @@ export function BomTab({ product, profile, data, merchandisingData }: BomTabProp
                       Save Changes
                     </Button>
                   )}
-                  <Button variant="outline" onClick={markComplete} disabled={saving}
-                    className={data?.is_completed ? 'text-orange-600 border-orange-200' : 'text-green-600 border-green-200'}
-                  >
-                    {data?.is_completed ? 'Mark Incomplete' : 'Mark BOM Complete'}
-                  </Button>
+                  {!data?.is_completed && (
+                    <Button variant="outline" onClick={markComplete} disabled={saving} className="text-green-600 border-green-200">
+                      Mark BOM Complete
+                    </Button>
+                  )}
                   <label className="flex items-center gap-2 cursor-pointer select-none ml-2">
                     <input
                       type="checkbox"

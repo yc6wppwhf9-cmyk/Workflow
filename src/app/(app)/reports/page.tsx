@@ -147,7 +147,7 @@ export default async function ReportsPage() {
     const issues: string[] = []
     if (!p.name) issues.push('Missing name')
     if (!p.sku) issues.push('Missing SKU')
-    if (p.workflow_stage !== 'product_live' && !sales?.deadline_date) issues.push('No deadline')
+    if (p.workflow_stage !== 'draft' && p.workflow_stage !== 'product_live' && !sales?.deadline_date) issues.push('No deadline')
     if (['bom_finalized', 'marketing_ready', 'sales_priced', 'product_live'].includes(p.workflow_stage) && !bom?.fg_inv_code) issues.push('Missing FG INV')
     if (['marketing_ready', 'sales_priced', 'product_live'].includes(p.workflow_stage) && !bom?.cost_given) issues.push('Cost not given')
     return issues.length > 0 ? [{ ...p, issues }] : []
@@ -191,7 +191,7 @@ export default async function ReportsPage() {
               <CardTitle className="text-base">Products by Workflow Stage</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {Object.entries(STAGE_LABELS).map(([stage, label]) => {
+              {Object.entries(STAGE_LABELS).filter(([stage]) => (byStage[stage] || 0) > 0).map(([stage, label]) => {
                 const count = byStage[stage] || 0
                 const pct = total > 0 ? Math.round((count / total) * 100) : 0
                 return (
@@ -204,6 +204,7 @@ export default async function ReportsPage() {
                   </div>
                 )
               })}
+              {Object.keys(byStage).length === 0 && <p className="text-sm text-gray-400">No products yet.</p>}
             </CardContent>
           </Card>
 
@@ -312,7 +313,7 @@ export default async function ReportsPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Launch Forecast & Readiness</CardTitle>
+                <CardTitle className="text-base">Launch Forecast & Readiness <span className="text-xs font-normal text-gray-400 ml-1">(top 10 by deadline)</span></CardTitle>
               </CardHeader>
               <CardContent className="p-0">
                 <table className="w-full text-sm">
@@ -354,7 +355,7 @@ export default async function ReportsPage() {
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Design Rework Report</CardTitle>
+                  <CardTitle className="text-base">Design Review Report</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                   <table className="w-full text-sm">

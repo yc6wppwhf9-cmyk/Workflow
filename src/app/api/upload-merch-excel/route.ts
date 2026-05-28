@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single()
-  if (!['admin', 'merchandising'].includes(profile?.role)) {
+  if (!['admin', 'merchandising', 'merchandising_head'].includes(profile?.role)) {
     return NextResponse.json({ error: 'Only merchandising team can upload' }, { status: 403 })
   }
 

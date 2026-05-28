@@ -48,9 +48,7 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
 
   const isSampler = ['admin', 'sampling', 'merchandising', 'merchandising_head'].includes(profile.role)
   const isMerchHead = ['admin', 'merchandising_head'].includes(profile.role)
-  const assignedDesignerId = designData?.assigned_to
-  const isAssignedDesigner = profile.role === 'design' && !!assignedDesignerId && profile.id === assignedDesignerId
-  const canReview = profile.role === 'admin' || isAssignedDesigner
+  const canReview = ['admin', 'design', 'design_head'].includes(profile.role)
   const sampleImages = files.filter(f => f.department === 'sampling' && f.file_type?.startsWith('image/'))
   const status = data?.sample_review_status || 'not_started'
   const isApproved = status === 'approved'

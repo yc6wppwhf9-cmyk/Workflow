@@ -20,7 +20,7 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
   )
 }
 
-export function OverviewTab({ product, designData, bomData, files }: OverviewTabProps) {
+export function OverviewTab({ product, designData, bomData, salesData, files }: OverviewTabProps) {
   const colourSkus = designData?.color_skus || []
 
   // Group merch images by colour_tag
@@ -62,7 +62,7 @@ export function OverviewTab({ product, designData, bomData, files }: OverviewTab
             </InfoRow>
 
             <InfoRow label="Channel">
-              <p className="text-sm font-medium text-gray-900">{designData?.channel || '—'}</p>
+              <p className="text-sm font-medium text-gray-900">{salesData?.channel || '—'}</p>
             </InfoRow>
 
             <InfoRow label="Brand">

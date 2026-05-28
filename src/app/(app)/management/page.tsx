@@ -37,6 +37,7 @@ export default async function ManagementPage() {
     { data: designDataRows },
     { data: assignmentLogs },
     { data: designFiles },
+    { data: actorProfiles },
   ] = await Promise.all([
     supabase.from('design_submissions')
       .select('id, product_id, submitted_by, status, created_at, reviewed_at, feedback, product:products(id,name), submitter:profiles!submitted_by(id,full_name)')
@@ -45,13 +46,16 @@ export default async function ManagementPage() {
       .select('product_id, assigned_to, is_completed, product:products(id,name,workflow_stage), assignee:profiles!assigned_to(id,full_name)')
       .not('assigned_to', 'is', null),
     supabase.from('activity_logs')
-      .select('product_id, created_at, action')
+      .select('product_id, created_at, action, user_id')
       .ilike('action', 'assigned design to%')
       .order('created_at', { ascending: false }),
     supabase.from('product_files')
       .select('product_id, uploaded_by, created_at')
       .eq('department', 'design')
       .like('file_type', 'image/%'),
+    supabase.from('profiles')
+      .select('id, full_name')
+      .in('role', ['admin', 'design_head']),
   ])
 
   // ── Latest assignment date per product ──────────────────────────────────────
@@ -171,9 +175,36 @@ export default async function ManagementPage() {
   const totalAssigned    = (designDataRows || []).length
   const totalSubmissions = (allSubmissions || []).length
   const totalApproved    = (allSubmissions || []).filter(s => s.status === 'approved').length
-  const approvalRate     = totalSubmissions > 0 ? Math.round((totalApproved / totalSubmissions) * 100) : 0
+  const totalPending     = (allSubmissions || []).filter(s => s.status === 'pending').length
+  const totalReviewed    = (allSubmissions || []).filter(s => s.status !== 'pending').length
+  const approvalRate     = totalReviewed > 0 ? Math.round((totalApproved / totalReviewed) * 100) : null
   const allDays          = designerStats.flatMap(d => d.daysToSubmitList)
   const avgDaysToSubmit  = allDays.length > 0 ? Math.round(allDays.reduce((a, b) => a + b, 0) / allDays.length) : null
+
+  // ── Actor profile map (for assignment log) ───────────────────────────────────
+  const actorMap = new Map<string, string>()
+  for (const p of actorProfiles || []) actorMap.set(p.id, p.full_name)
+
+  // ── Assignment log rows ──────────────────────────────────────────────────────
+  // One row per product showing latest assignment + completion info
+  const assignmentReport = (designDataRows || []).map(dd => {
+    const assignee = one(dd.assignee) as { id: string; full_name: string } | null
+    const product = one(dd.product) as { id: string; name: string; workflow_stage: string } | null
+    const assignedOn = latestAssignDate[dd.product_id] || null
+    const latestLog = (assignmentLogs || []).find(l => l.product_id === dd.product_id)
+    const assignedBy = latestLog?.user_id ? (actorMap.get(latestLog.user_id) || '—') : '—'
+    const pSub = productSubMap[dd.product_id]
+    const completedOn = pSub?.approvedAt ?? null
+    return {
+      productId: dd.product_id,
+      productName: product?.name || dd.product_id,
+      assignedTo: assignee?.full_name || '—',
+      assignedBy,
+      assignedOn,
+      completedOn,
+      isCompleted: !!completedOn,
+    }
+  }).sort((a, b) => (b.assignedOn || '').localeCompare(a.assignedOn || ''))
 
   // ── Recent submissions (newest first) ───────────────────────────────────────
   const recentSubs = [...(allSubmissions || [])].reverse().slice(0, 8)
@@ -205,7 +236,7 @@ export default async function ManagementPage() {
                 <div>
                   <p className="text-xs text-gray-500 mb-1">Total Submissions</p>
                   <p className="text-3xl font-bold text-gray-900">{totalSubmissions}</p>
-                  <p className="text-xs text-gray-400 mt-1">{totalApproved} approved</p>
+                  <p className="text-xs text-gray-400 mt-1">{totalApproved} approved · {totalPending} pending</p>
                 </div>
                 <div className="h-12 w-12 rounded-xl bg-purple-50 flex items-center justify-center">
                   <Send className="h-6 w-6 text-purple-600" />
@@ -218,8 +249,8 @@ export default async function ManagementPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs text-gray-500 mb-1">Approval Rate</p>
-                  <p className={`text-3xl font-bold ${approvalRate >= 70 ? 'text-green-600' : approvalRate >= 40 ? 'text-yellow-600' : 'text-red-600'}`}>{approvalRate}%</p>
-                  <p className="text-xs text-gray-400 mt-1">across all designers</p>
+                  <p className={`text-3xl font-bold ${approvalRate === null ? 'text-gray-400' : approvalRate >= 70 ? 'text-green-600' : approvalRate >= 40 ? 'text-yellow-600' : 'text-red-600'}`}>{approvalRate !== null ? `${approvalRate}%` : '—'}</p>
+                  <p className="text-xs text-gray-400 mt-1">{approvalRate !== null ? 'of reviewed submissions' : 'no reviews yet'}</p>
                 </div>
                 <div className="h-12 w-12 rounded-xl bg-green-50 flex items-center justify-center">
                   <TrendingUp className="h-6 w-6 text-green-600" />
@@ -273,7 +304,8 @@ export default async function ManagementPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {designerStats.map(d => {
-                      const rate = d.total > 0 ? Math.round((d.approved / d.total) * 100) : 0
+                      const reviewed = d.approved + d.rejected
+                      const rate = reviewed > 0 ? Math.round((d.approved / reviewed) * 100) : null
                       const avgDays = d.daysToSubmitList.length > 0
                         ? Math.round(d.daysToSubmitList.reduce((a, b) => a + b, 0) / d.daysToSubmitList.length)
                         : null
@@ -288,12 +320,12 @@ export default async function ManagementPage() {
                           <td className="px-4 py-3.5 text-center text-yellow-600">{d.pending}</td>
                           <td className="px-4 py-3.5 text-center">
                             <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                              d.total === 0 ? 'bg-gray-100 text-gray-400'
+                              rate === null ? 'bg-gray-100 text-gray-400'
                               : rate >= 70 ? 'bg-green-100 text-green-700'
                               : rate >= 40 ? 'bg-yellow-100 text-yellow-700'
                               : 'bg-red-100 text-red-600'
                             }`}>
-                              {d.total === 0 ? '—' : `${rate}%`}
+                              {rate === null ? '—' : `${rate}%`}
                             </span>
                           </td>
                           <td className="px-4 py-3.5 text-center text-gray-500 text-xs">
@@ -372,6 +404,57 @@ export default async function ManagementPage() {
                           ) : (
                             <span className="inline-flex items-center gap-1 text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-medium">
                               <XCircle className="h-3 w-3" /> Not Started
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Assignment Log */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <CalendarDays className="h-4 w-4 text-gray-400" /> Assignment Log
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {assignmentReport.length === 0 ? (
+              <p className="text-sm text-gray-400 px-6 py-4">No assignments yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 bg-gray-50">
+                      <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Product</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Assigned To</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Assigned By</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">Assigned On</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">Completed On</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {assignmentReport.map(row => (
+                      <tr key={row.productId} className="hover:bg-gray-50">
+                        <td className="px-6 py-3.5 font-medium text-gray-900 max-w-[200px] truncate">{row.productName}</td>
+                        <td className="px-4 py-3.5 text-gray-700">{row.assignedTo}</td>
+                        <td className="px-4 py-3.5 text-gray-500">{row.assignedBy}</td>
+                        <td className="px-4 py-3.5 text-center text-gray-600 text-xs">{fmt(row.assignedOn)}</td>
+                        <td className="px-4 py-3.5 text-center text-gray-600 text-xs">{fmt(row.completedOn)}</td>
+                        <td className="px-4 py-3.5 text-center">
+                          {row.isCompleted ? (
+                            <span className="inline-flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
+                              <CheckCircle2 className="h-3 w-3" /> Completed
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-medium">
+                              <Clock className="h-3 w-3" /> In Progress
                             </span>
                           )}
                         </td>

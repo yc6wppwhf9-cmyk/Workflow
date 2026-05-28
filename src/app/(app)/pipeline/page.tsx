@@ -55,7 +55,7 @@ function StageCell({
         <p className="text-xs text-gray-400 pl-5">by {assignedBy}</p>
       )}
       {startDate && (
-        <p className="text-xs text-gray-500 pl-5">
+        <p className="text-xs text-gray-500 pl-5 whitespace-nowrap">
           {fmt(startDate)}
           {endDate
             ? <> → <span className="text-green-600 font-medium">{fmt(endDate)}</span></>
@@ -331,7 +331,6 @@ export default async function PipelinePage() {
                             status={sampling.status}
                             person={sampling.data?.sampler_name}
                             startDate={sampling.submitEntry?.created_at || null}
-                            endDate={sampling.doneEntry?.created_at || null}
                           />
                         </td>
                         {/* ── Sampling: Mgmt Approved / Done ── */}
@@ -355,7 +354,6 @@ export default async function PipelinePage() {
                             person={merch.data?.assigned_to ? profileMap.get(merch.data.assigned_to) : null}
                             assignedBy={merch.assignEntry?.user_id ? profileMap.get(merch.assignEntry.user_id) : null}
                             startDate={merch.assignEntry?.created_at || null}
-                            endDate={merch.doneEntry?.created_at || null}
                           />
                         </td>
                         {/* ── Merch: Submitted ── */}
@@ -369,7 +367,13 @@ export default async function PipelinePage() {
                         {/* ── Merch: Completed ── */}
                         <td className="px-3 py-3">
                           {merch.doneEntry ? (
-                            <p className="text-xs text-green-700 font-semibold whitespace-nowrap">{fmt(merch.doneEntry.created_at)}</p>
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-1.5">
+                                <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                                <span className="text-xs font-semibold text-gray-800">{merch.doneEntry.user_id ? profileMap.get(merch.doneEntry.user_id) : '—'}</span>
+                              </div>
+                              <p className="text-xs text-green-700 font-medium pl-5 whitespace-nowrap">{fmt(merch.doneEntry.created_at)}</p>
+                            </div>
                           ) : (
                             <span className="text-gray-300 text-xs">—</span>
                           )}
@@ -378,7 +382,13 @@ export default async function PipelinePage() {
                         {/* ── BOM: Completed ── */}
                         <td className="px-3 py-3 border-l border-orange-50">
                           {bom.doneEntry ? (
-                            <p className="text-xs text-green-700 font-semibold whitespace-nowrap">{fmt(bom.doneEntry.created_at)}</p>
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-1.5">
+                                <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                                <span className="text-xs font-semibold text-gray-800">{bom.doneEntry.user_id ? profileMap.get(bom.doneEntry.user_id) : '—'}</span>
+                              </div>
+                              <p className="text-xs text-green-700 font-medium pl-5 whitespace-nowrap">{fmt(bom.doneEntry.created_at)}</p>
+                            </div>
                           ) : bom.status === 'active' ? (
                             <span className="inline-flex items-center gap-1 text-xs text-yellow-600">
                               <Clock className="h-3 w-3 animate-pulse" /> In progress

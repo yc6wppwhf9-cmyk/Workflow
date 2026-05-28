@@ -332,6 +332,14 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
 
       if (fileRecords.length > 0) await supabase.from('product_files').insert(fileRecords)
 
+      setUploadProgress('Saving colour variants...')
+      if (colourVariants.length > 0) {
+        await supabase.from('merchandising_data').update({
+          colour_variants: colourVariants,
+          updated_by: profile.id,
+        }).eq('product_id', product.id)
+      }
+
       setUploadProgress('Updating product data...')
       const primarySku = relevantSkus[0]
       const apiRes = await fetch('/api/upload-merch-excel', {
@@ -350,6 +358,7 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
         }),
       })
       const apiJson = await apiRes.json()
+      if (!apiRes.ok) errors.push(`API error: ${apiJson.error || apiRes.statusText}`)
       const version_saved: 'attribute' | 'production' = apiJson.version_saved || 'attribute'
 
       if (merch_fields) {

@@ -483,26 +483,36 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
         </Card>
       )}
 
-      {/* Team Member: Task Card (shown only when assigned) */}
-      {isTeamMember && isAssigned && (
-        <Card className="border-blue-200 bg-blue-50">
-          <CardContent className="pt-4 pb-4">
-            <div>
-              <p className="text-sm font-semibold text-blue-900">Your Task</p>
-              <p className="text-xs text-blue-700 mt-0.5">Create the attribute sheet and hand it over to the merchandising head.</p>
-            </div>
-            <label className="flex items-center gap-2 cursor-pointer select-none mt-3">
-              <input
-                type="checkbox"
-                checked={data?.attribute_sheet_handed_over || false}
-                onChange={toggleHandover}
-                disabled={data?.attribute_sheet_handed_over || false}
-                className="h-4 w-4 rounded border-gray-300"
-              />
-              <span className="text-sm font-medium text-blue-900">Attribute Sheet Handed Over</span>
-            </label>
-          </CardContent>
-        </Card>
+      {/* Team Member: Task Card */}
+      {isTeamMember && (
+        isAssigned ? (
+          <Card className="border-blue-200 bg-blue-50">
+            <CardContent className="pt-4 pb-4">
+              <div>
+                <p className="text-sm font-semibold text-blue-900">Your Task</p>
+                <p className="text-xs text-blue-700 mt-0.5">Create the attribute sheet and hand it over to the merchandising head.</p>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer select-none mt-3">
+                <input
+                  type="checkbox"
+                  checked={data?.attribute_sheet_handed_over || false}
+                  onChange={toggleHandover}
+                  disabled={data?.attribute_sheet_handed_over || false}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                <span className="text-sm font-medium text-blue-900">Attribute Sheet Handed Over</span>
+              </label>
+            </CardContent>
+          </Card>
+        ) : (
+          !data?.is_completed && (
+            <Card>
+              <CardContent className="py-8 text-center">
+                <p className="text-sm text-gray-500">Waiting for the merchandising head to assign this task to you.</p>
+              </CardContent>
+            </Card>
+          )
+        )
       )}
 
       {/* Placeholder for team members / other roles before completion */}

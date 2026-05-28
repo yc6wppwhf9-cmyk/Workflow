@@ -73,7 +73,9 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
   const isAssigned = data?.assigned_to === profile.id
   const isAtMerchStage = product.workflow_stage === 'merchandising_completed'
   const canEditFields = !data?.is_locked && !data?.is_completed && isHead && isAtMerchStage
-  const showActions = !data?.is_locked && isHead && isAtMerchStage  // Mark Complete only at merch stage
+  const showActions = !data?.is_locked && isHead && isAtMerchStage
+  // Attribute form: head always sees it; everyone else only after marked complete
+  const showAttributeForm = isHead || !!data?.is_completed
 
   const [activeVersion, setActiveVersion] = useState<'attribute' | 'production'>('attribute')
   const [attrForm, setAttrForm] = useState<FormState>(() => initForm(data))
@@ -503,7 +505,16 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
         </Card>
       )}
 
-      {/* Excel Upload Card */}
+      {/* Placeholder for team members / other roles before completion */}
+      {!showAttributeForm && !isTeamMember && (
+        <Card>
+          <CardContent className="py-8 text-center">
+            <p className="text-sm text-gray-400">Attribute sheet will be visible here once the merchandising head marks it complete.</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Excel Upload Card — head only, at merch stage */}
       {canEditFields && (
         <Card className="border-green-200 bg-green-50">
           <CardContent className="pt-4 pb-4">
@@ -558,7 +569,7 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
         </Card>
       )}
 
-      <Card>
+      {showAttributeForm && <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-0">
           <div className="flex items-center gap-2">
             <button
@@ -724,7 +735,7 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
             </div>
           )}
         </CardContent>
-      </Card>
+      </Card>}
     </div>
   )
 }

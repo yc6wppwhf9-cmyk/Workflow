@@ -97,8 +97,10 @@ export function DesignTab({ product, profile, data, salesData, files, submission
   const [showFileRejectBox, setShowFileRejectBox]       = useState<string | null>(null)
 
   const illustrationRef = useRef<HTMLInputElement>(null)
-  const [uploading, setUploading]       = useState(false)
-  const [uploadingName, setUploadingName] = useState('')
+  const [uploading, setUploading]           = useState(false)
+  const [uploadingName, setUploadingName]   = useState('')
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null)
+  const [uploadSuccess, setUploadSuccess]   = useState<number | null>(null)
 
   const techPackRef = useRef<HTMLInputElement>(null)
   const saveTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -294,6 +296,9 @@ export function DesignTab({ product, profile, data, salesData, files, submission
     const selectedFiles = Array.from(e.target.files || [])
     if (selectedFiles.length === 0) return
     setUploading(true)
+    setUploadSuccess(null)
+    setUploadProgress({ done: 0, total: selectedFiles.length })
+    let done = 0
     for (const file of selectedFiles) {
       setUploadingName(file.name)
       const fd = new FormData()
@@ -308,6 +313,8 @@ export function DesignTab({ product, profile, data, salesData, files, submission
           department: 'design', uploaded_by: profile.id,
         })
       }
+      done++
+      setUploadProgress({ done, total: selectedFiles.length })
     }
     await supabase.from('activity_logs').insert({
       product_id: product.id, user_id: profile.id,
@@ -315,6 +322,9 @@ export function DesignTab({ product, profile, data, salesData, files, submission
     })
     setUploading(false)
     setUploadingName('')
+    setUploadProgress(null)
+    setUploadSuccess(selectedFiles.length)
+    setTimeout(() => setUploadSuccess(null), 3000)
     if (illustrationRef.current) illustrationRef.current.value = ''
     router.refresh()
   }
@@ -654,12 +664,29 @@ export function DesignTab({ product, profile, data, salesData, files, submission
           {canUploadIllos && (
             <Button size="sm" variant="outline" onClick={() => illustrationRef.current?.click()} disabled={uploading}>
               {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              {uploading ? uploadingName || 'Uploading…' : 'Upload'}
+              {uploadProgress ? `${uploadProgress.done}/${uploadProgress.total} uploaded` : uploading ? 'Uploading…' : 'Upload'}
             </Button>
           )}
           <input ref={illustrationRef} type="file" accept="image/*" multiple className="hidden" onChange={handleIllustrationUpload} />
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
+          {/* Upload progress */}
+          {uploadProgress && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 space-y-2">
+              <div className="flex items-center justify-between text-sm text-blue-700 font-medium">
+                <span className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Uploading {uploadingName || 'images'}…</span>
+                <span>{uploadProgress.done} / {uploadProgress.total}</span>
+              </div>
+              <div className="h-1.5 bg-blue-100 rounded-full overflow-hidden">
+                <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${Math.round((uploadProgress.done / uploadProgress.total) * 100)}%` }} />
+              </div>
+            </div>
+          )}
+          {uploadSuccess !== null && !uploadProgress && (
+            <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-2.5 flex items-center gap-2 text-sm text-green-700 font-medium">
+              <CheckCircle2 className="h-4 w-4" /> {uploadSuccess} illustration{uploadSuccess !== 1 ? 's' : ''} uploaded successfully
+            </div>
+          )}
           {designFiles.length === 0 ? (
             <div
               className={`border-2 border-dashed rounded-xl py-10 text-center ${canUploadIllos ? 'border-gray-200 cursor-pointer hover:border-purple-300 hover:bg-purple-50 transition-colors' : 'border-gray-100'}`}

@@ -42,6 +42,8 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
   const [saving, setSaving] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null)
+  const [uploadSuccess, setUploadSuccess] = useState<number | null>(null)
   const [reviewing, setReviewing] = useState(false)
 
   const isSampler = ['admin', 'sampling', 'merchandising', 'merchandising_head'].includes(profile.role)
@@ -74,6 +76,9 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
     const selectedFiles = Array.from(e.target.files || [])
     if (selectedFiles.length === 0) return
     setUploading(true)
+    setUploadProgress({ done: 0, total: selectedFiles.length })
+    setUploadSuccess(null)
+    let done = 0
     for (const file of selectedFiles) {
       const fd = new FormData()
       fd.append('file', file)
@@ -91,6 +96,8 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
           uploaded_by: profile.id,
         })
       }
+      done++
+      setUploadProgress({ done, total: selectedFiles.length })
     }
     await supabase.from('activity_logs').insert({
       product_id: product.id,
@@ -99,6 +106,9 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
       department: 'sampling',
     })
     setUploading(false)
+    setUploadProgress(null)
+    setUploadSuccess(selectedFiles.length)
+    setTimeout(() => setUploadSuccess(null), 3000)
     if (sampleInputRef.current) sampleInputRef.current.value = ''
     router.refresh()
   }
@@ -221,17 +231,36 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
             <>
               <Button size="sm" variant="outline" onClick={() => sampleInputRef.current?.click()} disabled={uploading}>
                 {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                Upload Sample
+                {uploadProgress ? `${uploadProgress.done}/${uploadProgress.total} uploaded` : 'Upload Sample'}
               </Button>
               <input ref={sampleInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleUpload} />
             </>
           )}
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Upload progress */}
+          {uploadProgress && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 space-y-2">
+              <div className="flex items-center justify-between text-sm text-blue-700 font-medium">
+                <span className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Uploading images…</span>
+                <span>{uploadProgress.done} / {uploadProgress.total}</span>
+              </div>
+              <div className="h-1.5 bg-blue-100 rounded-full overflow-hidden">
+                <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${Math.round((uploadProgress.done / uploadProgress.total) * 100)}%` }} />
+              </div>
+            </div>
+          )}
+          {uploadSuccess !== null && !uploadProgress && (
+            <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-2.5 flex items-center gap-2 text-sm text-green-700 font-medium">
+              <CheckCircle2 className="h-4 w-4" /> {uploadSuccess} image{uploadSuccess !== 1 ? 's' : ''} uploaded successfully
+            </div>
+          )}
+
           {sampleImages.length === 0 ? (
             <div className="border-2 border-dashed border-gray-200 rounded-lg py-10 text-center">
               <Upload className="h-8 w-8 text-gray-300 mx-auto mb-2" />
               <p className="text-sm text-gray-500">No sample images uploaded yet.</p>
+              {isSampler && !isApproved && <p className="text-xs text-gray-400 mt-1">Click &quot;Upload Sample&quot; above to add images</p>}
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

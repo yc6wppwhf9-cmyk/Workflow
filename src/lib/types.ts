@@ -70,6 +70,7 @@ export interface Profile {
 export interface Product {
   id: string
   name: string
+  display_name: string | null
   sku: string
   category: ProductCategory
   brand: Brand | null

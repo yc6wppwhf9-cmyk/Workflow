@@ -39,6 +39,7 @@ export default async function ProductPage({
     { data: designSubmissions },
     { data: designers },
     { data: merchandisingUsers },
+    { data: comments },
   ] = await Promise.all([
     supabase.from('design_data').select('*').eq('product_id', id).single(),
     supabase.from('sampling_data').select('*').eq('product_id', id).single(),
@@ -51,6 +52,8 @@ export default async function ProductPage({
     supabase.from('design_submissions').select('*, submitter:profiles!submitted_by(id,full_name)').eq('product_id', id).order('created_at', { ascending: false }).limit(50),
     supabase.from('profiles').select('id, full_name').eq('role', 'design').eq('is_active', true).order('full_name'),
     supabase.from('profiles').select('id, full_name').eq('role', 'merchandising').eq('is_active', true).order('full_name'),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase as any).from('product_comments').select('id, message, created_at, user_id, author_name, author_role').eq('product_id', id).order('created_at', { ascending: true }).limit(200),
   ])
 
   // Cloudinary files have permanent public URLs — no signing needed.
@@ -87,8 +90,8 @@ export default async function ProductPage({
   return (
     <div>
       <Header
-        title={product.name}
-        subtitle={bomData?.fg_inv_code ? `FG INV: ${bomData.fg_inv_code}` : undefined}
+        title={product.display_name || product.name}
+        subtitle={product.display_name ? product.name : (bomData?.fg_inv_code ? `FG INV: ${bomData.fg_inv_code}` : undefined)}
       />
       <ProductDetail
         product={product as unknown as Product}
@@ -104,6 +107,8 @@ export default async function ProductPage({
         designSubmissions={designSubmissions as unknown as DesignSubmission[] || []}
         designers={designers || []}
         merchandisingUsers={merchandisingUsers || []}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        comments={(comments as any) || []}
         defaultTab={tab}
       />
     </div>

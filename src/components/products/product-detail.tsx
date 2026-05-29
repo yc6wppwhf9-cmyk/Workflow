@@ -13,6 +13,7 @@ import { BomTab } from '@/components/products/tabs/bom-tab'
 import { MarketingTab } from '@/components/products/tabs/marketing-tab'
 import { SalesTab } from '@/components/products/tabs/sales-tab'
 import { TimelineTab } from '@/components/products/tabs/timeline-tab'
+import { CommentsTab } from '@/components/products/tabs/comments-tab'
 import { ColourVariantsTab } from '@/components/products/tabs/colour-variants-tab'
 import { cn } from '@/lib/utils'
 import type {
@@ -34,6 +35,8 @@ interface ProductDetailProps {
   designSubmissions: DesignSubmission[]
   designers: Pick<Profile, 'id' | 'full_name'>[]
   merchandisingUsers: Pick<Profile, 'id' | 'full_name'>[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  comments: any[]
   defaultTab?: string
 }
 
@@ -46,7 +49,8 @@ const TABS = [
   { value: 'colours', label: 'Colours' },
   { value: 'bom', label: 'BOM' },
   { value: 'marketing', label: 'Marketing' },
-  { value: 'timeline', label: 'Timeline' },
+  { value: 'timeline',  label: 'Timeline'  },
+  { value: 'comments',  label: 'Comments'  },
 ]
 
 const VALID_TABS = new Set(TABS.map(t => t.value))
@@ -54,7 +58,7 @@ const VALID_TABS = new Set(TABS.map(t => t.value))
 export function ProductDetail({
   product, profile, designData, samplingData, merchandisingData,
   bomData, marketingData, salesData, files, logs,
-  designSubmissions, designers, merchandisingUsers,
+  designSubmissions, designers, merchandisingUsers, comments,
   defaultTab,
 }: ProductDetailProps) {
   const initialTab = defaultTab && VALID_TABS.has(defaultTab) ? defaultTab : 'overview'
@@ -158,6 +162,9 @@ export function ProductDetail({
           </TabsPrimitive.Content>
           <TabsPrimitive.Content value="timeline">
             <TimelineTab logs={logs} />
+          </TabsPrimitive.Content>
+          <TabsPrimitive.Content value="comments">
+            <CommentsTab productId={product.id} profile={profile} initialComments={comments} />
           </TabsPrimitive.Content>
         </div>
       </TabsPrimitive.Root>

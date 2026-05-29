@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useRouter } from 'next/navigation'
 import { Loader2, Lock, Save } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -74,6 +75,7 @@ export function SalesTab({ product, profile, data }: SalesTabProps) {
   })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   function set(field: string, value: string) {
     setForm(f => ({ ...f, [field]: value }))
@@ -244,7 +246,7 @@ export function SalesTab({ product, profile, data }: SalesTabProps) {
                 </Button>
               )}
               {!data?.is_completed && (
-                <Button variant="outline" onClick={markComplete} disabled={saving} className="text-green-600 border-green-200">
+                <Button variant="outline" onClick={() => setConfirmOpen(true)} disabled={saving} className="text-green-600 border-green-200">
                   Mark Sales Complete
                 </Button>
               )}
@@ -252,6 +254,15 @@ export function SalesTab({ product, profile, data }: SalesTabProps) {
           )}
         </CardContent>
       </Card>
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Send Requirements to Design?"
+        description="Requirements will be locked and the design team will be notified to begin work on this product."
+        confirmLabel="Yes, Send to Design"
+        loading={saving}
+        onConfirm={() => { setConfirmOpen(false); markComplete() }}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </div>
   )
 }

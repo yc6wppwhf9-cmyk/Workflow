@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createClient } from '@/lib/supabase/client'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { parseMerchExcel, filterSkusForProduct, aggregateMerchFields, buildColourVariants, extractProductBaseName } from '@/lib/parse-merch-excel'
 import type { Product, Profile, MerchandisingData } from '@/lib/types'
 
@@ -90,6 +91,7 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
   const setForm = activeVersion === 'attribute' ? setAttrForm : setProdForm
   const [newMaterial, setNewMaterial] = useState('')
   const [saving, setSaving] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [assignedTo, setAssignedTo] = useState(data?.assigned_to || '')
@@ -786,7 +788,7 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
               {!data?.is_completed && (
                 <Button
                   variant="outline"
-                  onClick={markComplete}
+                  onClick={() => setConfirmOpen(true)}
                   disabled={saving || !data?.attribute_sheet_handed_over}
                   className="text-green-600 border-green-200"
                   title={!data?.attribute_sheet_handed_over ? 'Attribute sheet must be handed over first' : ''}
@@ -798,6 +800,15 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
           )}
         </CardContent>
       </Card>}
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Mark Merchandising Complete?"
+        description="This will advance the product to the BOM stage and notify the BOM team. Merchandising fields will be locked."
+        confirmLabel="Yes, Mark Complete"
+        loading={saving}
+        onConfirm={() => { setConfirmOpen(false); markComplete() }}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </div>
   )
 }

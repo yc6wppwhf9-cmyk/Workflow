@@ -3,7 +3,7 @@ import { Header } from '@/components/layout/header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Package, CheckCircle2, ArrowRight, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
-import { one, formatDateTime, formatShortDate, daysSince, isOverdue } from '@/lib/utils'
+import { one, formatDateTime, formatShortDate, daysSince, daysUntil, isOverdue } from '@/lib/utils'
 import { type WorkflowStage, type UserRole } from '@/lib/types'
 import type { Profile } from '@/lib/types'
 import { KpiCard } from './_shared'
@@ -81,9 +81,14 @@ export async function DepartmentDashboard({ profile, filter }: { profile: Profil
                     <tr key={p.id} className={`hover:bg-amber-50 ${isOverdue(p.deadline) ? 'bg-red-50' : ''}`}>
                       <td className="px-6 py-3 font-medium text-gray-900">{p.name}</td>
                       <td className="px-4 py-3 text-xs">
-                        {p.deadline
-                          ? <span className={isOverdue(p.deadline) ? 'text-red-600 font-semibold' : 'text-gray-500'}>{formatShortDate(p.deadline)}{isOverdue(p.deadline) ? ' ⚠' : ''}</span>
-                          : <span className="text-gray-300">—</span>}
+                        {(() => {
+                          const d = daysUntil(p.deadline)
+                          if (d === null) return <span className="text-gray-300">—</span>
+                          if (d < 0)  return <span className="inline-flex items-center gap-1 bg-red-50 text-red-700 border border-red-200 px-2 py-0.5 rounded-full font-semibold">⚠ {Math.abs(d)}d overdue</span>
+                          if (d === 0) return <span className="inline-flex items-center gap-1 bg-orange-50 text-orange-700 border border-orange-200 px-2 py-0.5 rounded-full font-semibold">Due today</span>
+                          if (d <= 3)  return <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">{d}d left</span>
+                          return <span className="text-gray-500">{formatShortDate(p.deadline!)} <span className="text-gray-400">({d}d)</span></span>
+                        })()}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-500">{daysSince(p.created_at) === 0 ? 'Today' : `${daysSince(p.created_at)}d ago`}</td>
                       <td className="px-4 py-3 text-right">

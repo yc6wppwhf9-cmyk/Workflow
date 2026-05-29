@@ -15,6 +15,13 @@ export function daysSince(date?: string | null): number {
   return Math.max(0, Math.floor((Date.now() - new Date(date).getTime()) / 86400000))
 }
 
+export function daysUntil(date?: string | null): number | null {
+  if (!date) return null
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const target = new Date(date); target.setHours(0, 0, 0, 0)
+  return Math.round((target.getTime() - today.getTime()) / 86400000)
+}
+
 export function isOverdue(date?: string | null): boolean {
   if (!date) return false
   const today = new Date()

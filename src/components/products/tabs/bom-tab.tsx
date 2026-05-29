@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import type { Product, Profile, BomData, MerchandisingData } from '@/lib/types'
 
 interface BomTabProps {
@@ -31,6 +32,7 @@ export function BomTab({ product, profile, data, merchandisingData }: BomTabProp
   const [fgInvCode, setFgInvCode] = useState(data?.fg_inv_code || '')
   const [costGiven, setCostGiven] = useState(data?.cost_given || false)
   const [saving, setSaving] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const [saved, setSaved] = useState(false)
 
   const fgSaved = !!data?.fg_inv_code
@@ -199,7 +201,7 @@ export function BomTab({ product, profile, data, merchandisingData }: BomTabProp
                 <span className="text-sm text-gray-700">Cost Given</span>
               </label>
               {!data?.is_completed && (
-                <Button variant="outline" onClick={markComplete} disabled={saving} className="text-green-600 border-green-200">
+                <Button variant="outline" onClick={() => setConfirmOpen(true)} disabled={saving} className="text-green-600 border-green-200">
                   Mark BOM Complete
                 </Button>
               )}
@@ -207,6 +209,15 @@ export function BomTab({ product, profile, data, merchandisingData }: BomTabProp
           )}
         </CardContent>
       </Card>
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Mark BOM Complete?"
+        description="This will advance the product to the Marketing stage and notify the marketing team. BOM fields will be locked."
+        confirmLabel="Yes, Mark Complete"
+        loading={saving}
+        onConfirm={() => { setConfirmOpen(false); markComplete() }}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </div>
   )
 }

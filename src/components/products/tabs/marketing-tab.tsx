@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { createClient } from '@/lib/supabase/client'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import type { Product, Profile, MarketingData, ProductFile } from '@/lib/types'
 
 interface MarketingTabProps {
@@ -34,6 +35,7 @@ export function MarketingTab({ product, profile, data, files }: MarketingTabProp
   const [newFeature, setNewFeature] = useState('')
   const [newCatalog, setNewCatalog] = useState('')
   const [saving, setSaving] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const [saved, setSaved] = useState(false)
 
   // Launch creative files
@@ -248,7 +250,7 @@ export function MarketingTab({ product, profile, data, files }: MarketingTabProp
                 </Button>
               )}
               {!data?.is_completed && (
-                <Button variant="outline" onClick={markComplete} disabled={saving} className="text-green-600 border-green-200">
+                <Button variant="outline" onClick={() => setConfirmOpen(true)} disabled={saving} className="text-green-600 border-green-200">
                   Mark Complete
                 </Button>
               )}
@@ -382,6 +384,15 @@ export function MarketingTab({ product, profile, data, files }: MarketingTabProp
           )}
         </CardContent>
       </Card>
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Mark Marketing Complete?"
+        description="This will advance the product to Sales Pricing and notify the admin. Marketing fields will be locked."
+        confirmLabel="Yes, Mark Complete"
+        loading={saving}
+        onConfirm={() => { setConfirmOpen(false); markComplete() }}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </div>
   )
 }

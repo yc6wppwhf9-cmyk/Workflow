@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createClient } from '@/lib/supabase/client'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { CATEGORY_LABELS, BRANDS, CHANNELS, type ProductCategory, type Brand } from '@/lib/types'
 import type { Product, Profile, DesignData, SalesData, ProductFile, DesignSubmission } from '@/lib/types'
 import { parseTechPackRows } from '@/lib/parse-techpack'
@@ -79,6 +80,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
   const [brand, setBrand]         = useState<Brand | ''>(product.brand || '')
   const [newSku, setNewSku]       = useState('')
   const [saving, setSaving]       = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const [saved, setSaved]         = useState(false)
   const [assignedTo, setAssignedTo] = useState<string>(data?.assigned_to || '__none__')
   const [savingAssign, setSavingAssign] = useState(false)
@@ -979,7 +981,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
                 </Button>
               )}
               {!data?.is_completed && (
-                <Button variant="outline" onClick={markComplete} disabled={saving} className="text-green-600 border-green-200">
+                <Button variant="outline" onClick={() => setConfirmOpen(true)} disabled={saving} className="text-green-600 border-green-200">
                   Mark Complete
                 </Button>
               )}
@@ -987,6 +989,15 @@ export function DesignTab({ product, profile, data, salesData, files, submission
           )}
         </CardContent>
       </Card>}
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Mark Design Complete?"
+        description="This will advance the product to the Sampling stage and notify the sampling team. Design fields will be locked."
+        confirmLabel="Yes, Mark Complete"
+        loading={saving}
+        onConfirm={() => { setConfirmOpen(false); markComplete() }}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </div>
   )
 }

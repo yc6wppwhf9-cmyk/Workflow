@@ -1,4 +1,11 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Pencil, Check, X } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { createClient } from '@/lib/supabase/client'
 import { CATEGORY_LABELS, type ProductCategory, type Product, type DesignData, type MerchandisingData, type BomData, type MarketingData, type SalesData, type ProductFile } from '@/lib/types'
 
 interface OverviewTabProps {
@@ -21,7 +28,21 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
 }
 
 export function OverviewTab({ product, designData, bomData, salesData, files }: OverviewTabProps) {
+  const router    = useRouter()
   const colourSkus = designData?.color_skus || []
+
+  const [editingName, setEditingName] = useState(false)
+  const [displayName, setDisplayName] = useState(product.display_name || '')
+  const [savingName, setSavingName]   = useState(false)
+
+  async function saveDisplayName() {
+    setSavingName(true)
+    const supabase = createClient()
+    await supabase.from('products').update({ display_name: displayName.trim() || null }).eq('id', product.id)
+    setSavingName(false)
+    setEditingName(false)
+    router.refresh()
+  }
 
   // Group merch images by colour_tag
   const colourImages = files.filter(f => f.colour_tag && f.file_type?.startsWith('image/') && f.department === 'merchandising')
@@ -44,8 +65,49 @@ export function OverviewTab({ product, designData, bomData, salesData, files }: 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-8 gap-y-4">
 
             <InfoRow label="Product Name">
-              <p className="text-sm font-semibold text-gray-900">{product.name}</p>
+              <p className="text-sm font-semibold text-gray-900 break-words">{product.name}</p>
             </InfoRow>
+
+            {/* Editable short display name */}
+            <div className="col-span-2 sm:col-span-1">
+              <p className="text-xs text-gray-500 mb-1">Short Name <span className="text-gray-400">(alias)</span></p>
+              {editingName ? (
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    value={displayName}
+                    onChange={e => setDisplayName(e.target.value)}
+                    placeholder="e.g. Nike Bag Red"
+                    className="h-7 text-sm py-0"
+                    autoFocus
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') saveDisplayName()
+                      if (e.key === 'Escape') setEditingName(false)
+                    }}
+                  />
+                  <button onClick={saveDisplayName} disabled={savingName}
+                    className="text-green-600 hover:text-green-700 p-1 rounded hover:bg-green-50">
+                    <Check className="h-4 w-4" />
+                  </button>
+                  <button onClick={() => setEditingName(false)}
+                    className="text-gray-400 hover:text-gray-600 p-1 rounded hover:bg-gray-100">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 group">
+                  <p className="text-sm font-medium text-gray-900">
+                    {product.display_name || <span className="text-gray-400 italic">Not set</span>}
+                  </p>
+                  <button
+                    onClick={() => setEditingName(true)}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-blue-600 p-0.5 rounded"
+                    title="Edit short name"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
 
             <InfoRow label="Designer Name">
               <p className="text-sm font-medium text-gray-900">{designData?.designer_name || '—'}</p>

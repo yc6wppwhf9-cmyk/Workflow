@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import type { DesignData, Product, ProductFile, Profile, SamplingData } from '@/lib/types'
 import Image from 'next/image'
 
@@ -39,6 +40,7 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
   const [remarks, setRemarks] = useState(data?.sampler_remarks || '')
   const [feedback, setFeedback] = useState('')
   const [saving, setSaving] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [reviewing, setReviewing] = useState(false)
 
@@ -338,14 +340,22 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-gray-600">Sample has been approved by the designer. Click below to advance the product to the Merchandising stage.</p>
-            <Button onClick={markSamplingComplete} disabled={saving}>
+            <Button onClick={() => setConfirmOpen(true)} disabled={saving}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               Mark Sampling Complete
             </Button>
           </CardContent>
         </Card>
       )}
-
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Mark Sampling Complete?"
+        description="This will advance the product to the Merchandising stage and notify the merchandising head. Sampling fields will be locked."
+        confirmLabel="Yes, Mark Complete"
+        loading={saving}
+        onConfirm={() => { setConfirmOpen(false); markSamplingComplete() }}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </div>
   )
 }

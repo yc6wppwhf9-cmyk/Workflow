@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { Header } from '@/components/layout/header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Package, Clock, CheckCircle2, ArrowRight, AlertCircle } from 'lucide-react'
+import { Package, Clock, CheckCircle2, ArrowRight, AlertCircle, TrendingUp } from 'lucide-react'
 import Link from 'next/link'
 import { one, formatDateTime, formatShortDate } from '@/lib/utils'
 import type { Profile } from '@/lib/types'
@@ -112,22 +112,40 @@ export async function SalesDashboard({ profile, filter }: { profile: Profile; fi
 
         {show('in-pipeline') && inPipeline.length > 0 && (
           <Card>
-            <CardHeader className="pb-3"><CardTitle className="text-base">In Pipeline</CardTitle></CardHeader>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-purple-500" /> In Pipeline
+              </CardTitle>
+            </CardHeader>
             <CardContent className="p-0 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead><tr className="border-b border-gray-100 bg-gray-50">
                   <th className="text-left px-6 py-2 text-xs font-semibold text-gray-400 uppercase">Product</th>
-                  <th className="text-left px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Stage</th>
+                  <th className="text-left px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Current Stage</th>
+                  <th className="text-left px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Progress</th>
                   <th className="px-4 py-2"></th>
                 </tr></thead>
                 <tbody className="divide-y divide-gray-50">
-                  {inPipeline.map(p => (
-                    <tr key={p.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-3 font-medium text-gray-900">{p.name}</td>
-                      <td className="px-4 py-3"><StageBadge stage={p.workflow_stage} /></td>
-                      <td className="px-4 py-3 text-right"><Link href={`/products/${p.id}`} className="text-xs text-blue-600 hover:underline flex items-center gap-1 justify-end">Open <ArrowRight className="h-3 w-3" /></Link></td>
-                    </tr>
-                  ))}
+                  {inPipeline.map(p => {
+                    const STAGE_ORDER = ['draft','design_completed','sampling_completed','merchandising_completed','bom_finalized','marketing_ready','sales_priced','product_live']
+                    const idx = STAGE_ORDER.indexOf(p.workflow_stage)
+                    const pct = idx >= 0 ? Math.round((idx / (STAGE_ORDER.length - 1)) * 100) : 0
+                    return (
+                      <tr key={p.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-3 font-medium text-gray-900">{p.name}</td>
+                        <td className="px-4 py-3"><StageBadge stage={p.workflow_stage} /></td>
+                        <td className="px-4 py-3 min-w-[140px]">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                              <div className="h-full bg-purple-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className="text-xs text-gray-400 shrink-0">{pct}%</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-right"><Link href={`/products/${p.id}`} className="text-xs text-blue-600 hover:underline flex items-center gap-1 justify-end">Open <ArrowRight className="h-3 w-3" /></Link></td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </CardContent>

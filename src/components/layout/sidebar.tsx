@@ -21,8 +21,6 @@ import {
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { getInitials } from '@/lib/utils'
-import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
 import type { Profile } from '@/lib/types'
 
 const navItems = [
@@ -46,18 +44,14 @@ interface SidebarProps {
 }
 
 export function Sidebar({ profile }: SidebarProps) {
-  const pathname  = usePathname()
-  const router    = useRouter()
+  const pathname = usePathname()
   const [open, setOpen] = useState(false)
 
   // Close mobile drawer on route change
   useEffect(() => { setOpen(false) }, [pathname])
 
-  async function handleLogout() {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push('/login')
-    router.refresh()
+  function handleLogout() {
+    window.location.href = '/api/auth/signout'
   }
 
   const navLink = (href: string, label: string, Icon: React.ElementType) => {

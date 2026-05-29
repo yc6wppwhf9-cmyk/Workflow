@@ -53,7 +53,7 @@ export function Sidebar({ profile }: SidebarProps) {
   }
 
   return (
-    <aside className="w-64 shrink-0 flex flex-col bg-gray-900 text-white min-h-screen">
+    <aside className="w-64 shrink-0 flex flex-col bg-gray-900 text-white h-screen sticky top-0">
       {/* Logo */}
       <div className="flex items-center justify-center px-4 py-3 border-b border-gray-800">
         <Image
@@ -67,7 +67,7 @@ export function Sidebar({ profile }: SidebarProps) {
       </div>
 
       {/* Main nav */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5">
+      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
         <p className="px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Main</p>
         {navItems.map(({ href, label, icon: Icon }) => (
           <Link

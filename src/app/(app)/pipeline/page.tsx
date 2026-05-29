@@ -147,20 +147,23 @@ export default async function PipelinePage() {
   type LogMap = Map<string, LogEntry>
   const L = () => new Map<string, LogEntry>() as LogMap
 
-  const salesCreateLog    = L()
-  const salesCompleteLog  = L()
-  const designAssignLog   = L()
-  const illUploadLog      = L()
-  const illSubmitLog      = L()
-  const illApproveLog     = L()
-  const designCompleteLog = L()
-  const sampSubmitLog     = L()
-  const sampApproveLog    = L()
-  const sampDoneLog       = L()
-  const merchAssignLog    = L()
-  const merchSubmitLog    = L()
-  const merchDoneLog      = L()
-  const bomDoneLog        = L()
+  const salesCreateLog       = L()
+  const salesCompleteLog     = L()
+  const designAssignLog      = L()
+  const illUploadLog         = L()
+  const illSubmitLog         = L()
+  const illApproveLog        = L()
+  const designCompleteLog    = L()
+  const sampSubmitLog        = L()
+  const sampApproveLog       = L()
+  const sampDoneLog          = L()
+  const merchAssignLog       = L()
+  const merchSubmitLog       = L()
+  const merchDoneLog         = L()
+  const bomFgCodeLog         = L()
+  const bomDoneLog           = L()
+  const marketingCreativeLog = L()
+  const marketingDoneLog     = L()
 
   for (const log of activityLogs || []) {
     const pid = log.product_id
@@ -168,20 +171,23 @@ export default async function PipelinePage() {
     const a = (log.action || '').toLowerCase()
     const e: LogEntry = { created_at: log.created_at, user_id: log.user_id }
 
-    if (a.includes('created product with sales') && !salesCreateLog.has(pid))   salesCreateLog.set(pid, e)
-    if (a.includes('marked sales complete') && !salesCompleteLog.has(pid))      salesCompleteLog.set(pid, e)
-    if (a.startsWith('assigned design to') && !designAssignLog.has(pid))        designAssignLog.set(pid, e)
+    if (a.includes('created product with sales') && !salesCreateLog.has(pid))    salesCreateLog.set(pid, e)
+    if (a.includes('marked sales complete') && !salesCompleteLog.has(pid))       salesCompleteLog.set(pid, e)
+    if (a.startsWith('assigned design to') && !designAssignLog.has(pid))         designAssignLog.set(pid, e)
     if (a.startsWith('uploaded') && a.includes('illustration') && !illUploadLog.has(pid)) illUploadLog.set(pid, e)
-    if (a.includes('submitted design illustrations') && !illSubmitLog.has(pid)) illSubmitLog.set(pid, e)
-    if (a.includes('design submission approved') && !illApproveLog.has(pid))    illApproveLog.set(pid, e)
-    if (a.includes('marked design complete') && !designCompleteLog.has(pid))    designCompleteLog.set(pid, e)
-    if (a.includes('marked sample complete') && !sampSubmitLog.has(pid))        sampSubmitLog.set(pid, e)
-    if (a.includes('management approved sample') && !sampApproveLog.has(pid))   sampApproveLog.set(pid, e)
+    if (a.includes('submitted design illustrations') && !illSubmitLog.has(pid))  illSubmitLog.set(pid, e)
+    if (a.includes('design submission approved') && !illApproveLog.has(pid))     illApproveLog.set(pid, e)
+    if (a.includes('marked design complete') && !designCompleteLog.has(pid))     designCompleteLog.set(pid, e)
+    if (a.includes('marked sample complete') && !sampSubmitLog.has(pid))         sampSubmitLog.set(pid, e)
+    if (a.includes('management approved sample') && !sampApproveLog.has(pid))    sampApproveLog.set(pid, e)
     if (a.includes('sampling complete') && a.includes('stage advanced') && !sampDoneLog.has(pid)) sampDoneLog.set(pid, e)
-    if (a.startsWith('assigned merchandising') && !merchAssignLog.has(pid))     merchAssignLog.set(pid, e)
-    if (a.includes('submitted attribute sheet') && !merchSubmitLog.has(pid))    merchSubmitLog.set(pid, e)
-    if (a.includes('marked merchandising complete') && !merchDoneLog.has(pid))  merchDoneLog.set(pid, e)
-    if (a.includes('marked bom complete') && !bomDoneLog.has(pid))              bomDoneLog.set(pid, e)
+    if (a.startsWith('assigned merchandising') && !merchAssignLog.has(pid))      merchAssignLog.set(pid, e)
+    if (a.includes('submitted attribute sheet') && !merchSubmitLog.has(pid))     merchSubmitLog.set(pid, e)
+    if (a.includes('marked merchandising complete') && !merchDoneLog.has(pid))   merchDoneLog.set(pid, e)
+    if (a.includes('saved fg inv code') && !bomFgCodeLog.has(pid))               bomFgCodeLog.set(pid, e)
+    if (a.includes('marked bom complete') && !bomDoneLog.has(pid))               bomDoneLog.set(pid, e)
+    if (a.includes('launch creative') && !marketingCreativeLog.has(pid))         marketingCreativeLog.set(pid, e)
+    if (a.includes('marked marketing complete') && !a.includes('incomplete') && !marketingDoneLog.has(pid)) marketingDoneLog.set(pid, e)
   }
 
   // Design submissions: first submit + first approval
@@ -319,6 +325,16 @@ export default async function PipelinePage() {
         activeIf: (!!merch?.assigned_to || !!merchSubmitLog.has(pid)) && !merchDoneLog.has(pid) && atOrPast('merchandising_completed'),
       }),
       // ── BOM ────────────────────────────────────────────────────────────────
+      ms('bom_started', 'bom', 'BOM review started', {
+        doneIf: !!bomFgCodeLog.has(pid) || !!bomDoneLog.has(pid) || atOrPast('marketing_ready'),
+        activeIf: atOrPast('bom_finalized') && !bomFgCodeLog.has(pid) && !bomDoneLog.has(pid),
+      }),
+      ms('bom_fg_code', 'bom', 'FG INV code entered', {
+        logEntry: bomFgCodeLog.get(pid),
+        person: name(bomFgCodeLog.get(pid)?.user_id),
+        doneIf: !!bomFgCodeLog.has(pid),
+        activeIf: atOrPast('bom_finalized') && !bomFgCodeLog.has(pid),
+      }),
       ms('bom_done', 'bom', 'BOM completed — sent to Marketing', {
         logEntry: bomDoneLog.get(pid),
         person: name(bomDoneLog.get(pid)?.user_id),
@@ -326,9 +342,29 @@ export default async function PipelinePage() {
         activeIf: atOrPast('bom_finalized') && !bomDoneLog.has(pid),
       }),
       // ── MARKETING ──────────────────────────────────────────────────────────
-      ms('marketing', 'marketing', 'Marketing stage', {
-        doneIf: atOrPast('sales_priced'),
+      ms('marketing_started', 'marketing', 'Marketing started', {
+        doneIf: !!marketingCreativeLog.has(pid) || !!marketingDoneLog.has(pid) || atOrPast('sales_priced'),
         activeIf: product.workflow_stage === 'marketing_ready',
+      }),
+      ms('marketing_creatives', 'marketing', 'Creatives uploaded', {
+        logEntry: marketingCreativeLog.get(pid),
+        person: name(marketingCreativeLog.get(pid)?.user_id),
+        doneIf: !!marketingCreativeLog.has(pid),
+        activeIf: product.workflow_stage === 'marketing_ready' && !marketingCreativeLog.has(pid),
+      }),
+      ms('marketing_done', 'marketing', 'Marketing completed', {
+        logEntry: marketingDoneLog.get(pid),
+        person: name(marketingDoneLog.get(pid)?.user_id),
+        doneIf: !!marketingDoneLog.has(pid) || atOrPast('sales_priced'),
+        activeIf: product.workflow_stage === 'marketing_ready',
+      }),
+      ms('sales_priced', 'marketing', 'Sales priced product', {
+        doneIf: atOrPast('product_live'),
+        activeIf: product.workflow_stage === 'sales_priced',
+      }),
+      ms('product_live', 'marketing', 'Product live', {
+        doneIf: product.workflow_stage === 'product_live',
+        activeIf: false,
       }),
     ]
 
@@ -351,8 +387,8 @@ export default async function PipelinePage() {
     { dept: 'design',        title: 'Design',        ids: ['design_assigned','ill_uploaded','ill_submitted','ill_approved','design_done'] },
     { dept: 'sampling',      title: 'Sampling',      ids: ['samp_started','samp_submitted','samp_approved','samp_done'] },
     { dept: 'merchandising', title: 'Merchandising', ids: ['merch_assigned','merch_submitted','merch_done'] },
-    { dept: 'bom',           title: 'BOM',           ids: ['bom_done'] },
-    { dept: 'marketing',     title: 'Marketing',     ids: ['marketing'] },
+    { dept: 'bom',           title: 'BOM',           ids: ['bom_started', 'bom_fg_code', 'bom_done'] },
+    { dept: 'marketing',     title: 'Marketing',     ids: ['marketing_started', 'marketing_creatives', 'marketing_done', 'sales_priced', 'product_live'] },
   ]
 
   return (

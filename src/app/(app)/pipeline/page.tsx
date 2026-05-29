@@ -269,8 +269,8 @@ export default async function PipelinePage() {
       ms('ill_approved', 'design', 'Illustrations approved by Design Head', {
         date: dsApprove?.at ?? null,
         person: name(dsApprove?.by ?? illApproveLog.get(pid)?.user_id),
-        doneIf: !!dsApprove || !!illApproveLog.has(pid),
-        activeIf: !!dsFirstSubmit.has(pid) && !dsApprove,
+        doneIf: !!dsApprove || !!illApproveLog.has(pid) || !!designCompleteLog.has(pid) || atOrPast('sampling_completed'),
+        activeIf: !!dsFirstSubmit.has(pid) && !dsApprove && !illApproveLog.has(pid) && !designCompleteLog.has(pid) && !atOrPast('sampling_completed'),
       }),
       ms('design_done', 'design', 'Tech pack filled — Design completed', {
         logEntry: designCompleteLog.get(pid),

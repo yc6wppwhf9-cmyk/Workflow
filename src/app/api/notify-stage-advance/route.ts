@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@supabase/supabase-js'
+import { createClient as createServerClient } from '@/lib/supabase/server'
 import { STAGE_LABELS, ROLE_LABELS, type WorkflowStage, type UserRole } from '@/lib/types'
+
+const adminSupabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+)
 
 // Maps each stage to the role(s) that need to act next
 const NEXT_STAGE_ROLES: Partial<Record<WorkflowStage, UserRole[]>> = {
@@ -25,7 +31,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const supabase = await createClient()
+    const supabase = await createServerClient()
 
     // Verify caller is authenticated
     const { data: { user } } = await supabase.auth.getUser()
@@ -39,7 +45,7 @@ export async function POST(request: NextRequest) {
     // Fetch all active users for all recipient roles
     const { data: recipients } = await supabase
       .from('profiles')
-      .select('email, full_name, role')
+      .select('id, email, full_name, role')
       .in('role', recipientRoles)
       .eq('is_active', true)
 
@@ -54,6 +60,16 @@ export async function POST(request: NextRequest) {
     // Send via Resend if API key is configured
     const resendKey = process.env.RESEND_API_KEY
     const fromEmail = process.env.RESEND_FROM_EMAIL || 'PLM System <noreply@hscvpl.com>'
+
+    // Always write in-app notifications regardless of email config
+    await adminSupabase.from('notifications').insert(
+      recipients.map(r => ({
+        user_id:      r.id,
+        product_id,
+        product_name: product_name || null,
+        message:      `"${product_name}" has moved to ${stageLabel} — your action is required.`,
+      }))
+    )
 
     if (!resendKey) {
       console.log(`[notify] Stage advanced to "${stageLabel}" for "${product_name}". Recipients: ${recipients.map(r => r.email).join(', ')}`)

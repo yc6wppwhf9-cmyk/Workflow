@@ -1,5 +1,4 @@
-import { Bell } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { NotificationBell } from './notification-bell'
 
 interface HeaderProps {
   title: string
@@ -17,9 +16,7 @@ export function Header({ title, subtitle, actions }: HeaderProps) {
         </div>
         <div className="flex items-center gap-3">
           {actions}
-          <button className="relative text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100">
-            <Bell className="h-5 w-5" />
-          </button>
+          <NotificationBell />
         </div>
       </div>
     </header>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useMemo } from 'react'
+import { useState, useRef, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Loader2, Lock, Save, Plus, X, Upload, ExternalLink, Trash2,
@@ -17,6 +17,7 @@ import { CATEGORY_LABELS, BRANDS, CHANNELS, type ProductCategory, type Brand } f
 import type { Product, Profile, DesignData, SalesData, ProductFile, DesignSubmission } from '@/lib/types'
 import { parseTechPackRows } from '@/lib/parse-techpack'
 import { extractStoragePath } from '@/lib/utils'
+import Image from 'next/image'
 
 interface DesignTabProps {
   product: Product
@@ -99,6 +100,14 @@ export function DesignTab({ product, profile, data, salesData, files, submission
   const [uploadingName, setUploadingName] = useState('')
 
   const techPackRef = useRef<HTMLInputElement>(null)
+  const saveTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const notesTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const submitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => {
+    if (saveTimerRef.current)   clearTimeout(saveTimerRef.current)
+    if (notesTimerRef.current)  clearTimeout(notesTimerRef.current)
+    if (submitTimerRef.current) clearTimeout(submitTimerRef.current)
+  }, [])
   const [parsingTechPack, setParsing]   = useState(false)
   const [techPackResult, setTechPackResult] = useState<{ filled: string[] } | null>(null)
 
@@ -133,7 +142,8 @@ export function DesignTab({ product, profile, data, salesData, files, submission
     })
     setSaving(false)
     setSaved(true)
-    setTimeout(() => { setSaved(false); router.refresh() }, 2000)
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => { setSaved(false); router.refresh() }, 2000)
   }
 
   async function markComplete() {
@@ -190,7 +200,8 @@ export function DesignTab({ product, profile, data, salesData, files, submission
     await supabase.from('design_data').update({ head_notes: headNotes || null, updated_by: profile.id }).eq('product_id', product.id)
     setSavingNotes(false)
     setNotesSaved(true)
-    setTimeout(() => setNotesSaved(false), 2000)
+    if (notesTimerRef.current) clearTimeout(notesTimerRef.current)
+    notesTimerRef.current = setTimeout(() => setNotesSaved(false), 2000)
   }
 
   async function submitForReview() {
@@ -200,7 +211,11 @@ export function DesignTab({ product, profile, data, salesData, files, submission
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ product_id: product.id }),
     })
-    if (res.ok) { setSubmitDone(true); setTimeout(() => setSubmitDone(false), 3000) }
+    if (res.ok) {
+      setSubmitDone(true)
+      if (submitTimerRef.current) clearTimeout(submitTimerRef.current)
+      submitTimerRef.current = setTimeout(() => setSubmitDone(false), 3000)
+    }
     setSubmitting(false)
     router.refresh()
   }
@@ -347,7 +362,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
                     className="group relative aspect-video rounded-lg overflow-hidden border border-gray-200 bg-gray-50 hover:border-blue-300 transition-colors"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={file.file_url} alt={file.name} className="w-full h-full object-cover" />
+                    <Image src={file.file_url} alt={file.name} fill sizes="(max-width: 768px) 50vw, 25vw" className="object-cover" />
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
                       <ExternalLink className="h-5 w-5 text-white" />
                     </div>
@@ -531,7 +546,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
                       className="relative shrink-0 w-20 h-20 rounded-md overflow-hidden border border-gray-200 bg-gray-50 hover:opacity-90 transition-opacity"
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={file.file_url} alt={file.name} className="w-full h-full object-cover" />
+                      <Image src={file.file_url} alt={file.name} fill sizes="(max-width: 768px) 50vw, 25vw" className="object-cover" />
                     </a>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -663,7 +678,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
                     'border-gray-200'
                   }`}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={file.file_url} alt={file.name} className="w-full h-full object-cover" />
+                    <Image src={file.file_url} alt={file.name} fill sizes="(max-width: 768px) 50vw, 25vw" className="object-cover" />
                     {/* Status badge */}
                     {file.review_status && (
                       <div className={`absolute top-1.5 left-1.5 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs font-medium ${

@@ -41,7 +41,8 @@ export default async function ManagementPage() {
   ] = await Promise.all([
     supabase.from('design_submissions')
       .select('id, product_id, submitted_by, status, created_at, reviewed_at, feedback, product:products(id,name), submitter:profiles!submitted_by(id,full_name)')
-      .order('created_at', { ascending: true }),
+      .order('created_at', { ascending: true })
+      .limit(2000),
     supabase.from('design_data')
       .select('product_id, assigned_to, is_completed, product:products(id,name,workflow_stage), assignee:profiles!assigned_to(id,full_name)')
       .not('assigned_to', 'is', null),
@@ -123,14 +124,20 @@ export default async function ManagementPage() {
     designerMap[f.uploaded_by].imagesUploaded++
   }
 
+  // Pre-index first submission per product to avoid O(n*m) find inside loop
+  const firstSubByProduct = new Map<string, { submitter: unknown }>()
+  for (const sub of allSubmissions || []) {
+    if (!sub.product_id || firstSubByProduct.has(sub.product_id)) continue
+    firstSubByProduct.set(sub.product_id, sub)
+  }
+
   // Avg days from assignment to first submission (per product)
   for (const [productId, pSub] of Object.entries(productSubMap)) {
     const assignDate = latestAssignDate[productId]
     if (!assignDate || !pSub.firstSubmit) continue
     const days = diffDays(assignDate, pSub.firstSubmit)
     if (days === null) continue
-    // Find which designer submitted first for this product
-    const firstSub = (allSubmissions || []).find(s => s.product_id === productId)
+    const firstSub = firstSubByProduct.get(productId)
     const submitter = one(firstSub?.submitter) as { id: string } | null
     if (submitter && designerMap[submitter.id]) {
       designerMap[submitter.id].daysToSubmitList.push(days)

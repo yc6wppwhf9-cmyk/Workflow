@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useRef, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { CheckCircle2, Clock, ExternalLink, Loader2, Printer, Send, Trash2, Upload, XCircle } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
 import type { DesignData, Product, ProductFile, Profile, SamplingData } from '@/lib/types'
+import Image from 'next/image'
 
 interface SamplingTabProps {
   product: Product
@@ -38,6 +39,7 @@ function getStoragePath(fileUrl: string) {
 
 export function SamplingTab({ product, profile, designData, data, files }: SamplingTabProps) {
   const router = useRouter()
+  const supabase = useMemo(() => createClient(), [])
   const sampleInputRef = useRef<HTMLInputElement>(null)
   const [samplerName, setSamplerName] = useState(data?.sampler_name || '')
   const [remarks, setRemarks] = useState(data?.sampler_remarks || '')
@@ -57,7 +59,6 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
 
   async function saveRemarks() {
     setSaving(true)
-    const supabase = createClient()
     await supabase.from('sampling_data').update({
       sampler_name: samplerName || null,
       sampler_remarks: remarks || null,
@@ -77,7 +78,6 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
     const selectedFiles = Array.from(e.target.files || [])
     if (selectedFiles.length === 0) return
     setUploading(true)
-    const supabase = createClient()
     const ts = Date.now()
 
     for (let i = 0; i < selectedFiles.length; i++) {
@@ -109,7 +109,6 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
   }
 
   async function deleteFile(file: ProductFile) {
-    const supabase = createClient()
     const storagePath = getStoragePath(file.file_url)
     if (storagePath) await supabase.storage.from('product-files').remove([storagePath])
     await supabase.from('product_files').delete().eq('id', file.id)
@@ -118,7 +117,6 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
 
   async function submitSampleForReview() {
     setSaving(true)
-    const supabase = createClient()
     await supabase.from('sampling_data').update({
       sampler_name: samplerName || null,
       sampler_remarks: remarks || null,
@@ -153,7 +151,6 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
 
   async function markSamplingComplete() {
     setSaving(true)
-    const supabase = createClient()
     await supabase.rpc('advance_product_stage', {
       p_product_id: product.id,
       p_next_stage: 'merchandising_completed',
@@ -240,7 +237,7 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
               {sampleImages.map(file => (
                 <div key={file.id} className="relative group rounded-lg overflow-hidden border border-gray-200 aspect-square bg-gray-50">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={file.file_url} alt={file.name} className="h-full w-full object-cover" />
+                  <Image src={file.file_url} alt={file.name} fill sizes="(max-width: 768px) 50vw, 25vw" className="object-cover" />
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/35 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
                     <a href={file.file_url} target="_blank" rel="noopener noreferrer" className="h-8 w-8 rounded-full bg-white flex items-center justify-center">
                       <ExternalLink className="h-4 w-4 text-gray-700" />

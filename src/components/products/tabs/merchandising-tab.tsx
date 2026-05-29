@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createClient } from '@/lib/supabase/client'
-import * as XLSX from 'xlsx'
 import { parseMerchExcel, filterSkusForProduct, aggregateMerchFields, buildColourVariants, extractProductBaseName } from '@/lib/parse-merch-excel'
 import type { Product, Profile, MerchandisingData } from '@/lib/types'
 
@@ -158,7 +157,8 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
     try {
       setUploadProgress('Parsing Excel...')
       const arrayBuffer = await file.arrayBuffer()
-      const wb = XLSX.read(arrayBuffer, { type: 'array' })
+      const { read, utils: xlsxUtils } = await import('xlsx')
+      const wb = read(arrayBuffer, { type: 'array' })
       const sheetNames = wb.SheetNames
       const parsed = parseMerchExcel(arrayBuffer, product.name)
 
@@ -240,7 +240,7 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
           if (detailsPicsIdx >= 0) {
             const detailsSheet = wb.Sheets[sheetNames[detailsPicsIdx]]
             if (detailsSheet) {
-              const cellData = XLSX.utils.sheet_to_json<string[]>(detailsSheet, { header: 1, defval: '' }) as string[][]
+              const cellData = xlsxUtils.sheet_to_json<string[]>(detailsSheet, { header: 1, defval: '' }) as string[][]
               for (let r = 0; r < cellData.length; r++) {
                 for (const cell of cellData[r]) {
                   const cellStr = String(cell || '').trim().toLowerCase()

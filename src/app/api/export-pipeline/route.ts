@@ -26,12 +26,12 @@ export async function GET() {
     { data: activityLogs },
     { data: allProfiles },
   ] = await Promise.all([
-    supabase.from('products').select('id, name, workflow_stage, created_at, created_by').order('created_at', { ascending: false }),
+    supabase.from('products').select('id, name, workflow_stage, created_at, created_by').order('created_at', { ascending: false }).limit(500),
     supabase.from('design_data').select('product_id, assigned_to'),
-    supabase.from('design_submissions').select('product_id, status, created_at, reviewed_at, reviewed_by').order('created_at', { ascending: true }),
+    supabase.from('design_submissions').select('product_id, status, created_at, reviewed_at, reviewed_by').order('created_at', { ascending: true }).limit(2000),
     supabase.from('sampling_data').select('product_id, sampler_name, reviewed_at, reviewed_by'),
     supabase.from('merchandising_data').select('product_id, assigned_to'),
-    supabase.from('activity_logs').select('product_id, created_at, action, user_id').order('created_at', { ascending: true }),
+    supabase.from('activity_logs').select('product_id, created_at, action, user_id').order('created_at', { ascending: true }).limit(5000),
     supabase.from('profiles').select('id, full_name'),
   ])
 
@@ -146,6 +146,7 @@ export async function GET() {
     headers: {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': `attachment; filename="product-pipeline-${today}.xlsx"`,
+      'Cache-Control': 'private, no-store',
     },
   })
 }

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Pencil, Check, X } from 'lucide-react'
+import { Pencil, Check, X, ChevronLeft, ChevronRight, ZoomIn } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { createClient } from '@/lib/supabase/client'
@@ -34,6 +34,13 @@ export function OverviewTab({ product, designData, bomData, salesData, files }: 
   const [editingName, setEditingName] = useState(false)
   const [displayName, setDisplayName] = useState(product.display_name || '')
   const [savingName, setSavingName]   = useState(false)
+
+  // Lightbox state
+  const [lightbox, setLightbox] = useState<{ imgs: ProductFile[]; idx: number } | null>(null)
+  function openLightbox(imgs: ProductFile[], idx: number) { setLightbox({ imgs, idx }) }
+  function closeLightbox() { setLightbox(null) }
+  function prevImg() { setLightbox(lb => lb && lb.idx > 0 ? { ...lb, idx: lb.idx - 1 } : lb) }
+  function nextImg() { setLightbox(lb => lb && lb.idx < lb.imgs.length - 1 ? { ...lb, idx: lb.idx + 1 } : lb) }
 
   async function saveDisplayName() {
     setSavingName(true)
@@ -156,27 +163,80 @@ export function OverviewTab({ product, designData, bomData, salesData, files }: 
           <CardHeader>
             <CardTitle className="text-base">Colour Variants</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-              {Object.entries(colourGroups).map(([tag, imgs]) => (
-                <div key={tag} className="space-y-2">
-                  <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{tag}</p>
-                  {imgs.slice(0, 1).map(img => (
-                    <a key={img.id} href={img.file_url} target="_blank" rel="noopener noreferrer"
-                      className="block rounded-lg overflow-hidden border border-gray-200 aspect-square bg-gray-50 hover:border-blue-300 transition-colors"
+          <CardContent className="space-y-6">
+            {Object.entries(colourGroups).map(([tag, imgs]) => (
+              <div key={tag}>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">{tag}</p>
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2">
+                  {imgs.map((img, idx) => (
+                    <button
+                      key={img.id}
+                      onClick={() => openLightbox(imgs, idx)}
+                      className="relative group rounded-lg overflow-hidden border border-gray-200 aspect-square bg-gray-50 hover:border-blue-400 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400"
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={img.file_url} alt={tag} className="w-full h-full object-cover" />
-                    </a>
+                      <img src={img.file_url} alt={`${tag} ${idx + 1}`} className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                        <ZoomIn className="h-5 w-5 text-white drop-shadow" />
+                      </div>
+                    </button>
                   ))}
-                  {imgs.length > 1 && (
-                    <p className="text-xs text-gray-400">+{imgs.length - 1} more</p>
-                  )}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </CardContent>
         </Card>
+      )}
+
+      {/* Lightbox */}
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+          onClick={closeLightbox}
+        >
+          {/* Close */}
+          <button
+            onClick={closeLightbox}
+            className="absolute top-4 right-4 text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10"
+          >
+            <X className="h-6 w-6" />
+          </button>
+
+          {/* Counter */}
+          <p className="absolute top-4 left-1/2 -translate-x-1/2 text-white/60 text-sm">
+            {lightbox.idx + 1} / {lightbox.imgs.length}
+          </p>
+
+          {/* Prev */}
+          {lightbox.idx > 0 && (
+            <button
+              onClick={e => { e.stopPropagation(); prevImg() }}
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10"
+            >
+              <ChevronLeft className="h-8 w-8" />
+            </button>
+          )}
+
+          {/* Image */}
+          <div onClick={e => e.stopPropagation()} className="max-w-4xl max-h-[85vh] flex items-center justify-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={lightbox.imgs[lightbox.idx].file_url}
+              alt=""
+              className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
+            />
+          </div>
+
+          {/* Next */}
+          {lightbox.idx < lightbox.imgs.length - 1 && (
+            <button
+              onClick={e => { e.stopPropagation(); nextImg() }}
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10"
+            >
+              <ChevronRight className="h-8 w-8" />
+            </button>
+          )}
+        </div>
       )}
 
     </div>

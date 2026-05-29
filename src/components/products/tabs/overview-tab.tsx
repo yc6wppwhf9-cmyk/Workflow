@@ -38,7 +38,8 @@ export function OverviewTab({ product, designData, bomData, salesData, files }: 
   async function saveDisplayName() {
     setSavingName(true)
     const supabase = createClient()
-    await supabase.from('products').update({ display_name: displayName.trim() || null }).eq('id', product.id)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any).from('products').update({ display_name: displayName.trim() || null }).eq('id', product.id)
     setSavingName(false)
     setEditingName(false)
     router.refresh()

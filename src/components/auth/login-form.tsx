@@ -36,27 +36,30 @@ export function LoginForm() {
   }
 
   return (
-    <Card className="shadow-lg border-0">
-      <CardHeader>
-        <CardTitle className="text-xl">Sign in to your account</CardTitle>
-        <CardDescription>Enter your email and password to continue</CardDescription>
+    <Card className="shadow-sm border border-gray-200 bg-white rounded-2xl">
+      <CardHeader className="pb-4 pt-7 px-7">
+        <CardTitle className="text-2xl font-bold text-gray-900">Welcome back</CardTitle>
+        <CardDescription className="text-sm text-gray-500 mt-0.5">
+          Sign in with your company credentials
+        </CardDescription>
       </CardHeader>
-      <CardContent>
-        <form onSubmit={handleLogin} className="space-y-4">
+      <CardContent className="px-7 pb-7">
+        <form onSubmit={handleLogin} className="space-y-5">
           <div className="space-y-1.5">
-            <Label htmlFor="email">Email address</Label>
+            <Label htmlFor="email" className="text-sm font-medium text-gray-700">Email address</Label>
             <Input
               id="email"
               type="email"
-              placeholder="you@company.com"
+              placeholder="you@hscvpl.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
               autoComplete="email"
+              className="h-10 bg-gray-50 border-gray-200 focus:bg-white"
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password" className="text-sm font-medium text-gray-700">Password</Label>
             <div className="relative">
               <Input
                 id="password"
@@ -66,7 +69,7 @@ export function LoginForm() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 autoComplete="current-password"
-                className="pr-10"
+                className="h-10 bg-gray-50 border-gray-200 focus:bg-white pr-10"
               />
               <button
                 type="button"
@@ -79,14 +82,14 @@ export function LoginForm() {
           </div>
 
           {error && (
-            <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+            <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-2.5 text-sm text-red-700">
               {error}
             </div>
           )}
 
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button type="submit" className="w-full h-10 mt-1 text-sm font-semibold" disabled={loading}>
             {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-            Sign in
+            {loading ? 'Signing in…' : 'Sign in'}
           </Button>
         </form>
       </CardContent>

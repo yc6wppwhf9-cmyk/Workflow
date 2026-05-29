@@ -11,7 +11,7 @@ import { KpiCard } from './_shared'
 const DEPT_CONFIG: Record<string, { stage: WorkflowStage; dataTable: string; label: string; tab: string; color: string }> = {
   sampling:           { stage: 'sampling_completed',      dataTable: 'sampling_data',      label: 'Sampling',      tab: 'sampling',      color: 'bg-cyan-50 [&>svg]:text-cyan-600' },
   merchandising:      { stage: 'merchandising_completed', dataTable: 'merchandising_data', label: 'Merchandising', tab: 'merchandising', color: 'bg-blue-50 [&>svg]:text-blue-600' },
-  merchandising_head: { stage: 'merchandising_completed', dataTable: 'merchandising_data', label: 'Merchandising', tab: 'merchandising', color: 'bg-teal-50 [&>svg]:text-teal-600' },
+  merchandising_head: { stage: 'sampling_completed',      dataTable: 'merchandising_data', label: 'Merchandising', tab: 'merchandising', color: 'bg-teal-50 [&>svg]:text-teal-600' },
   bom:                { stage: 'bom_finalized',           dataTable: 'bom_data',           label: 'BOM',           tab: 'bom',           color: 'bg-orange-50 [&>svg]:text-orange-600' },
   marketing:          { stage: 'marketing_ready',         dataTable: 'marketing_data',     label: 'Marketing',     tab: 'marketing',     color: 'bg-yellow-50 [&>svg]:text-yellow-600' },
 }
@@ -22,6 +22,11 @@ export async function DepartmentDashboard({ profile, filter }: { profile: Profil
   if (!cfg) return null
 
   const supabase = await createClient()
+  // merchandising_head logs are recorded under 'merchandising' department in the tab
+  const logDepts = profile.role === 'merchandising_head'
+    ? ['merchandising', 'merchandising_head']
+    : [profile.role]
+
   const [{ data: myWorkProducts }, { data: recentLogs }] = await Promise.all([
     supabase.from('products')
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -30,7 +35,7 @@ export async function DepartmentDashboard({ profile, filter }: { profile: Profil
       .order('created_at', { ascending: false }),
     supabase.from('activity_logs')
       .select('*, user:profiles(full_name), product:products(name)')
-      .eq('department', profile.role)
+      .in('department', logDepts)
       .order('created_at', { ascending: false })
       .limit(6),
   ])

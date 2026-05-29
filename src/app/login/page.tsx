@@ -3,21 +3,35 @@ import { LoginForm } from '@/components/auth/login-form'
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="flex flex-col items-center mb-8">
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-sm space-y-6">
+
+        {/* Logo + company name */}
+        <div className="flex flex-col items-center gap-3">
           <Image
             src="/logo.png"
-            alt="HSCVPL Logo"
-            width={120}
-            height={120}
-            className="object-contain mb-4"
+            alt="HSCVPL"
+            width={96}
+            height={96}
+            className="object-contain"
             priority
           />
-          <h1 className="text-2xl font-bold text-gray-900">PLM System</h1>
-          <p className="text-gray-500 text-sm mt-1">Product Lifecycle Management</p>
+          <div className="text-center">
+            <p className="text-sm font-semibold text-gray-800 leading-tight">
+              High Spirit Commercial Ventures Pvt. Ltd.
+            </p>
+            <p className="text-xs text-gray-400 mt-0.5 tracking-wide uppercase">
+              Product Lifecycle Management
+            </p>
+          </div>
         </div>
+
+        {/* Form */}
         <LoginForm />
+
+        <p className="text-center text-xs text-gray-400">
+          &copy; {new Date().getFullYear()} HSCVPL. All rights reserved.
+        </p>
       </div>
     </div>
   )

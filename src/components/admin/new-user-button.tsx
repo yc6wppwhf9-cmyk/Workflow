@@ -109,7 +109,7 @@ export function NewUserButton() {
                 <Input
                   id="password"
                   type="password"
-                  placeholder="Leave blank to default to 'TempPass123!'"
+                  placeholder="Leave blank to default to 'Welcome@2026'"
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
                   minLength={6}

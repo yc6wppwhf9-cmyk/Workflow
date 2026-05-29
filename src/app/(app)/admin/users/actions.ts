@@ -73,7 +73,7 @@ export async function createTeamUser(formData: {
   // 1. Create the user in Supabase Authentication
   const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
     email: formData.email,
-    password: formData.password || 'TempPass123!',
+    password: formData.password || 'Welcome@2026',
     email_confirm: true,
     user_metadata: {
       full_name: formData.fullName,

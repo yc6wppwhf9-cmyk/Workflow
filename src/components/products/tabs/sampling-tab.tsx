@@ -169,11 +169,15 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="text-base">Design Tech Pack</CardTitle>
-          <a href={`/print/${product.id}`} target="_blank" rel="noopener noreferrer">
-            <Button size="sm" variant="outline" className="gap-1.5">
-              <Printer className="h-3.5 w-3.5" /> Print Tech Pack
-            </Button>
-          </a>
+          <Button
+            size="sm" variant="outline" className="gap-1.5"
+            onClick={() => {
+              const w = window.open(`/print/${product.id}`, '_blank')
+              if (w) w.onload = () => w.print()
+            }}
+          >
+            <Printer className="h-3.5 w-3.5" /> Print Tech Pack
+          </Button>
         </CardHeader>
         <CardContent>
           {designData ? (

@@ -92,6 +92,7 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
   const [newMaterial, setNewMaterial] = useState('')
   const [saving, setSaving] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [confirmProductName, setConfirmProductName] = useState(product.display_name || product.name || '')
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [assignedTo, setAssignedTo] = useState(data?.assigned_to || '')
@@ -433,6 +434,14 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
     const becomingComplete = !data?.is_completed
     setSaving(true)
     const supabase = createClient()
+
+    // Save confirmed product name to display_name
+    const finalName = confirmProductName.trim()
+    if (finalName) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from('products').update({ display_name: finalName }).eq('id', product.id)
+    }
+
     await supabase.from('merchandising_data').update({
       ...attrForm, is_completed: becomingComplete, updated_by: profile.id,
     }).eq('product_id', product.id)
@@ -474,11 +483,15 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
 
       {/* Print Tech Pack shortcut */}
       <div className="flex justify-end">
-        <a href={`/print/${product.id}`} target="_blank" rel="noopener noreferrer">
-          <Button size="sm" variant="outline" className="gap-1.5">
-            <Printer className="h-3.5 w-3.5" /> Print Tech Pack
-          </Button>
-        </a>
+        <Button
+          size="sm" variant="outline" className="gap-1.5"
+          onClick={() => {
+            const w = window.open(`/print/${product.id}`, '_blank')
+            if (w) w.onload = () => w.print()
+          }}
+        >
+          <Printer className="h-3.5 w-3.5" /> Print Tech Pack
+        </Button>
       </div>
 
       {/* Head: Assignment Card */}
@@ -800,15 +813,50 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
           )}
         </CardContent>
       </Card>}
-      <ConfirmDialog
-        open={confirmOpen}
-        title="Mark Merchandising Complete?"
-        description="This will advance the product to the BOM stage and notify the BOM team. Merchandising fields will be locked."
-        confirmLabel="Yes, Mark Complete"
-        loading={saving}
-        onConfirm={() => { setConfirmOpen(false); markComplete() }}
-        onCancel={() => setConfirmOpen(false)}
-      />
+      {/* Custom confirm with compulsory product name */}
+      {confirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-xl p-6 w-full max-w-sm mx-4">
+            <div className="flex flex-col items-center mb-4">
+              <div className="h-12 w-12 rounded-full bg-green-50 flex items-center justify-center mb-2">
+                <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+              </div>
+              <h3 className="text-base font-semibold text-gray-900 text-center">Mark Merchandising Complete?</h3>
+              <p className="text-sm text-gray-500 text-center mt-1">This will advance the product to BOM and notify the BOM team.</p>
+            </div>
+            <div className="mb-4">
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                Product Name <span className="text-red-500">*</span>
+                <span className="font-normal text-gray-400 ml-1">(required before completing)</span>
+              </label>
+              <input
+                type="text"
+                value={confirmProductName}
+                onChange={e => setConfirmProductName(e.target.value)}
+                placeholder="e.g. Nike Campus Backpack Red"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                autoFocus
+              />
+              {!confirmProductName.trim() && (
+                <p className="text-xs text-red-500 mt-1">Please enter a product name to continue.</p>
+              )}
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmOpen(false)} disabled={saving}
+                className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
+                Cancel
+              </button>
+              <button
+                onClick={() => { if (!confirmProductName.trim()) return; setConfirmOpen(false); markComplete() }}
+                disabled={saving || !confirmProductName.trim()}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving ? 'Saving…' : 'Yes, Mark Complete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -99,10 +99,11 @@ export async function POST(req: NextRequest) {
     fields_updated.push('colour_variants')
   }
 
-  // Always update product name from Excel (every upload)
+  // Always update product name + display_name from Excel (every upload)
   if (extracted_product_name) {
     updates.push(
-      supabase.from('products').update({ name: extracted_product_name, updated_by: user.id }).eq('id', product_id)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (supabase as any).from('products').update({ name: extracted_product_name, display_name: extracted_product_name, updated_by: user.id }).eq('id', product_id)
     )
     fields_updated.push('product_name')
   }

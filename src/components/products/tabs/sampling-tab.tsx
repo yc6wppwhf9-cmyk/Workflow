@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCircle2, Clock, ExternalLink, Loader2, Send, Trash2, Upload, XCircle } from 'lucide-react'
+import { CheckCircle2, Clock, ExternalLink, Loader2, Printer, Send, Trash2, Upload, XCircle } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -173,8 +173,13 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader className="pb-3">
+        <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="text-base">Design Tech Pack</CardTitle>
+          <a href={`/print/${product.id}`} target="_blank" rel="noopener noreferrer">
+            <Button size="sm" variant="outline" className="gap-1.5">
+              <Printer className="h-3.5 w-3.5" /> Print Tech Pack
+            </Button>
+          </a>
         </CardHeader>
         <CardContent>
           {designData ? (

@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Lock, Save, Plus, X, Upload, FileSpreadsheet, CheckCircle2, UserCheck, Send } from 'lucide-react'
+import { Loader2, Lock, Save, Plus, X, Upload, FileSpreadsheet, CheckCircle2, UserCheck, Send, Printer } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -468,6 +468,15 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
 
   return (
     <div className="max-w-3xl space-y-4">
+
+      {/* Print Tech Pack shortcut */}
+      <div className="flex justify-end">
+        <a href={`/print/${product.id}`} target="_blank" rel="noopener noreferrer">
+          <Button size="sm" variant="outline" className="gap-1.5">
+            <Printer className="h-3.5 w-3.5" /> Print Tech Pack
+          </Button>
+        </a>
+      </div>
 
       {/* Head: Assignment Card */}
       {isHead && (

@@ -541,112 +541,139 @@ export function DesignTab({ product, profile, data, salesData, files, submission
             </CardContent>
           </Card>
 
-          {/* Image Review Queue — per image */}
-          <Card className="border-violet-200">
-            <CardHeader className="pb-2 pt-4">
-              <CardTitle className="text-sm text-violet-900">Design Submissions for Review</CardTitle>
-            </CardHeader>
-            <CardContent className="pb-4 space-y-3">
-              {designFiles.length === 0 ? (
-                <p className="text-sm text-gray-400 py-2">No illustrations uploaded yet — designer will upload and submit.</p>
-              ) : designFiles.map(file => (
-                <div key={file.id} className={`border rounded-lg overflow-hidden ${
-                  file.review_status === 'approved' ? 'border-green-200 bg-green-50' :
-                  file.review_status === 'rejected' ? 'border-red-200 bg-red-50' :
-                  file.review_status === 'pending'  ? 'border-yellow-200 bg-yellow-50' :
-                  'border-gray-200'
-                }`}>
-                  <div className="flex items-start gap-3 p-3">
-                    <a href={file.file_url} target="_blank" rel="noopener noreferrer"
-                      className="relative shrink-0 w-20 h-20 rounded-md overflow-hidden border border-gray-200 bg-gray-50 hover:opacity-90 transition-opacity"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <Image src={file.file_url} alt={file.name} fill sizes="(max-width: 768px) 50vw, 25vw" className="object-cover" />
-                    </a>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2 mb-1.5">
-                        <p className="text-sm font-medium text-gray-800 truncate">{file.name}</p>
-                        {file.review_status === 'approved' && (
-                          <span className="inline-flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium shrink-0">
-                            <CheckCircle2 className="h-3 w-3" /> Approved
-                          </span>
-                        )}
-                        {file.review_status === 'rejected' && (
-                          <span className="inline-flex items-center gap-1 text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium shrink-0">
-                            <XCircle className="h-3 w-3" /> Rejected
-                          </span>
-                        )}
-                        {file.review_status === 'pending' && (
-                          <span className="inline-flex items-center gap-1 text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-medium shrink-0">
-                            <Clock className="h-3 w-3" /> Awaiting review
-                          </span>
-                        )}
-                        {!file.review_status && (
-                          <span className="inline-flex items-center gap-1 text-xs bg-gray-100 text-gray-400 px-2 py-0.5 rounded-full font-medium shrink-0">
-                            Not submitted
-                          </span>
-                        )}
-                      </div>
-                      {file.review_feedback && (
-                        <p className="text-xs text-red-700 mb-2">Feedback: {file.review_feedback}</p>
-                      )}
-                      {file.review_status === 'pending' && (
-                        <div className="flex items-start gap-2 mt-1">
-                          <Button
-                            size="sm"
-                            className="bg-green-600 hover:bg-green-700 h-7 text-xs"
-                            disabled={reviewingFileId === file.id}
-                            onClick={() => reviewImage(file.id, 'approved')}
-                          >
-                            {reviewingFileId === file.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
-                            Approve
-                          </Button>
-                          {showFileRejectBox === file.id ? (
-                            <div className="flex-1 space-y-1.5">
-                              <Textarea
-                                placeholder="Reason for rejection (optional)…"
-                                rows={2}
-                                className="text-xs bg-white"
-                                value={fileRejectFeedback[file.id] || ''}
-                                onChange={e => setFileRejectFeedback(prev => ({ ...prev, [file.id]: e.target.value }))}
-                              />
-                              <div className="flex gap-2">
+          {/* Image Review Queue — only pending files */}
+          {(() => {
+            const pendingFiles  = designFiles.filter(f => f.review_status === 'pending')
+            const rejectedFiles = designFiles.filter(f => f.review_status === 'rejected')
+            const approvedFiles = designFiles.filter(f => f.review_status === 'approved')
+            const reviewableFiles = [...pendingFiles, ...rejectedFiles]
+            return (
+              <Card className="border-violet-200">
+                <CardHeader className="pb-2 pt-4 flex flex-row items-center justify-between">
+                  <CardTitle className="text-sm text-violet-900">
+                    Design Submissions for Review
+                    {pendingFiles.length > 0 && (
+                      <span className="ml-2 inline-flex items-center justify-center h-5 w-5 rounded-full bg-yellow-400 text-white text-xs font-bold">
+                        {pendingFiles.length}
+                      </span>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pb-4 space-y-3">
+                  {designFiles.length === 0 && (
+                    <p className="text-sm text-gray-400 py-2">No illustrations uploaded yet — designer will upload and submit.</p>
+                  )}
+                  {designFiles.length > 0 && reviewableFiles.length === 0 && (
+                    <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 rounded-lg px-3 py-2.5 border border-green-200">
+                      <CheckCircle2 className="h-4 w-4 shrink-0" />
+                      All {approvedFiles.length} illustration{approvedFiles.length !== 1 ? 's' : ''} approved — nothing left to review.
+                    </div>
+                  )}
+                  {reviewableFiles.map(file => (
+                    <div key={file.id} className={`border rounded-lg overflow-hidden ${
+                      file.review_status === 'rejected' ? 'border-red-200 bg-red-50' : 'border-yellow-200 bg-yellow-50'
+                    }`}>
+                      <div className="flex items-start gap-3 p-3">
+                        <a href={file.file_url} target="_blank" rel="noopener noreferrer"
+                          className="relative shrink-0 w-20 h-20 rounded-md overflow-hidden border border-gray-200 bg-gray-50 hover:opacity-90 transition-opacity"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <Image src={file.file_url} alt={file.name} fill sizes="80px" className="object-cover" />
+                        </a>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2 mb-1.5">
+                            <p className="text-sm font-medium text-gray-800 truncate">{file.name}</p>
+                            {file.review_status === 'rejected' && (
+                              <span className="inline-flex items-center gap-1 text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium shrink-0">
+                                <XCircle className="h-3 w-3" /> Rejected
+                              </span>
+                            )}
+                            {file.review_status === 'pending' && (
+                              <span className="inline-flex items-center gap-1 text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-medium shrink-0">
+                                <Clock className="h-3 w-3" /> Awaiting review
+                              </span>
+                            )}
+                          </div>
+                          {file.review_feedback && (
+                            <p className="text-xs text-red-700 mb-2">Feedback: {file.review_feedback}</p>
+                          )}
+                          {file.review_status === 'pending' && (
+                            <div className="flex items-start gap-2 mt-1">
+                              <Button
+                                size="sm"
+                                className="bg-green-600 hover:bg-green-700 h-7 text-xs"
+                                disabled={reviewingFileId === file.id}
+                                onClick={() => reviewImage(file.id, 'approved')}
+                              >
+                                {reviewingFileId === file.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                                Approve
+                              </Button>
+                              {showFileRejectBox === file.id ? (
+                                <div className="flex-1 space-y-1.5">
+                                  <Textarea
+                                    placeholder="Reason for rejection (optional)…"
+                                    rows={2}
+                                    className="text-xs bg-white"
+                                    value={fileRejectFeedback[file.id] || ''}
+                                    onChange={e => setFileRejectFeedback(prev => ({ ...prev, [file.id]: e.target.value }))}
+                                  />
+                                  <div className="flex gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="destructive"
+                                      className="h-7 text-xs"
+                                      disabled={reviewingFileId === file.id}
+                                      onClick={() => reviewImage(file.id, 'rejected', fileRejectFeedback[file.id])}
+                                    >
+                                      {reviewingFileId === file.id ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                                      Confirm Reject
+                                    </Button>
+                                    <Button size="sm" variant="outline" className="h-7 text-xs bg-white" onClick={() => setShowFileRejectBox(null)}>
+                                      Cancel
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
                                 <Button
                                   size="sm"
-                                  variant="destructive"
-                                  className="h-7 text-xs"
-                                  disabled={reviewingFileId === file.id}
-                                  onClick={() => reviewImage(file.id, 'rejected', fileRejectFeedback[file.id])}
+                                  variant="outline"
+                                  className="h-7 text-xs text-red-600 border-red-200 bg-white"
+                                  onClick={() => setShowFileRejectBox(file.id)}
                                 >
-                                  {reviewingFileId === file.id ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-                                  Confirm Reject
+                                  <XCircle className="h-3 w-3" /> Reject
                                 </Button>
-                                <Button size="sm" variant="outline" className="h-7 text-xs bg-white" onClick={() => setShowFileRejectBox(null)}>
-                                  Cancel
-                                </Button>
-                              </div>
+                              )}
                             </div>
-                          ) : (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-xs text-red-600 border-red-200 bg-white"
-                              onClick={() => setShowFileRejectBox(file.id)}
-                            >
-                              <XCircle className="h-3 w-3" /> Reject
-                            </Button>
                           )}
                         </div>
-                      )}
+                      </div>
                     </div>
-                  </div>
-                </div>
-              ))}
-              {submissions.length > 0 && designFiles.length > 0 && !designFiles.some(f => f.review_status) && (
-                <p className="text-xs text-gray-400 pt-1">Images uploaded but not yet submitted for review by the designer.</p>
-              )}
-            </CardContent>
-          </Card>
+                  ))}
+                  {/* Approved summary — compact thumbnails, not actionable */}
+                  {approvedFiles.length > 0 && (
+                    <div className="pt-1">
+                      <p className="text-xs font-medium text-green-700 mb-2 flex items-center gap-1.5">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> {approvedFiles.length} illustration{approvedFiles.length !== 1 ? 's' : ''} already approved
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {approvedFiles.map(f => (
+                          <a key={f.id} href={f.file_url} target="_blank" rel="noopener noreferrer"
+                            className="relative w-12 h-12 rounded-md overflow-hidden border-2 border-green-300 bg-gray-50 hover:opacity-80 transition-opacity"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <Image src={f.file_url} alt={f.name} fill sizes="48px" className="object-cover" />
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {submissions.length > 0 && designFiles.length > 0 && !designFiles.some(f => f.review_status) && (
+                    <p className="text-xs text-gray-400 pt-1">Images uploaded but not yet submitted for review by the designer.</p>
+                  )}
+                </CardContent>
+              </Card>
+            )
+          })()}
         </>
       )}
 

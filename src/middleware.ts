@@ -1,10 +1,14 @@
 import { createServerClient } from '@supabase/ssr'
+import type { Database } from '@/lib/database.types'
 import { NextResponse, type NextRequest } from 'next/server'
 
+// Middleware is intentionally a pure JWT/session gate — no DB queries.
+// The is_active check lives in (app)/layout.tsx where getCurrentProfile()
+// is already cached via React cache(), so it costs zero extra round trips.
 export default async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
-  const supabase = createServerClient(
+  const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -27,28 +31,12 @@ export default async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
-  // Redirect unauthenticated users to login
   if (!user && !pathname.startsWith('/login') && !pathname.startsWith('/auth')) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Redirect authenticated users away from login
   if (user && pathname === '/login') {
     return NextResponse.redirect(new URL('/dashboard', request.url))
-  }
-
-  // Block deactivated users — sign them out and redirect to login
-  if (user && !pathname.startsWith('/login') && !pathname.startsWith('/auth')) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('is_active')
-      .eq('id', user.id)
-      .single()
-
-    if (profile && !profile.is_active) {
-      await supabase.auth.signOut()
-      return NextResponse.redirect(new URL('/login?reason=deactivated', request.url))
-    }
   }
 
   return supabaseResponse

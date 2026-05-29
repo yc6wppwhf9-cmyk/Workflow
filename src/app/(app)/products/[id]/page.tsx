@@ -1,8 +1,11 @@
 import { notFound } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getCurrentProfile } from '@/lib/supabase/server'
 import { Header } from '@/components/layout/header'
 import { ProductDetail } from '@/components/products/product-detail'
-import type { Profile } from '@/lib/types'
+import type {
+  Profile, Product, DesignData, SamplingData, MerchandisingData,
+  BomData, MarketingData, SalesData, ProductFile, ActivityLog, DesignSubmission,
+} from '@/lib/types'
 
 export default async function ProductPage({
   params,
@@ -14,9 +17,7 @@ export default async function ProductPage({
   const { id } = await params
   const { tab } = await searchParams
   const supabase = await createClient()
-
-  const { data: { user } } = await supabase.auth.getUser()
-  const { data: profile } = await supabase.from('profiles').select('*').eq('id', user!.id).single()
+  const profile = await getCurrentProfile()
 
   const { data: product } = await supabase
     .from('products')
@@ -52,16 +53,16 @@ export default async function ProductPage({
     supabase.from('profiles').select('id, full_name').eq('role', 'merchandising').eq('is_active', true).order('full_name'),
   ])
 
-  // Convert stored paths to 1-hour signed URLs (bucket is private)
+  // Convert stored paths to 1-hour signed URLs (bucket is private).
+  // storage_path holds the raw path; file_url holds the signed URL passed to the client.
   const fileList = rawFiles || []
   let files = fileList
   if (fileList.length > 0) {
     const paths = fileList.map(f => {
       const url = f.file_url
       if (!url.startsWith('http')) return url
-      // Legacy public URL — extract storage path
-      const parts = url.split('/product-files/')
-      return parts.length > 1 ? decodeURIComponent(parts[1].split('?')[0]) : url
+      const idx = url.indexOf('/product-files/')
+      return idx !== -1 ? decodeURIComponent(url.slice(idx + '/product-files/'.length).split('?')[0]) : url
     })
     const { data: signedData } = await supabase.storage
       .from('product-files')
@@ -69,11 +70,15 @@ export default async function ProductPage({
     if (signedData) {
       files = fileList.map((f, i) => ({
         ...f,
+        storage_path: paths[i],
         file_url: signedData[i]?.signedUrl || f.file_url,
       }))
     }
   }
 
+  // DB returns `string` for text columns; app types use narrow unions.
+  // Cast explicitly at the server→client boundary — values are constrained by DB CHECK
+  // constraints and application logic; the cast is intentional, not a workaround.
   return (
     <div>
       <Header
@@ -81,17 +86,17 @@ export default async function ProductPage({
         subtitle={bomData?.fg_inv_code ? `FG INV: ${bomData.fg_inv_code}` : undefined}
       />
       <ProductDetail
-        product={product}
+        product={product as unknown as Product}
         profile={profile as Profile}
-        designData={designData}
-        samplingData={samplingData}
-        merchandisingData={merchandisingData}
-        bomData={bomData}
-        marketingData={marketingData}
-        salesData={salesData}
-        files={files || []}
-        logs={logs || []}
-        designSubmissions={designSubmissions || []}
+        designData={designData as unknown as DesignData | null}
+        samplingData={samplingData as unknown as SamplingData | null}
+        merchandisingData={merchandisingData as unknown as MerchandisingData | null}
+        bomData={bomData as unknown as BomData | null}
+        marketingData={marketingData as unknown as MarketingData | null}
+        salesData={salesData as unknown as SalesData | null}
+        files={files as unknown as ProductFile[]}
+        logs={logs as unknown as ActivityLog[] || []}
+        designSubmissions={designSubmissions as unknown as DesignSubmission[] || []}
         designers={designers || []}
         merchandisingUsers={merchandisingUsers || []}
         defaultTab={tab}

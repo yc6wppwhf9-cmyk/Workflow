@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import * as TabsPrimitive from '@radix-ui/react-tabs'
@@ -59,62 +59,42 @@ export function ProductDetail({
 }: ProductDetailProps) {
   const initialTab = defaultTab && VALID_TABS.has(defaultTab) ? defaultTab : 'overview'
   const router = useRouter()
+  const supabase = useMemo(() => createClient(), [])
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const debouncedRefresh = useCallback(() => {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current)
+    refreshTimer.current = setTimeout(() => router.refresh(), 300)
+  }, [router])
 
   useEffect(() => {
-    const supabase = createClient()
-    const channel = supabase
-      .channel(`product-${product.id}`)
-      .on(
+    const WATCHED_TABLES = [
+      { table: 'products',           filter: `id=eq.${product.id}` },
+      { table: 'design_data',        filter: `product_id=eq.${product.id}` },
+      { table: 'sampling_data',      filter: `product_id=eq.${product.id}` },
+      { table: 'merchandising_data', filter: `product_id=eq.${product.id}` },
+      { table: 'bom_data',           filter: `product_id=eq.${product.id}` },
+      { table: 'marketing_data',     filter: `product_id=eq.${product.id}` },
+      { table: 'sales_data',         filter: `product_id=eq.${product.id}` },
+      { table: 'product_files',      filter: `product_id=eq.${product.id}` },
+      { table: 'activity_logs',      filter: `product_id=eq.${product.id}` },
+    ]
+
+    let channel = supabase.channel(`product-${product.id}`)
+    for (const { table, filter } of WATCHED_TABLES) {
+      channel = channel.on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'products', filter: `id=eq.${product.id}` },
-        () => router.refresh()
+        { event: '*', schema: 'public', table, filter },
+        debouncedRefresh
       )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'design_data', filter: `product_id=eq.${product.id}` },
-        () => router.refresh()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'sampling_data', filter: `product_id=eq.${product.id}` },
-        () => router.refresh()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'merchandising_data', filter: `product_id=eq.${product.id}` },
-        () => router.refresh()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'bom_data', filter: `product_id=eq.${product.id}` },
-        () => router.refresh()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'marketing_data', filter: `product_id=eq.${product.id}` },
-        () => router.refresh()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'sales_data', filter: `product_id=eq.${product.id}` },
-        () => router.refresh()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'product_files', filter: `product_id=eq.${product.id}` },
-        () => router.refresh()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'activity_logs', filter: `product_id=eq.${product.id}` },
-        () => router.refresh()
-      )
-      .subscribe()
+    }
+    channel.subscribe()
 
     return () => {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current)
       supabase.removeChannel(channel)
     }
-  }, [product.id, router])
+  }, [product.id, supabase, debouncedRefresh])
 
   return (
     <div>

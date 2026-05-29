@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Loader2, Lock, Save, Plus, X, Upload, ExternalLink, Trash2,
@@ -16,6 +16,7 @@ import { createClient } from '@/lib/supabase/client'
 import { CATEGORY_LABELS, BRANDS, CHANNELS, type ProductCategory, type Brand } from '@/lib/types'
 import type { Product, Profile, DesignData, SalesData, ProductFile, DesignSubmission } from '@/lib/types'
 import { parseTechPackRows } from '@/lib/parse-techpack'
+import { extractStoragePath } from '@/lib/utils'
 
 interface DesignTabProps {
   product: Product
@@ -29,6 +30,7 @@ interface DesignTabProps {
 
 export function DesignTab({ product, profile, data, salesData, files, submissions, designers }: DesignTabProps) {
   const router = useRouter()
+  const supabase = useMemo(() => createClient(), [])
 
   const isTeamMember = profile.role === 'design'
   const isHead       = ['admin', 'design_head'].includes(profile.role)
@@ -117,7 +119,6 @@ export function DesignTab({ product, profile, data, salesData, files, submission
 
   async function handleSave() {
     setSaving(true)
-    const supabase = createClient()
     await Promise.all([
       supabase.from('design_data').update({ ...form, updated_by: profile.id }).eq('product_id', product.id),
       supabase.from('products').update({
@@ -138,7 +139,6 @@ export function DesignTab({ product, profile, data, salesData, files, submission
   async function markComplete() {
     const becomingComplete = !data?.is_completed
     setSaving(true)
-    const supabase = createClient()
     await supabase.from('design_data').update({
       ...form, is_completed: becomingComplete, updated_by: profile.id,
     }).eq('product_id', product.id)
@@ -169,7 +169,6 @@ export function DesignTab({ product, profile, data, salesData, files, submission
 
   async function saveAssignment(userId: string) {
     setSavingAssign(true)
-    const supabase = createClient()
     const resolvedId = userId === '__none__' ? null : userId
     const { error } = await supabase.from('design_data').update({ assigned_to: resolvedId, updated_by: profile.id }).eq('product_id', product.id)
     if (error) {
@@ -188,7 +187,6 @@ export function DesignTab({ product, profile, data, salesData, files, submission
 
   async function saveHeadNotes() {
     setSavingNotes(true)
-    const supabase = createClient()
     await supabase.from('design_data').update({ head_notes: headNotes || null, updated_by: profile.id }).eq('product_id', product.id)
     setSavingNotes(false)
     setNotesSaved(true)
@@ -209,7 +207,6 @@ export function DesignTab({ product, profile, data, salesData, files, submission
 
   async function reviewImage(fileId: string, status: 'approved' | 'rejected', feedback?: string) {
     setReviewingFileId(fileId)
-    const supabase = createClient()
     await supabase.from('product_files').update({
       review_status: status,
       review_feedback: feedback || null,
@@ -265,7 +262,6 @@ export function DesignTab({ product, profile, data, salesData, files, submission
       }
       setForm(prev => ({ ...prev, ...updates }))
       if (f.styleName && (product.name === 'New Product' || product.name.startsWith('PROD-'))) {
-        const supabase = createClient()
         await supabase.from('products').update({ name: f.styleName, updated_by: profile.id }).eq('id', product.id)
         filled.push(`Product name → ${f.styleName}`)
       }
@@ -282,7 +278,6 @@ export function DesignTab({ product, profile, data, salesData, files, submission
     const selectedFiles = Array.from(e.target.files || [])
     if (selectedFiles.length === 0) return
     setUploading(true)
-    const supabase = createClient()
     const ts = Date.now()
     for (let i = 0; i < selectedFiles.length; i++) {
       const file = selectedFiles[i]
@@ -308,10 +303,9 @@ export function DesignTab({ product, profile, data, salesData, files, submission
   }
 
   async function deleteFile(file: ProductFile) {
-    const supabase = createClient()
-    const url = file.file_url
-    const parts = url.split('/product-files/')
-    const storagePath = parts.length > 1 ? decodeURIComponent(parts[1].split('?')[0]) : null
+    // Prefer storage_path (raw path set by server) over parsing the signed URL
+    const storagePath = (file as ProductFile & { storage_path?: string }).storage_path
+      ?? extractStoragePath(file.file_url, 'product-files')
     if (storagePath) await supabase.storage.from('product-files').remove([storagePath])
     await supabase.from('product_files').delete().eq('id', file.id)
     router.refresh()

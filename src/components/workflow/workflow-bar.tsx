@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, Lock, ChevronRight, Unlock, AlertCircle, Loader2 } from 'lucide-react'
+import { Check, ChevronRight, Unlock, AlertCircle, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
@@ -27,10 +27,13 @@ export function WorkflowBar({
   bomData, marketingData, salesData,
 }: WorkflowBarProps) {
   const router = useRouter()
+  const supabase = useMemo(() => createClient(), [])
   const [advancing, setAdvancing] = useState(false)
+  const [advanceError, setAdvanceError] = useState<string | null>(null)
   const [unlockOpen, setUnlockOpen] = useState(false)
   const [unlockReason, setUnlockReason] = useState('')
   const [unlockLoading, setUnlockLoading] = useState(false)
+  const [unlockError, setUnlockError] = useState<string | null>(null)
 
   const currentIndex = WORKFLOW_STAGES.indexOf(product.workflow_stage as WorkflowStage)
   const isAdmin = ['admin', 'management'].includes(profile.role)
@@ -72,50 +75,51 @@ export function WorkflowBar({
   async function advanceStage() {
     if (currentIndex >= WORKFLOW_STAGES.length - 1) return
     setAdvancing(true)
+    setAdvanceError(null)
 
-    const supabase = createClient()
     const nextStage = WORKFLOW_STAGES[currentIndex + 1]
-    const actionText = `advanced stage to "${STAGE_LABELS[nextStage]}"`
-
     const { error: rpcError } = await supabase.rpc('advance_product_stage', {
       p_product_id: product.id,
       p_next_stage: nextStage,
       p_user_id: profile.id,
-      p_action: actionText,
-      p_department: profile.role
+      p_action: `advanced stage to "${STAGE_LABELS[nextStage]}"`,
+      p_department: profile.role,
     })
 
     if (rpcError) {
-      alert(`Could not advance stage: ${rpcError.message}`)
-    } else {
-      // Fire notification — non-blocking, don't await
-      fetch('/api/notify-stage-advance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product_id: product.id, product_name: product.name, next_stage: nextStage }),
-      }).catch(() => { /* notifications are best-effort */ })
+      setAdvanceError(rpcError.message)
+      setAdvancing(false)
+      return
     }
+
+    // Fire notification — non-blocking, best-effort
+    fetch('/api/notify-stage-advance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_id: product.id, product_name: product.name, next_stage: nextStage }),
+    }).catch(() => {})
 
     router.refresh()
     setAdvancing(false)
   }
 
   async function requestUnlock() {
-    if (currentIndex <= 0) return   // guard: cannot unlock below Draft
+    if (currentIndex <= 0) return
     setUnlockLoading(true)
-    const supabase = createClient()
+    setUnlockError(null)
 
     if (isAdmin) {
-      const actionText = `unlocked stage back to "${STAGE_LABELS[prevStage!]}"`
       const { error: rpcError } = await supabase.rpc('unlock_product_stage', {
         p_product_id: product.id,
         p_prev_stage: prevStage!,
         p_user_id: profile.id,
-        p_action: actionText,
-        p_department: 'admin'
+        p_action: `unlocked stage back to "${STAGE_LABELS[prevStage!]}"`,
+        p_department: 'admin',
       })
       if (rpcError) {
-        alert(`Could not unlock stage: ${rpcError.message}`)
+        setUnlockError(rpcError.message)
+        setUnlockLoading(false)
+        return
       }
     } else {
       await supabase.from('stage_unlock_requests').insert({
@@ -204,6 +208,13 @@ export function WorkflowBar({
         </div>
       </div>
 
+      {advanceError && (
+        <div className="mt-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          {advanceError}
+        </div>
+      )}
+
       {/* Unlock dialog */}
       <Dialog open={unlockOpen} onOpenChange={setUnlockOpen}>
         <DialogContent className="max-w-sm">
@@ -225,6 +236,9 @@ export function WorkflowBar({
                 )}
               </div>
             </div>
+            {unlockError && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{unlockError}</p>
+            )}
             <div className="space-y-1.5">
               <Label>Reason</Label>
               <Textarea

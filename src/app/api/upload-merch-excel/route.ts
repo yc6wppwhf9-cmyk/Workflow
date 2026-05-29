@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single()
-  if (!['admin', 'merchandising', 'merchandising_head'].includes(profile?.role)) {
+  if (!profile || !['admin', 'merchandising', 'merchandising_head'].includes(profile.role)) {
     return NextResponse.json({ error: 'Only merchandising team can upload' }, { status: 403 })
   }
 
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
       const { data: masterRows } = await supabase
         .from('item_master').select('inv_code, item_name_norm, uom').in('item_name_norm', uniqueNorms)
       const masterMap = new Map<string, { inv_code: string; uom: string }>()
-      for (const row of masterRows ?? []) masterMap.set(row.item_name_norm, { inv_code: row.inv_code, uom: row.uom })
+      for (const row of masterRows ?? []) masterMap.set(row.item_name_norm, { inv_code: row.inv_code, uom: row.uom ?? '' })
 
       enrichedVariants = enrichedVariants.map((v: { bomItems?: { inv_name: string; inv_code: string; consumption: string; unit: string }[] }) => ({
         ...v,
@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
         .in('item_name_norm', normNames)
       const masterMap = new Map<string, { inv_code: string; uom: string }>()
       for (const row of masterRows ?? []) {
-        masterMap.set(row.item_name_norm, { inv_code: row.inv_code, uom: row.uom })
+        masterMap.set(row.item_name_norm, { inv_code: row.inv_code, uom: row.uom ?? '' })
       }
 
       let bomRows = rawBomSource.map((item, idx) => {

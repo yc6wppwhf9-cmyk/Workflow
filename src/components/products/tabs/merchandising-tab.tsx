@@ -303,7 +303,7 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
       const ts = Date.now()
       const fileRecords: Array<{
         product_id: string; name: string; file_url: string; file_type: string
-        file_size: number; department: string; uploaded_by: string; colour_tag: string | null
+        file_size: number; department: 'merchandising'; uploaded_by: string; colour_tag: string | null
       }> = []
 
       for (let i = 0; i < imagesToUpload.length; i++) {
@@ -339,7 +339,8 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
       setUploadProgress('Saving colour variants...')
       if (colourVariants.length > 0) {
         await supabase.from('merchandising_data').update({
-          colour_variants: colourVariants,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          colour_variants: colourVariants as any,
           updated_by: profile.id,
         }).eq('product_id', product.id)
       }

@@ -66,7 +66,7 @@ export async function DepartmentDashboard({ profile, filter }: { profile: Profil
                 <AlertCircle className="h-4 w-4" /> Products Waiting for {cfg.label}
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50">
@@ -102,7 +102,7 @@ export async function DepartmentDashboard({ profile, filter }: { profile: Profil
         {show('completed') && completed.length > 0 && (
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-green-500" />Recently Completed</CardTitle></CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead><tr className="border-b border-gray-100 bg-gray-50">
                   <th className="text-left px-6 py-2 text-xs font-semibold text-gray-400 uppercase">Product</th>

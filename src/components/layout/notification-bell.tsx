@@ -104,11 +104,16 @@ export function NotificationBell() {
         className="relative text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
         aria-label="Notifications"
       >
-        <Bell className="h-5 w-5" />
+        <Bell className={`h-5 w-5 ${unread > 0 ? 'text-gray-700' : ''}`} />
         {unread > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none">
-            {unread > 9 ? '9+' : unread}
-          </span>
+          <>
+            {/* Pulse ring */}
+            <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-red-400 opacity-75 animate-ping" />
+            {/* Badge */}
+            <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none">
+              {unread > 9 ? '9+' : unread}
+            </span>
+          </>
         )}
       </button>
 

@@ -288,7 +288,7 @@ export default async function ManagementPage() {
               <Users className="h-4 w-4 text-gray-400" /> Designer Performance
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent className="p-0 overflow-x-auto">
             {designerStats.length === 0 ? (
               <p className="text-sm text-gray-400 px-6 py-4">No design assignments yet.</p>
             ) : (
@@ -355,7 +355,7 @@ export default async function ManagementPage() {
               <CalendarDays className="h-4 w-4 text-gray-400" /> Product Design Timeline
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent className="p-0 overflow-x-auto">
             {productTimeline.length === 0 ? (
               <p className="text-sm text-gray-400 px-6 py-4">No assigned products yet.</p>
             ) : (
@@ -430,7 +430,7 @@ export default async function ManagementPage() {
               <CalendarDays className="h-4 w-4 text-gray-400" /> Assignment Log
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent className="p-0 overflow-x-auto">
             {assignmentReport.length === 0 ? (
               <p className="text-sm text-gray-400 px-6 py-4">No assignments yet.</p>
             ) : (

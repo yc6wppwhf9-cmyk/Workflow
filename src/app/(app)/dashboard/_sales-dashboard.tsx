@@ -46,7 +46,7 @@ export async function SalesDashboard({ profile, filter }: { profile: Profile; fi
                 <AlertCircle className="h-4 w-4" /> Needs Your Input
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50">
@@ -84,7 +84,7 @@ export async function SalesDashboard({ profile, filter }: { profile: Profile; fi
               <CardTitle className="text-base">All My Products</CardTitle>
               <Link href="/products" className="text-sm text-blue-600 hover:underline flex items-center gap-1">View all <ArrowRight className="h-3 w-3" /></Link>
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50">
@@ -113,7 +113,7 @@ export async function SalesDashboard({ profile, filter }: { profile: Profile; fi
         {show('in-pipeline') && inPipeline.length > 0 && (
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">In Pipeline</CardTitle></CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead><tr className="border-b border-gray-100 bg-gray-50">
                   <th className="text-left px-6 py-2 text-xs font-semibold text-gray-400 uppercase">Product</th>
@@ -137,7 +137,7 @@ export async function SalesDashboard({ profile, filter }: { profile: Profile; fi
         {show('live') && live.length > 0 && (
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base text-green-700">Live Products</CardTitle></CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead><tr className="border-b border-gray-100 bg-gray-50">
                   <th className="text-left px-6 py-2 text-xs font-semibold text-gray-400 uppercase">Product</th>

@@ -450,14 +450,16 @@ export default async function PipelinePage() {
                 </div>
               </div>
 
-              {/* Pipeline body */}
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 p-4">
+              {/* Pipeline body — horizontally scrollable on small screens */}
+              <div className="overflow-x-auto">
+              <div className="grid grid-cols-6 gap-3 p-4 min-w-[860px]">
                 {DEPT_SECTIONS.map(({ dept, title, ids }) => {
                   const sectionMilestones = ids.map(id => msMap.get(id)).filter(Boolean) as Milestone[]
                   return (
                     <DeptSection key={dept} dept={dept} title={title} milestones={sectionMilestones} />
                   )
                 })}
+              </div>
               </div>
             </div>
           )

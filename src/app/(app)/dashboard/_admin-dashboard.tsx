@@ -136,7 +136,7 @@ export async function AdminDashboard({ profile, filter, page }: { profile: Profi
                 <CheckCircle2 className="h-4 w-4" /> Samples Awaiting Approval
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead><tr className="border-b border-gray-100 bg-gray-50">
                   <th className="text-left px-6 py-2 text-xs font-semibold text-gray-400 uppercase">Product</th>
@@ -218,7 +218,7 @@ export async function AdminDashboard({ profile, filter, page }: { profile: Profi
                 <Clock className="h-4 w-4 text-amber-500" /> Aging Watchlist
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead><tr className="border-b border-gray-100 bg-gray-50">
                   <th className="text-left px-6 py-2 text-xs font-semibold text-gray-400 uppercase">Product</th>

@@ -65,7 +65,7 @@ export async function DesignDashboard({ profile, filter }: { profile: Profile; f
         {show('all') && (
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">My Assigned Products</CardTitle></CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               {assignments.length === 0 ? (
                 <p className="text-sm text-gray-400 px-6 py-6 text-center">No products assigned to you yet.</p>
               ) : (
@@ -127,7 +127,7 @@ export async function DesignDashboard({ profile, filter }: { profile: Profile; f
         {show('needs-work') && (
           <Card className="border-amber-200">
             <CardHeader className="pb-3"><CardTitle className="text-sm text-amber-700 flex items-center gap-2"><AlertCircle className="h-4 w-4" /> Needs Work</CardTitle></CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead><tr className="border-b border-gray-100 bg-gray-50"><th className="text-left px-6 py-2 text-xs font-semibold text-gray-400 uppercase">Product</th><th className="text-center px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Status</th><th className="px-4 py-2"></th></tr></thead>
                 <tbody className="divide-y divide-gray-50">
@@ -147,7 +147,7 @@ export async function DesignDashboard({ profile, filter }: { profile: Profile; f
         {show('in-review') && (
           <Card className="border-blue-200">
             <CardHeader className="pb-3"><CardTitle className="text-sm text-blue-700 flex items-center gap-2"><Clock className="h-4 w-4" /> In Review</CardTitle></CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead><tr className="border-b border-gray-100 bg-gray-50"><th className="text-left px-6 py-2 text-xs font-semibold text-gray-400 uppercase">Product</th><th className="px-4 py-2"></th></tr></thead>
                 <tbody className="divide-y divide-gray-50">

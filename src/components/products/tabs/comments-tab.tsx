@@ -110,7 +110,7 @@ export function CommentsTab({ productId, profile, initialComments }: CommentsTab
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       sendComment()
     }
@@ -180,7 +180,7 @@ export function CommentsTab({ productId, profile, initialComments }: CommentsTab
             {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </Button>
         </div>
-        <p className="text-[11px] text-gray-400 mt-1.5">Ctrl+Enter to send · visible to all departments</p>
+        <p className="text-[11px] text-gray-400 mt-1.5">Enter to send · Shift+Enter for new line · visible to all departments</p>
       </div>
     </div>
   )

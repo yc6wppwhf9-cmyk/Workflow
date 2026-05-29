@@ -53,12 +53,15 @@ export default async function ProductPage({
     supabase.from('profiles').select('id, full_name').eq('role', 'merchandising').eq('is_active', true).order('full_name'),
   ])
 
-  // Convert stored paths to 1-hour signed URLs (bucket is private).
-  // storage_path holds the raw path; file_url holds the signed URL passed to the client.
+  // Cloudinary files have permanent public URLs — no signing needed.
+  // Supabase-stored files (legacy) still need a 1-hour signed URL.
   const fileList = rawFiles || []
-  let files = fileList
-  if (fileList.length > 0) {
-    const paths = fileList.map(f => {
+  const cloudinaryFiles = fileList.filter(f => f.file_url.startsWith('https://res.cloudinary.com'))
+  const supabaseFiles   = fileList.filter(f => !f.file_url.startsWith('https://res.cloudinary.com'))
+
+  let signedFiles = supabaseFiles
+  if (supabaseFiles.length > 0) {
+    const paths = supabaseFiles.map(f => {
       const url = f.file_url
       if (!url.startsWith('http')) return url
       const idx = url.indexOf('/product-files/')
@@ -68,13 +71,15 @@ export default async function ProductPage({
       .from('product-files')
       .createSignedUrls(paths, 3600)
     if (signedData) {
-      files = fileList.map((f, i) => ({
+      signedFiles = supabaseFiles.map((f, i) => ({
         ...f,
         storage_path: paths[i],
         file_url: signedData[i]?.signedUrl || f.file_url,
       }))
     }
   }
+
+  const files = [...cloudinaryFiles, ...signedFiles]
 
   // DB returns `string` for text columns; app types use narrow unions.
   // Cast explicitly at the server→client boundary — values are constrained by DB CHECK

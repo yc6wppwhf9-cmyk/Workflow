@@ -30,12 +30,6 @@ function TechPackValue({ label, value }: { label: string; value?: string | null 
   )
 }
 
-function getStoragePath(fileUrl: string) {
-  if (!fileUrl.startsWith('http')) return fileUrl
-  const marker = '/product-files/'
-  const parts = fileUrl.split(marker)
-  return parts.length > 1 ? decodeURIComponent(parts[1].split('?')[0]) : null
-}
 
 export function SamplingTab({ product, profile, designData, data, files }: SamplingTabProps) {
   const router = useRouter()
@@ -78,17 +72,17 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
     const selectedFiles = Array.from(e.target.files || [])
     if (selectedFiles.length === 0) return
     setUploading(true)
-    const ts = Date.now()
-
-    for (let i = 0; i < selectedFiles.length; i++) {
-      const file = selectedFiles[i]
-      const storagePath = `${product.id}/sampling_${ts}_${i}_${file.name}`
-      const { error } = await supabase.storage.from('product-files').upload(storagePath, file, { upsert: true })
-      if (!error) {
+    for (const file of selectedFiles) {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('folder', `products/${product.id}/sampling`)
+      const res = await fetch('/api/upload-image', { method: 'POST', body: fd })
+      if (res.ok) {
+        const { url } = await res.json() as { url: string }
         await supabase.from('product_files').insert({
           product_id: product.id,
           name: file.name,
-          file_url: storagePath,
+          file_url: url,
           file_type: file.type,
           file_size: file.size,
           department: 'sampling',
@@ -96,7 +90,6 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
         })
       }
     }
-
     await supabase.from('activity_logs').insert({
       product_id: product.id,
       user_id: profile.id,
@@ -109,9 +102,11 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
   }
 
   async function deleteFile(file: ProductFile) {
-    const storagePath = getStoragePath(file.file_url)
-    if (storagePath) await supabase.storage.from('product-files').remove([storagePath])
-    await supabase.from('product_files').delete().eq('id', file.id)
+    await fetch('/api/delete-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_url: file.file_url, file_id: file.id }),
+    })
     router.refresh()
   }
 

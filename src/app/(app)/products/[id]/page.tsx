@@ -87,11 +87,12 @@ export default async function ProductPage({
   // DB returns `string` for text columns; app types use narrow unions.
   // Cast explicitly at the server→client boundary — values are constrained by DB CHECK
   // constraints and application logic; the cast is intentional, not a workaround.
+  const p = product as unknown as Product
   return (
     <div>
       <Header
-        title={product.display_name || product.name}
-        subtitle={product.display_name ? product.name : (bomData?.fg_inv_code ? `FG INV: ${bomData.fg_inv_code}` : undefined)}
+        title={p.display_name || p.name}
+        subtitle={p.display_name ? p.name : (bomData?.fg_inv_code ? `FG INV: ${bomData.fg_inv_code}` : undefined)}
       />
       <ProductDetail
         product={product as unknown as Product}

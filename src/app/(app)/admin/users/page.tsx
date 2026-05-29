@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Header } from '@/components/layout/header'
 import { UsersTable } from '@/components/admin/users-table'
 import { NewUserButton } from '@/components/admin/new-user-button'
+import { SeedUsersButton } from '@/components/admin/seed-users-button'
 
 export default async function AdminUsersPage() {
   const supabase = await createClient()
@@ -27,7 +28,7 @@ export default async function AdminUsersPage() {
       <Header
         title="User Management"
         subtitle="Manage team members and their roles"
-        actions={<NewUserButton />}
+        actions={<div className="flex gap-2"><SeedUsersButton /><NewUserButton /></div>}
       />
       <div className="p-6">
         <UsersTable users={users || []} unlockRequests={unlockRequests || []} adminId={user!.id} />

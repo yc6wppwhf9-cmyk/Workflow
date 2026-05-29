@@ -11,10 +11,12 @@ export async function DesignHeadDashboard({ profile, filter }: { profile: Profil
   const show = (key: string) => !filter || filter === key
   const supabase = await createClient()
 
-  const [{ data: pendingSubmissions }, { data: productsInDesign }, { data: designDataForProducts }] = await Promise.all([
-    supabase.from('design_submissions')
-      .select('id, product_id, created_at, submitter:profiles!submitted_by(full_name), product:products(id, name)')
-      .eq('status', 'pending')
+  const [{ data: pendingFiles }, { data: productsInDesign }, { data: designDataForProducts }] = await Promise.all([
+    // Pending reviews = products that have at least one file with review_status = 'pending'
+    supabase.from('product_files')
+      .select('product_id, created_at, uploader:profiles!uploaded_by(full_name), product:products(id, name)')
+      .eq('review_status', 'pending')
+      .eq('department', 'design')
       .order('created_at', { ascending: true }),
     supabase.from('products')
       .select('id, name, created_at, workflow_stage')
@@ -24,6 +26,14 @@ export async function DesignHeadDashboard({ profile, filter }: { profile: Profil
       .select('product_id, assigned_to, assignee:profiles!assigned_to(full_name)'),
   ])
 
+  // Deduplicate: one entry per product (oldest pending file per product)
+  const seenProducts = new Set<string>()
+  const pendingSubmissions = (pendingFiles || []).filter(f => {
+    if (seenProducts.has(f.product_id)) return false
+    seenProducts.add(f.product_id)
+    return true
+  })
+
   const assignMap: Record<string, string | null> = {}
   for (const d of designDataForProducts || []) {
     const assignee = one(d.assignee) as { full_name: string } | null
@@ -32,7 +42,7 @@ export async function DesignHeadDashboard({ profile, filter }: { profile: Profil
 
   const unassigned = (productsInDesign || []).filter(p => !assignMap[p.id])
   const assigned   = (productsInDesign || []).filter(p =>  assignMap[p.id])
-  const pending    = pendingSubmissions || []
+  const pending    = pendingSubmissions
 
   return (
     <div>
@@ -53,15 +63,15 @@ export async function DesignHeadDashboard({ profile, filter }: { profile: Profil
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              {pending.map(sub => {
-                const submitter = one(sub.submitter) as { full_name: string } | null
-                const product   = one(sub.product)   as { id: string; name: string } | null
-                const waitDays  = daysSince(sub.created_at)
+              {pending.map(f => {
+                const uploader = one(f.uploader) as { full_name: string } | null
+                const product  = one(f.product)  as { id: string; name: string } | null
+                const waitDays = daysSince(f.created_at)
                 return (
-                  <div key={sub.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                  <div key={f.product_id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
                     <div>
                       <p className="text-sm font-medium text-gray-900">{product?.name}</p>
-                      <p className="text-xs text-gray-500">by {submitter?.full_name} · {waitDays === 0 ? 'today' : `${waitDays}d ago`}</p>
+                      <p className="text-xs text-gray-500">by {uploader?.full_name} · {waitDays === 0 ? 'today' : `${waitDays}d ago`}</p>
                     </div>
                     <Link href={`/products/${product?.id}?tab=design`} className="text-xs text-blue-600 hover:underline flex items-center gap-1 shrink-0">
                       Review <ArrowRight className="h-3 w-3" />

@@ -2,7 +2,8 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { PrintTrigger } from './print-trigger'
 
-export default async function PrintTechPackPage({ params }: { params: { id: string } }) {
+export default async function PrintTechPackPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -13,12 +14,12 @@ export default async function PrintTechPackPage({ params }: { params: { id: stri
     { data: sampling },
     { data: files },
   ] = await Promise.all([
-    supabase.from('products').select('id, name, category, brand').eq('id', params.id).single(),
-    supabase.from('design_data').select('*').eq('product_id', params.id).single(),
-    supabase.from('sampling_data').select('sampler_name, sampler_remarks').eq('product_id', params.id).single(),
+    supabase.from('products').select('id, name, category, brand').eq('id', id).single(),
+    supabase.from('design_data').select('*').eq('product_id', id).single(),
+    supabase.from('sampling_data').select('sampler_name, sampler_remarks').eq('product_id', id).single(),
     supabase.from('product_files')
       .select('id, name, file_url, file_type, department')
-      .eq('product_id', params.id)
+      .eq('product_id', id)
       .like('file_type', 'image/%')
       .in('department', ['design', 'sampling']),
   ])

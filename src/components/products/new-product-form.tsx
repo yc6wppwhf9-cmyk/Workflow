@@ -159,7 +159,7 @@ export function NewProductForm({ profile }: NewProductFormProps) {
 
             {/* Sample images upload */}
             <div className="space-y-1.5">
-              <Label>Sample Images</Label>
+              <Label>Reference Images</Label>
               <input
                 ref={fileInputRef}
                 type="file"

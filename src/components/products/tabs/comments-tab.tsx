@@ -170,7 +170,7 @@ export function CommentsTab({ productId, profile, initialComments }: CommentsTab
       <div className="border-t border-gray-100 pt-4 mt-2">
         <div className="flex gap-2 items-end">
           <Textarea
-            placeholder="Write a comment… (Ctrl+Enter to send)"
+            placeholder="Write a comment… (Enter to send)"
             value={text}
             onChange={e => setText(e.target.value)}
             onKeyDown={onKeyDown}

@@ -8,6 +8,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   if (!profile) redirect('/login')
   if (!profile.is_active) redirect('/login?reason=deactivated')
+  if (profile.must_change_password) redirect('/change-password')
 
   return (
     <div className="flex min-h-screen bg-gray-50">

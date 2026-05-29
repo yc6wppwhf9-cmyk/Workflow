@@ -110,6 +110,7 @@ export async function createTeamUser(formData: {
     .update({
       full_name: formData.fullName,
       role: formData.role,
+      must_change_password: true,
     })
     .eq('id', authUser.user.id)
 

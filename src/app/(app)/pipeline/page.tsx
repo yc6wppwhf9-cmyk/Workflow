@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Header } from '@/components/layout/header'
-import { CheckCircle2, Clock, Circle, ExternalLink, GitBranch } from 'lucide-react'
+import { CheckCircle2, Clock, Circle, ExternalLink, GitBranch, Download } from 'lucide-react'
 import { STAGE_LABELS } from '@/lib/types'
 
 function fmt(d: string | null | undefined) {
@@ -54,27 +54,23 @@ function MilestoneRow({ m, isLast }: { m: Milestone; isLast: boolean }) {
       </div>
 
       {/* Content */}
-      <div className={`pb-4 flex-1 min-w-0`}>
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className={`text-sm font-medium ${
-              m.status === 'done' ? 'text-gray-800' :
-              m.status === 'active' ? 'text-gray-900' : 'text-gray-400'
-            }`}>{m.label}</p>
-            {(m.person || m.byPerson) && m.status !== 'pending' && (
-              <p className="text-xs text-gray-500 mt-0.5">
-                {m.person && <span className="font-medium text-gray-700">{m.person}</span>}
-                {m.byPerson && <span className="text-gray-400"> · by {m.byPerson}</span>}
-              </p>
-            )}
-          </div>
-          {m.date && m.status !== 'pending' && (
-            <span className="text-xs text-gray-400 whitespace-nowrap shrink-0">{fmt(m.date)}</span>
-          )}
-          {m.status === 'active' && !m.date && (
-            <span className="text-xs text-yellow-500 whitespace-nowrap shrink-0">In progress</span>
-          )}
-        </div>
+      <div className="pb-4 flex-1 min-w-0">
+        <p className={`text-xs font-medium leading-tight ${
+          m.status === 'done' ? 'text-gray-800' :
+          m.status === 'active' ? 'text-gray-900' : 'text-gray-400'
+        }`}>{m.label}</p>
+        {(m.person || m.byPerson) && m.status !== 'pending' && (
+          <p className="text-xs text-gray-500 mt-0.5 leading-tight">
+            {m.person && <span className="font-medium text-gray-700">{m.person}</span>}
+            {m.byPerson && <span className="text-gray-400"> · by {m.byPerson}</span>}
+          </p>
+        )}
+        {m.date && m.status !== 'pending' && (
+          <p className="text-xs text-gray-400 mt-0.5">{fmt(m.date)}</p>
+        )}
+        {m.status === 'active' && !m.date && (
+          <p className="text-xs text-yellow-500 mt-0.5">In progress</p>
+        )}
       </div>
     </div>
   )
@@ -359,8 +355,36 @@ export default async function PipelinePage() {
   return (
     <div>
       <Header title="Product Pipeline" subtitle="Full lifecycle milestone tracking for every product" />
-      <div className="p-6 space-y-6">
 
+      {/* Sticky product index + export bar */}
+      <div className="sticky top-0 z-20 bg-white border-b border-gray-200 shadow-sm">
+        <div className="px-6 py-2 flex items-center gap-3 overflow-x-auto">
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide shrink-0">
+            {pipelineRows.length} product{pipelineRows.length !== 1 ? 's' : ''}
+          </span>
+          <div className="flex items-center gap-2 flex-1 overflow-x-auto">
+            {pipelineRows.map(({ product }) => (
+              <a
+                key={product.id}
+                href={`#product-${product.id}`}
+                className={`text-xs px-2.5 py-1 rounded-full border whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity ${stageColor[product.workflow_stage] || 'bg-gray-100 text-gray-500 border-gray-200'}`}
+              >
+                {product.name.length > 30 ? product.name.slice(0, 30) + '…' : product.name}
+              </a>
+            ))}
+          </div>
+          <a
+            href="/api/export-pipeline"
+            download
+            className="shrink-0 flex items-center gap-1.5 text-xs font-medium bg-gray-900 text-white px-3 py-1.5 rounded-lg hover:bg-gray-700 transition-colors"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Export Excel
+          </a>
+        </div>
+      </div>
+
+      <div className="p-6 space-y-6">
         {pipelineRows.length === 0 && (
           <p className="text-sm text-gray-400">No products yet.</p>
         )}
@@ -369,7 +393,7 @@ export default async function PipelinePage() {
           const msMap = new Map(milestones.map(m => [m.id, m]))
 
           return (
-            <div key={product.id} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div id={`product-${product.id}`} key={product.id} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden scroll-mt-14">
               {/* Product header */}
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gray-50">
                 <div className="flex items-center gap-3 min-w-0">

@@ -261,7 +261,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
         if (val) { (updates as Record<string, string>)[key] = val; filled.push(label) }
       }
       setForm(prev => ({ ...prev, ...updates }))
-      if (f.styleName && (product.name === 'New Product' || product.name.startsWith('PROD-'))) {
+      if (f.styleName) {
         await supabase.from('products').update({ name: f.styleName, updated_by: profile.id }).eq('id', product.id)
         filled.push(`Product name → ${f.styleName}`)
       }

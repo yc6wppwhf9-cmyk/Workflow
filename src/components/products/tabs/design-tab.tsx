@@ -2,6 +2,7 @@
 
 import { useState, useRef, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import {
   Loader2, Lock, Save, Plus, X, Upload, ExternalLink, Trash2,
   FileSpreadsheet, CheckCircle2, UserCheck, Clock, XCircle, Send,
@@ -145,6 +146,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
     })
     setSaving(false)
     setSaved(true)
+    toast.success('Design data saved')
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(() => { setSaved(false); router.refresh() }, 2000)
   }
@@ -325,6 +327,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
     setUploadProgress(null)
     setUploadSuccess(selectedFiles.length)
     setTimeout(() => setUploadSuccess(null), 3000)
+    toast.success(`${selectedFiles.length} illustration${selectedFiles.length !== 1 ? 's' : ''} uploaded`)
     if (illustrationRef.current) illustrationRef.current.value = ''
     router.refresh()
   }

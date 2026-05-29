@@ -3,6 +3,7 @@
 import { useRef, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { CheckCircle2, Clock, ExternalLink, Loader2, Printer, Send, Trash2, Upload, XCircle } from 'lucide-react'
+import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -69,6 +70,7 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
       department: 'sampling',
     })
     setSaving(false)
+    toast.success('Remarks saved')
     router.refresh()
   }
 
@@ -109,6 +111,7 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
     setUploadProgress(null)
     setUploadSuccess(selectedFiles.length)
     setTimeout(() => setUploadSuccess(null), 3000)
+    toast.success(`${selectedFiles.length} image${selectedFiles.length !== 1 ? 's' : ''} uploaded`)
     if (sampleInputRef.current) sampleInputRef.current.value = ''
     router.refresh()
   }
@@ -141,6 +144,7 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
       department: 'sampling',
     })
     setSaving(false)
+    toast.success('Sample sent for management approval')
     router.refresh()
   }
 

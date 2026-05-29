@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Send, Loader2, MessageSquare } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -97,7 +98,7 @@ export function CommentsTab({ productId, profile, initialComments }: CommentsTab
     setComments(prev => [...prev, optimistic])
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any).from('product_comments').insert({
+    const { error } = await (supabase as any).from('product_comments').insert({
       product_id:  productId,
       user_id:     profile.id,
       message:     msg,
@@ -105,6 +106,11 @@ export function CommentsTab({ productId, profile, initialComments }: CommentsTab
       author_role: profile.role,
     })
 
+    if (error) {
+      toast.error('Failed to send comment. Please try again.')
+    } else {
+      toast.success('Comment sent')
+    }
     setSending(false)
     router.refresh()
   }

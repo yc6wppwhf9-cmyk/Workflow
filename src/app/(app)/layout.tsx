@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getCurrentProfile } from '@/lib/supabase/server'
 import { Sidebar } from '@/components/layout/sidebar'
+import { Toaster } from 'sonner'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const profile = await getCurrentProfile()
@@ -14,6 +15,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <main className="flex-1 overflow-auto min-w-0 pt-14 lg:pt-0">
         {children}
       </main>
+      <Toaster position="bottom-right" richColors closeButton />
     </div>
   )
 }

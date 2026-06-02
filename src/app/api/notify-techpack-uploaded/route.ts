@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
 
   const [uploaderRes, designHeadsRes] = await Promise.all([
     adminSupabase.from('profiles').select('full_name').eq('id', user.id).single(),
-    adminSupabase.from('profiles').select('id, email, full_name').eq('role', 'design_head').eq('is_active', true),
+    adminSupabase.from('profiles').select('id, email, full_name, role').in('role', ['design_head', 'merchandising', 'merchandising_head', 'sampling']).eq('is_active', true),
   ])
 
   const uploaderName = uploaderRes.data?.full_name ?? 'A designer'
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
         message:      `${uploaderName} uploaded a tech pack for "${productName}". The Excel is attached to this email.`,
       }))
     ),
-    sendPushToRole('design_head', {
+    sendPushToRole(['design_head', 'merchandising', 'merchandising_head', 'sampling'], {
       title: 'Tech Pack Uploaded',
       body:  `${uploaderName} uploaded a tech pack for "${productName}"`,
       url:   productUrl,

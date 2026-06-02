@@ -9,7 +9,17 @@ export default async function ProductsPage() {
   const supabase = await createClient()
   const profile = await getCurrentProfile()
 
-  const { data: rawProducts } = await supabase
+  // Designers only see their own assigned products
+  let assignedProductIds: string[] | null = null
+  if (profile?.role === 'design') {
+    const { data: assignments } = await supabase
+      .from('design_data')
+      .select('product_id')
+      .eq('assigned_to', profile.id)
+    assignedProductIds = (assignments || []).map(a => a.product_id)
+  }
+
+  const query = supabase
     .from('products')
     .select(`
       id, name, sku, category, workflow_stage, created_at,
@@ -17,6 +27,13 @@ export default async function ProductsPage() {
       bom_data(fg_inv_code)
     `)
     .order('created_at', { ascending: false })
+
+  if (assignedProductIds !== null) {
+    if (assignedProductIds.length === 0) query.eq('id', 'no-match')
+    else query.in('id', assignedProductIds)
+  }
+
+  const { data: rawProducts } = await query
 
   // Normalize Supabase nested join arrays to scalars expected by ProductsTable
   const products = (rawProducts || []).map(p => ({

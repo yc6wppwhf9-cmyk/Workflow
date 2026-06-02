@@ -34,6 +34,7 @@ interface ProductDetailProps {
   logs: ActivityLog[]
   designSubmissions: DesignSubmission[]
   designers: Pick<Profile, 'id' | 'full_name'>[]
+  designerWorkloads: Record<string, number>
   merchandisingUsers: Pick<Profile, 'id' | 'full_name'>[]
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   comments: any[]
@@ -58,7 +59,7 @@ const VALID_TABS = new Set(TABS.map(t => t.value))
 export function ProductDetail({
   product, profile, designData, samplingData, merchandisingData,
   bomData, marketingData, salesData, files, logs,
-  designSubmissions, designers, merchandisingUsers, comments,
+  designSubmissions, designers, designerWorkloads, merchandisingUsers, comments,
   defaultTab,
 }: ProductDetailProps) {
   const initialTab = defaultTab && VALID_TABS.has(defaultTab) ? defaultTab : 'overview'
@@ -137,7 +138,7 @@ export function ProductDetail({
             <OverviewTab product={product} designData={designData} merchandisingData={merchandisingData} bomData={bomData} marketingData={marketingData} salesData={salesData} files={files} />
           </TabsPrimitive.Content>
           <TabsPrimitive.Content value="design">
-            <DesignTab product={product} profile={profile} data={designData} salesData={salesData} files={files} submissions={designSubmissions} designers={designers} />
+            <DesignTab product={product} profile={profile} data={designData} salesData={salesData} files={files} submissions={designSubmissions} designers={designers} designerWorkloads={designerWorkloads} />
           </TabsPrimitive.Content>
           <TabsPrimitive.Content value="sampling">
             <SamplingTab product={product} profile={profile} designData={designData} data={samplingData} files={files} />

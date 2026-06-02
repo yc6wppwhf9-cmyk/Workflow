@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createAdmin } from '@supabase/supabase-js'
+import { sendPushToRole } from '@/lib/push'
+import { APP_URL } from '@/lib/email'
+
+const adminSupabase = createAdmin(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+)
 
 export async function POST(request: NextRequest) {
   try {
@@ -38,6 +46,31 @@ export async function POST(request: NextRequest) {
       action: 'submitted design illustrations for review',
       department: 'design',
     })
+
+    // Notify all active design heads
+    const [{ data: product }, { data: submitter }, { data: designHeads }] = await Promise.all([
+      adminSupabase.from('products').select('name').eq('id', product_id).single(),
+      adminSupabase.from('profiles').select('full_name').eq('id', user.id).single(),
+      adminSupabase.from('profiles').select('id').eq('role', 'design_head').eq('is_active', true),
+    ])
+
+    if (product && designHeads && designHeads.length > 0) {
+      const submitterName = submitter?.full_name ?? 'A designer'
+      const message = `${submitterName} submitted illustrations for "${product.name}" — review needed.`
+      const productUrl = `${APP_URL}/products/${product_id}?tab=design`
+
+      await Promise.all([
+        adminSupabase.from('notifications').insert(
+          designHeads.map(dh => ({ user_id: dh.id, product_id, product_name: product.name, message }))
+        ),
+        sendPushToRole('design_head', {
+          title: 'Design Submission — Review Needed',
+          body: message,
+          url: productUrl,
+          tag: `submit-${product_id}`,
+        }),
+      ])
+    }
 
     return NextResponse.json({ submission: data })
   } catch (err) {

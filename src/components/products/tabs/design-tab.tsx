@@ -28,26 +28,27 @@ interface DesignTabProps {
   files: ProductFile[]
   submissions: DesignSubmission[]
   designers: Pick<Profile, 'id' | 'full_name'>[]
+  designerWorkloads?: Record<string, number>
 }
 
-export function DesignTab({ product, profile, data, salesData, files, submissions, designers }: DesignTabProps) {
+export function DesignTab({ product, profile, data, salesData, files, submissions, designers, designerWorkloads }: DesignTabProps) {
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
 
-  const isTeamMember = profile.role === 'design'
-  const isHead       = ['admin', 'design_head'].includes(profile.role)
-  const isRoleAllowed = isTeamMember || isHead
+  const isTeamMember   = profile.role === 'design'
+  const isHead         = ['admin', 'design_head'].includes(profile.role)
+  const isRoleAllowed  = isTeamMember || isHead
+  const isAssignedToMe = isTeamMember && data?.assigned_to === profile.id
 
   const designFiles = files.filter(f => f.department === 'design' && f.file_type?.startsWith('image/') && f.colour_tag !== 'print')
   const imageApproved = designFiles.some(f => f.review_status === 'approved')
     && !designFiles.some(f => f.review_status === 'pending')
     && !designFiles.some(f => f.review_status === 'rejected')
 
-  // Team members can edit form fields only after images are approved
-  // Head / admin always have full edit access
-  const canEditFields  = !data?.is_locked && !data?.is_completed && isRoleAllowed && (isHead || imageApproved)
-  const showActions    = !data?.is_locked && isRoleAllowed && (isHead || imageApproved)
-  const canUploadIllos = !data?.is_locked && !data?.is_completed && isRoleAllowed && (isHead || !imageApproved)
+  // Only the assigned designer (or head/admin) can edit — prevents designers from touching each other's work
+  const canEditFields  = !data?.is_locked && !data?.is_completed && (isHead || (isAssignedToMe && imageApproved))
+  const showActions    = !data?.is_locked && (isHead || (isAssignedToMe && imageApproved))
+  const canUploadIllos = !data?.is_locked && !data?.is_completed && (isHead || (isAssignedToMe && !imageApproved))
 
   const [form, setForm] = useState({
     channel:        data?.channel        || '',
@@ -93,6 +94,8 @@ export function DesignTab({ product, profile, data, salesData, files, submission
   // Submission state
   const [submitting, setSubmitting]   = useState(false)
   const [submitDone, setSubmitDone]   = useState(false)
+  const [approvingAll, setApprovingAll] = useState(false)
+
   // Per-image review state (for head)
   const [reviewingFileId, setReviewingFileId]           = useState<string | null>(null)
   const [fileRejectFeedback, setFileRejectFeedback]     = useState<Record<string, string>>({})
@@ -230,7 +233,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
       department: profile.role,
     })
 
-    if (becomingComplete && product.workflow_stage === 'design_completed') {
+    if (becomingComplete && (product.workflow_stage === 'design_completed' || product.workflow_stage === 'draft')) {
       await supabase.rpc('advance_product_stage', {
         p_product_id: product.id,
         p_next_stage: 'sampling_completed',
@@ -264,18 +267,38 @@ export function DesignTab({ product, profile, data, salesData, files, submission
       action: `assigned design to ${assignedDesigner?.full_name || 'unassigned'}`,
       department: 'design',
     })
+    const previousId   = data?.assigned_to ?? null
+    const previousName = previousId ? designers.find(d => d.id === previousId)?.full_name : null
+
     if (resolvedId && assignedDesigner) {
       fetch('/api/notify-assignment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          product_id:         product.id,
-          product_name:       product.name,
-          assigned_to_id:     resolvedId,
-          assigned_to_name:   assignedDesigner.full_name,
-          assigned_to_email:  (assignedDesigner as { full_name: string; email?: string }).email ?? '',
-          department:         'design',
-          assigned_by_name:   profile.full_name,
+          product_id:             product.id,
+          product_name:           product.name,
+          assigned_to_id:         resolvedId,
+          assigned_to_name:       assignedDesigner.full_name,
+          assigned_to_email:      (assignedDesigner as { full_name: string; email?: string }).email ?? '',
+          department:             'design',
+          assigned_by_name:       profile.full_name,
+          previous_assignee_id:   previousId,
+          previous_assignee_name: previousName,
+        }),
+      }).catch(() => {})
+    } else if (!resolvedId && previousId) {
+      // Unassigning without a replacement — still notify old assignee
+      fetch('/api/notify-assignment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_id:             product.id,
+          product_name:           product.name,
+          assigned_to_id:         null,
+          department:             'design',
+          assigned_by_name:       profile.full_name,
+          previous_assignee_id:   previousId,
+          previous_assignee_name: previousName,
         }),
       }).catch(() => {})
     }
@@ -339,6 +362,31 @@ export function DesignTab({ product, profile, data, salesData, files, submission
     setReviewingFileId(null)
     setShowFileRejectBox(null)
     setFileRejectFeedback(prev => { const next = { ...prev }; delete next[fileId]; return next })
+    router.refresh()
+  }
+
+  async function approveAll(pendingFiles: typeof designFiles) {
+    setApprovingAll(true)
+    for (const file of pendingFiles) {
+      await supabase.from('product_files').update({
+        review_status: 'approved',
+        review_feedback: null,
+        reviewed_by: profile.id,
+        reviewed_at: new Date().toISOString(),
+      }).eq('id', file.id)
+    }
+    await supabase.from('activity_logs').insert({
+      product_id: product.id,
+      user_id:    profile.id,
+      action:     `approved all ${pendingFiles.length} pending illustration(s)`,
+      department: 'design',
+    })
+    fetch('/api/notify-illustration-approved', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_id: product.id, file_id: pendingFiles[0].id, file_name: `${pendingFiles.length} illustrations` }),
+    }).catch(() => {})
+    setApprovingAll(false)
     router.refresh()
   }
 
@@ -600,9 +648,19 @@ export function DesignTab({ product, profile, data, salesData, files, submission
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__none__">— Unassigned —</SelectItem>
-                        {designers.map(d => (
-                          <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>
-                        ))}
+                        {designers.map(d => {
+                          const count = designerWorkloads?.[d.id] ?? 0
+                          return (
+                            <SelectItem key={d.id} value={d.id}>
+                              {d.full_name}
+                              {count > 0 && (
+                                <span className={`ml-2 text-xs font-medium px-1.5 py-0.5 rounded-full ${count >= 5 ? 'bg-red-100 text-red-600' : count >= 3 ? 'bg-amber-100 text-amber-600' : 'bg-green-100 text-green-600'}`}>
+                                  {count} active
+                                </span>
+                              )}
+                            </SelectItem>
+                          )
+                        })}
                       </SelectContent>
                     </Select>
                     <Button
@@ -646,14 +704,25 @@ export function DesignTab({ product, profile, data, salesData, files, submission
             return (
               <Card className="border-violet-200">
                 <CardHeader className="pb-2 pt-4 flex flex-row items-center justify-between">
-                  <CardTitle className="text-sm text-violet-900">
+                  <CardTitle className="text-sm text-violet-900 flex items-center gap-2">
                     Design Submissions for Review
                     {pendingFiles.length > 0 && (
-                      <span className="ml-2 inline-flex items-center justify-center h-5 w-5 rounded-full bg-yellow-400 text-white text-xs font-bold">
+                      <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-yellow-400 text-white text-xs font-bold">
                         {pendingFiles.length}
                       </span>
                     )}
                   </CardTitle>
+                  {pendingFiles.length >= 2 && (
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs bg-green-600 hover:bg-green-700"
+                      disabled={approvingAll}
+                      onClick={() => approveAll(pendingFiles)}
+                    >
+                      {approvingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                      Approve All ({pendingFiles.length})
+                    </Button>
+                  )}
                 </CardHeader>
                 <CardContent className="pb-4 space-y-3">
                   {designFiles.length === 0 && (
@@ -774,40 +843,23 @@ export function DesignTab({ product, profile, data, salesData, files, submission
         </>
       )}
 
-      {/* ── Self-assign banner for unassigned designers ──────────── */}
-      {isTeamMember && !data?.assigned_to && !data?.is_locked && !data?.is_completed && (
+      {/* ── Unassigned / wrong-assignee notice for designers ─────── */}
+      {isTeamMember && !isAssignedToMe && !data?.is_locked && !data?.is_completed && (
         <Card className="border-amber-200 bg-amber-50">
           <CardContent className="pt-4 pb-4">
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex items-center gap-3">
-                <UserCheck className="h-5 w-5 text-amber-500 shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold text-amber-900">Not yet assigned</p>
-                  <p className="text-xs text-amber-700">No designer has been assigned to this product. You can assign yourself to start working.</p>
-                </div>
+            <div className="flex items-center gap-3">
+              <UserCheck className="h-5 w-5 text-amber-500 shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-amber-900">Awaiting assignment</p>
+                <p className="text-xs text-amber-700">The design head has not yet assigned this product. You will be notified when it is assigned to you.</p>
               </div>
-              <Button
-                size="sm"
-                onClick={async () => {
-                  setSavingAssign(true)
-                  await supabase.from('design_data').update({ assigned_to: profile.id, updated_by: profile.id }).eq('product_id', product.id)
-                  await supabase.from('activity_logs').insert({ product_id: product.id, user_id: profile.id, action: `self-assigned design task`, department: 'design' })
-                  setSavingAssign(false)
-                  router.refresh()
-                }}
-                disabled={savingAssign}
-                className="bg-amber-600 hover:bg-amber-700 shrink-0"
-              >
-                {savingAssign ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="h-4 w-4" />}
-                Assign to me
-              </Button>
             </div>
           </CardContent>
         </Card>
       )}
 
       {/* ── Head Remarks visible to designers ─────────────────────── */}
-      {isTeamMember && data?.head_notes && (
+      {isAssignedToMe && data?.head_notes && (
         <Card className="border-violet-200 bg-violet-50">
           <CardContent className="pt-4 pb-4">
             <p className="text-xs font-semibold text-violet-400 uppercase tracking-wide mb-1">Remarks from Design Head</p>
@@ -817,7 +869,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
       )}
 
       {/* ── Illustrations (team members + head acting as designer) ── */}
-      {(isTeamMember || isHead) && <Card>
+      {(isAssignedToMe || isHead) && <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <div>
             <CardTitle className="text-base">Illustrations</CardTitle>
@@ -911,7 +963,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
       </Card>}
 
       {/* ── Submit for Review (design team members only) ──────────── */}
-      {isTeamMember && !data?.is_locked && !data?.is_completed && (
+      {isAssignedToMe && !data?.is_locked && !data?.is_completed && (
         <Card className={imageApproved ? 'border-green-200 bg-green-50' : 'border-gray-200'}>
           <CardContent className="pt-4 pb-4">
             {imageApproved ? (
@@ -956,7 +1008,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
       )}
 
       {/* ── Tech Pack Upload ── */}
-      {(isTeamMember || isHead) && canEditFields && (
+      {(isAssignedToMe || isHead) && canEditFields && (
         <Card className="border-purple-200 bg-purple-50">
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -995,7 +1047,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
       )}
 
       {/* ── Print Files Upload (drag & drop) ── */}
-      {(isTeamMember || isHead) && canEditFields && (
+      {(isAssignedToMe || isHead) && canEditFields && (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-3">
             <div>
@@ -1098,14 +1150,14 @@ export function DesignTab({ product, profile, data, salesData, files, submission
       )}
 
       {/* Locked notice for team member before image approval */}
-      {isTeamMember && !imageApproved && !data?.is_locked && !data?.is_completed && (
+      {isAssignedToMe && !imageApproved && !data?.is_locked && !data?.is_completed && (
         <p className="text-xs text-gray-400 text-center py-1">
           Tech pack and design form unlock after the design head approves your illustrations.
         </p>
       )}
 
       {/* ── Design Details form ──────────────────────────────────── */}
-      {(isTeamMember || isHead) && <Card>
+      {(isAssignedToMe || isHead) && <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="text-base">Design Details</CardTitle>
           <div className="flex items-center gap-2">

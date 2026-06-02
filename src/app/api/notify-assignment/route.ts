@@ -22,6 +22,8 @@ export async function POST(request: NextRequest) {
     assigned_to_email,
     department,
     assigned_by_name,
+    previous_assignee_id,
+    previous_assignee_name,
   } = await request.json()
 
   if (!assigned_to_id || !product_id) {
@@ -74,6 +76,25 @@ export async function POST(request: NextRequest) {
     `Task Assigned: "${product_name}" — ${deptLabel}`,
     html,
   )
+
+  // Notify the previous assignee that they've been removed
+  if (previous_assignee_id && previous_assignee_id !== assigned_to_id) {
+    const unassignMsg = `You have been unassigned from "${product_name}" by ${assigned_by_name}.`
+    await Promise.all([
+      adminSupabase.from('notifications').insert({
+        user_id: previous_assignee_id,
+        product_id,
+        product_name,
+        message: unassignMsg,
+      }),
+      sendPushToUser(previous_assignee_id, {
+        title: 'Task Unassigned',
+        body: unassignMsg,
+        tag: `unassign-${product_id}`,
+      }),
+    ])
+    void previous_assignee_name // acknowledged
+  }
 
   return NextResponse.json({ ok: true })
 }

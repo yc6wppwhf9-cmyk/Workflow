@@ -39,6 +39,7 @@ export default async function ProductPage({
     { data: designSubmissions },
     { data: designers },
     { data: merchandisingUsers },
+    { data: activeAssignments },
     { data: comments },
   ] = await Promise.all([
     supabase.from('design_data').select('*').eq('product_id', id).single(),
@@ -52,9 +53,15 @@ export default async function ProductPage({
     supabase.from('design_submissions').select('*, submitter:profiles!submitted_by(id,full_name)').eq('product_id', id).order('created_at', { ascending: false }).limit(50),
     supabase.from('profiles').select('id, full_name, email').eq('role', 'design').eq('is_active', true).order('full_name'),
     supabase.from('profiles').select('id, full_name, email').eq('role', 'merchandising').eq('is_active', true).order('full_name'),
+    supabase.from('design_data').select('assigned_to').not('assigned_to', 'is', null).neq('is_completed', true),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any).from('product_comments').select('id, message, created_at, user_id, author_name, author_role').eq('product_id', id).order('created_at', { ascending: true }).limit(200),
   ])
+
+  const designerWorkloads: Record<string, number> = {}
+  for (const row of activeAssignments || []) {
+    if (row.assigned_to) designerWorkloads[row.assigned_to] = (designerWorkloads[row.assigned_to] || 0) + 1
+  }
 
   // Cloudinary files have permanent public URLs — no signing needed.
   // Supabase-stored files (legacy) still need a 1-hour signed URL.
@@ -107,6 +114,7 @@ export default async function ProductPage({
         logs={logs as unknown as ActivityLog[] || []}
         designSubmissions={designSubmissions as unknown as DesignSubmission[] || []}
         designers={designers || []}
+        designerWorkloads={designerWorkloads}
         merchandisingUsers={merchandisingUsers || []}
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         comments={(comments as any) || []}

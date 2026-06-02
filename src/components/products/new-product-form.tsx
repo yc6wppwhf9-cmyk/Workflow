@@ -88,6 +88,11 @@ export function NewProductForm({ profile }: NewProductFormProps) {
         product_specification: productSpec           || null,
         updated_by: profile.id,
       }).eq('product_id', product.id)
+    } else if (deadlineDate) {
+      await supabase.from('sales_data').update({
+        deadline_date: deadlineDate,
+        updated_by: profile.id,
+      }).eq('product_id', product.id)
     }
 
     // Upload reference images
@@ -167,6 +172,13 @@ export function NewProductForm({ profile }: NewProductFormProps) {
                   {CHANNELS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                 </SelectContent>
               </Select>
+            </div>
+            )}
+
+            {isDesignHead && (
+            <div className="space-y-1.5">
+              <Label>Deadline Date</Label>
+              <DateInput value={deadlineDate} onChange={setDeadlineDate} />
             </div>
             )}
 

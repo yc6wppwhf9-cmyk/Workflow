@@ -458,6 +458,13 @@ export function DesignTab({ product, profile, data, salesData, files, submission
       const rows = utils.sheet_to_json<string[]>(ws, { header: 1, defval: '' }) as string[][]
       const variants = parseTechPackAllVariants(rows)
 
+      // Email the Excel to all design heads (fire-and-forget)
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('product_id', product.id)
+      fd.append('product_name', product.name)
+      fetch('/api/notify-techpack-uploaded', { method: 'POST', body: fd }).catch(() => {})
+
       if (variants.length > 1) {
         // Multi-colour: let the user choose which colour to load
         setTechPackVariants(variants)

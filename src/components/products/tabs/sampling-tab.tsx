@@ -2,7 +2,7 @@
 
 import { useRef, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCircle2, Clock, ExternalLink, Loader2, Printer, Send, Trash2, Upload, XCircle } from 'lucide-react'
+import { CheckCircle2, Clock, Download, ExternalLink, Loader2, Printer, Send, Trash2, Upload, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -183,15 +183,25 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="text-base">Design Tech Pack</CardTitle>
-          <Button
-            size="sm" variant="outline" className="gap-1.5"
-            onClick={() => {
-              const w = window.open(`/print/${product.id}`, '_blank')
-              if (w) w.onload = () => w.print()
-            }}
-          >
-            <Printer className="h-3.5 w-3.5" /> Print Tech Pack
-          </Button>
+          <div className="flex items-center gap-2">
+            <a
+              href={`/api/export-sampling-techpack?product_id=${product.id}`}
+              download
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 border border-blue-200 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition-colors"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Export Excel
+            </a>
+            <Button
+              size="sm" variant="outline" className="gap-1.5"
+              onClick={() => {
+                const w = window.open(`/print/${product.id}`, '_blank')
+                if (w) w.onload = () => w.print()
+              }}
+            >
+              <Printer className="h-3.5 w-3.5" /> Print Tech Pack
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {designData ? (

@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Lock, Save, Plus, X, Upload, FileSpreadsheet, CheckCircle2, UserCheck, Send, Printer } from 'lucide-react'
+import { Download, Loader2, Lock, Save, Plus, X, Upload, FileSpreadsheet, CheckCircle2, UserCheck, Send, Printer } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -679,11 +679,21 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
               Production
             </button>
           </div>
-          {data?.is_locked && (
-            <span className="flex items-center gap-1.5 text-xs text-orange-600 bg-orange-50 px-2.5 py-1 rounded-full border border-orange-200">
-              <Lock className="h-3 w-3" /> Stage Locked
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            <a
+              href={`/api/export-merchandising-techpack?product_id=${product.id}`}
+              download
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 border border-blue-200 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition-colors"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Export Excel
+            </a>
+            {data?.is_locked && (
+              <span className="flex items-center gap-1.5 text-xs text-orange-600 bg-orange-50 px-2.5 py-1 rounded-full border border-orange-200">
+                <Lock className="h-3 w-3" /> Stage Locked
+              </span>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-5">
 

@@ -42,14 +42,17 @@ export function DesignTab({ product, profile, data, salesData, files, submission
   const isAssignedToMe = isTeamMember && data?.assigned_to === profile.id
 
   const designFiles = files.filter(f => f.department === 'design' && f.file_type?.startsWith('image/') && f.colour_tag !== 'print')
-  const imageApproved = designFiles.some(f => f.review_status === 'approved')
+  const hasAnyApproved = designFiles.some(f => f.review_status === 'approved')
+  const imageApproved  = hasAnyApproved
     && !designFiles.some(f => f.review_status === 'pending')
     && !designFiles.some(f => f.review_status === 'rejected')
 
   // Only the assigned designer (or head/admin) can edit — prevents designers from touching each other's work
-  const canEditFields  = !data?.is_locked && !data?.is_completed && (isHead || (isAssignedToMe && imageApproved))
-  const showActions    = !data?.is_locked && (isHead || (isAssignedToMe && imageApproved))
-  const canUploadIllos = !data?.is_locked && !data?.is_completed && (isHead || (isAssignedToMe && !imageApproved))
+  // canEditFields unlocks once any illustration is approved (stays unlocked even if new pending files added)
+  const canEditFields  = !data?.is_locked && !data?.is_completed && (isHead || (isAssignedToMe && hasAnyApproved))
+  const showActions    = !data?.is_locked && (isHead || (isAssignedToMe && hasAnyApproved))
+  // canUploadIllos is open until design is marked complete — approval state does not block new uploads
+  const canUploadIllos = !data?.is_locked && !data?.is_completed && (isHead || isAssignedToMe)
 
   const [form, setForm] = useState({
     channel:        data?.channel        || '',
@@ -1404,7 +1407,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
       )}
 
       {/* Locked notice for team member before image approval */}
-      {isAssignedToMe && !imageApproved && !data?.is_locked && !data?.is_completed && (
+      {isAssignedToMe && !hasAnyApproved && !data?.is_locked && !data?.is_completed && (
         <p className="text-xs text-gray-400 text-center py-1">
           Tech pack and design form unlock after the design head approves your illustrations.
         </p>

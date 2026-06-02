@@ -18,6 +18,7 @@ import {
   X,
   FlaskConical,
   LineChart,
+  Eye,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -98,6 +99,17 @@ export function Sidebar({ profile }: SidebarProps) {
             <p className="px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-5 mb-2">My Work</p>
             {navLink('/sampling-review', 'Sampling Review', FlaskConical)}
           </>
+        )}
+
+        {['design_head'].includes(profile.role) && (
+          <>
+            <p className="px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-5 mb-2">My Work</p>
+            {navLink('/illustration-review', 'Review Queue', Eye)}
+          </>
+        )}
+
+        {['management'].includes(profile.role) && (
+          <>{navLink('/illustration-review', 'Illustration Review', Eye)}</>
         )}
 
         {['admin', 'management'].includes(profile.role) && (

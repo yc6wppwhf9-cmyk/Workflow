@@ -17,7 +17,7 @@ import { createClient } from '@/lib/supabase/client'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { CATEGORY_LABELS, CATEGORY_SUBCATEGORIES, BRANDS, CHANNELS, type ProductCategory, type Brand } from '@/lib/types'
 import type { Product, Profile, DesignData, SalesData, ProductFile, DesignSubmission } from '@/lib/types'
-import { parseTechPackRows } from '@/lib/parse-techpack'
+import { parseTechPackAllVariants, type TechPackVariant } from '@/lib/parse-techpack'
 import { ImageLightbox, type LightboxImage } from '@/components/ui/image-lightbox'
 
 interface DesignTabProps {
@@ -192,6 +192,8 @@ export function DesignTab({ product, profile, data, salesData, files, submission
   }, [])
   const [parsingTechPack, setParsing]   = useState(false)
   const [techPackResult, setTechPackResult] = useState<{ filled: string[] } | null>(null)
+  const [techPackVariants, setTechPackVariants] = useState<TechPackVariant[]>([])
+  const [selectedVariantIdx, setSelectedVariantIdx] = useState(0)
 
   function F({ label, field, placeholder, mono }: { label: string; field: keyof typeof form; placeholder?: string; mono?: boolean }) {
     return (
@@ -399,59 +401,76 @@ export function DesignTab({ product, profile, data, salesData, files, submission
     router.refresh()
   }
 
+  function variantToFormUpdates(f: TechPackVariant) {
+    const updates: Partial<typeof form> = {}
+    const filled: string[] = []
+    const map: Array<[keyof typeof form, string, string]> = [
+      ['designer_name',  f.designerName,  'Designer Name'],
+      ['farma',          f.farma,         'Farma'],
+      ['season_year',    f.seasonYear,    'Season Year'],
+      ['fabric',         f.fabric,        'Fabric'],
+      ['lining',         f.lining,        'Lining'],
+      ['air_mesh',       f.airMesh,       'Air Mesh'],
+      ['zipper',         f.zipper,        'Zipper'],
+      ['puller',         f.puller,        'Puller'],
+      ['patta_9mm',      f.patta9mm,      '9mm Patta'],
+      ['patta_1',        f.patta1,        'Patta 1'],
+      ['patta_2',        f.patta2,        'Patta 2'],
+      ['lader_lock',     f.laderLock,     'Lader Lock'],
+      ['branding',       f.branding,      'Branding'],
+      ['screen_print',   f.screenPrint,   'Screen Print'],
+      ['digital_print',  f.digitalPrint,  'Digital Print'],
+      ['bartech',        f.bartech,       'Bartech'],
+      ['re_sampling_by', f.reSamplingBy,  'Re-sampling By'],
+      ['remarks',        f.remarks,       'Remarks'],
+      ['add_on_1',       f.addOn1,        'Add On 1'],
+      ['add_on_2',       f.addOn2,        'Add On 2'],
+      ['add_on_3',       f.addOn3,        'Add On 3'],
+      ['designer_sign',  f.designerSign,  'Designer Sign'],
+    ]
+    for (const [key, val, label] of map) {
+      if (val) { (updates as Record<string, string>)[key] = val; filled.push(label) }
+    }
+    return { updates, filled }
+  }
+
+  async function loadVariantIntoForm(variant: TechPackVariant) {
+    const { updates, filled } = variantToFormUpdates(variant)
+    setForm(prev => ({ ...prev, ...updates, sample_color: variant.colourName || prev.sample_color }))
+    if (variant.styleName) {
+      await supabase.from('products').update({ name: variant.styleName, updated_by: profile.id }).eq('id', product.id)
+    }
+    setTechPackResult({ filled })
+    router.refresh()
+  }
+
   async function handleTechPackUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     setParsing(true)
     setTechPackResult(null)
+    setTechPackVariants([])
     try {
       const { read, utils } = await import('xlsx')
       const buffer = await file.arrayBuffer()
       const wb = read(buffer, { type: 'array' })
       const ws = wb.Sheets[wb.SheetNames[0]]
       const rows = utils.sheet_to_json<string[]>(ws, { header: 1, defval: '' }) as string[][]
-      const f = parseTechPackRows(rows)
-      const filled: string[] = []
-      const updates: Partial<typeof form> = {}
-      const map: Array<[keyof typeof form, string, string]> = [
-        ['designer_name',  f.designerName,  'Designer Name'],
-        ['farma',          f.farma,         'Farma'],
-        ['season_year',    f.seasonYear,    'Season Year'],
-        ['fabric',         f.fabric,        'Fabric'],
-        ['lining',         f.lining,        'Lining'],
-        ['air_mesh',       f.airMesh,       'Air Mesh'],
-        ['zipper',         f.zipper,        'Zipper'],
-        ['puller',         f.puller,        'Puller'],
-        ['patta_9mm',      f.patta9mm,      '9mm Patta'],
-        ['patta_1',        f.patta1,        'Patta 1'],
-        ['patta_2',        f.patta2,        'Patta 2'],
-        ['lader_lock',     f.laderLock,     'Lader Lock'],
-        ['branding',       f.branding,      'Branding'],
-        ['screen_print',   f.screenPrint,   'Screen Print'],
-        ['digital_print',  f.digitalPrint,  'Digital Print'],
-        ['bartech',        f.bartech,       'Bartech'],
-        ['re_sampling_by', f.reSamplingBy,  'Re-sampling By'],
-        ['remarks',        f.remarks,       'Remarks'],
-        ['add_on_1',       f.addOn1,        'Add On 1'],
-        ['add_on_2',       f.addOn2,        'Add On 2'],
-        ['add_on_3',       f.addOn3,        'Add On 3'],
-        ['designer_sign',  f.designerSign,  'Designer Sign'],
-      ]
-      for (const [key, val, label] of map) {
-        if (val) { (updates as Record<string, string>)[key] = val; filled.push(label) }
+      const variants = parseTechPackAllVariants(rows)
+
+      if (variants.length > 1) {
+        // Multi-colour: let the user choose which colour to load
+        setTechPackVariants(variants)
+        setSelectedVariantIdx(0)
+      } else {
+        // Single colour: auto-load immediately (existing behaviour)
+        await loadVariantIntoForm(variants[0])
       }
-      setForm(prev => ({ ...prev, ...updates }))
-      if (f.styleName) {
-        await supabase.from('products').update({ name: f.styleName, updated_by: profile.id }).eq('id', product.id)
-        filled.push(`Product name → ${f.styleName}`)
-      }
-      setTechPackResult({ filled })
     } catch {
       setTechPackResult({ filled: [] })
     }
     setParsing(false)
     if (techPackRef.current) techPackRef.current.value = ''
-    router.refresh()
   }
 
   async function handleIllustrationUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -1036,15 +1055,79 @@ export function DesignTab({ product, profile, data, salesData, files, submission
               </Button>
               <input ref={techPackRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleTechPackUpload} />
             </div>
-            {techPackResult && (
+            {/* Multi-colour variant selector */}
+            {techPackVariants.length > 1 && (
+              <div className="mt-3 pt-3 border-t border-purple-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-purple-800">
+                    {techPackVariants.length} colour variants found — select one to load
+                  </p>
+                </div>
+                {/* Colour pills */}
+                <div className="flex flex-wrap gap-2">
+                  {techPackVariants.map((v, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setSelectedVariantIdx(i)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                        i === selectedVariantIdx
+                          ? 'bg-purple-600 text-white border-purple-600'
+                          : 'bg-white text-purple-700 border-purple-300 hover:border-purple-500'
+                      }`}
+                    >
+                      {v.colourName || `Colour ${i + 1}`}
+                    </button>
+                  ))}
+                </div>
+                {/* Selected variant preview */}
+                {(() => {
+                  const v = techPackVariants[selectedVariantIdx]
+                  const rows: [string, string][] = [
+                    ['Fabric',        v.fabric],
+                    ['Lining',        v.lining],
+                    ['Air Mesh',      v.airMesh],
+                    ['Zipper',        v.zipper],
+                    ['Puller',        v.puller],
+                    ['9mm Patta',     v.patta9mm],
+                    ['Patta 1',       v.patta1],
+                    ['Patta 2',       v.patta2],
+                    ['Lader Lock',    v.laderLock],
+                    ['Branding',      v.branding],
+                    ['Screen Print',  v.screenPrint],
+                    ['Digital Print', v.digitalPrint],
+                    ['Bartech',       v.bartech],
+                    ['Remarks',       v.remarks],
+                  ].filter(([, val]) => val) as [string, string][]
+                  return rows.length > 0 ? (
+                    <div className="bg-white rounded-lg border border-purple-100 px-3 py-2.5">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
+                        {rows.map(([label, val]) => (
+                          <div key={label}>
+                            <p className="text-[10px] font-semibold text-purple-300 uppercase tracking-wide">{label}</p>
+                            <p className="text-xs text-gray-800 truncate">{val}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null
+                })()}
+                <Button
+                  size="sm"
+                  className="bg-purple-600 hover:bg-purple-700 h-7 text-xs"
+                  onClick={() => loadVariantIntoForm(techPackVariants[selectedVariantIdx])}
+                >
+                  <CheckCircle2 className="h-3 w-3" />
+                  Load {techPackVariants[selectedVariantIdx]?.colourName || `Colour ${selectedVariantIdx + 1}`} into form
+                </Button>
+              </div>
+            )}
+            {/* Single colour result */}
+            {techPackResult && techPackVariants.length <= 1 && (
               <div className="mt-3 pt-3 border-t border-purple-200">
                 {techPackResult.filled.length > 0 ? (
                   <div className="flex items-start gap-2 text-purple-800">
                     <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0 text-purple-600" />
-                    <div className="text-xs space-y-1">
-                      <p>Filled: {techPackResult.filled.join(', ')}. Review and save.</p>
-                      <p className="text-purple-600">If the Excel has multiple colour variants, data is taken from the first variant.</p>
-                    </div>
+                    <p className="text-xs">Filled: {techPackResult.filled.join(', ')}. Review and save.</p>
                   </div>
                 ) : (
                   <p className="text-xs text-red-600">Could not extract data — check the file format.</p>

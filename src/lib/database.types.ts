@@ -589,10 +589,12 @@ export type Database = {
           created_at: string
           created_by: string | null
           description: string | null
+          display_name: string | null
           id: string
           is_locked: boolean
           name: string
           sku: string
+          sub_category: string | null
           updated_at: string
           updated_by: string | null
           workflow_stage: Database["public"]["Enums"]["workflow_stage"]
@@ -603,10 +605,12 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           description?: string | null
+          display_name?: string | null
           id?: string
           is_locked?: boolean
           name: string
           sku: string
+          sub_category?: string | null
           updated_at?: string
           updated_by?: string | null
           workflow_stage?: Database["public"]["Enums"]["workflow_stage"]
@@ -617,10 +621,12 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           description?: string | null
+          display_name?: string | null
           id?: string
           is_locked?: boolean
           name?: string
           sku?: string
+          sub_category?: string | null
           updated_at?: string
           updated_by?: string | null
           workflow_stage?: Database["public"]["Enums"]["workflow_stage"]

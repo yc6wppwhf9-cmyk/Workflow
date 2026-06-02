@@ -24,6 +24,13 @@ export function NewProductForm({ profile }: NewProductFormProps) {
 
   const [category, setCategory]   = useState<ProductCategory | ''>('')
   const [subCategory, setSubCategory] = useState('')
+
+  function handleCategoryChange(val: ProductCategory | '') {
+    setCategory(val)
+    if (!val) { setSubCategory(''); return }
+    const subs = CATEGORY_SUBCATEGORIES[val as ProductCategory] ?? []
+    setSubCategory(subs.length === 1 ? subs[0] : '')
+  }
   const [brand, setBrand]         = useState<Brand | ''>('')
   const [channel, setChannel]     = useState('')
   const [priceRange, setPriceRange]   = useState('')
@@ -53,7 +60,8 @@ export function NewProductForm({ profile }: NewProductFormProps) {
 
   async function handleSave() {
     if (!category) { setError('Category is required'); return }
-    if (!subCategory) { setError('Sub-category is required'); return }
+    const availableSubs = CATEGORY_SUBCATEGORIES[category as ProductCategory] ?? []
+    if (availableSubs.length > 1 && !subCategory) { setError('Sub-category is required'); return }
     setSaving(true)
     setError('')
 
@@ -148,7 +156,7 @@ export function NewProductForm({ profile }: NewProductFormProps) {
           <CardContent className="space-y-4">
             <div className="space-y-1.5">
               <Label>Category <span className="text-red-500">*</span></Label>
-              <Select value={category} onValueChange={v => { setCategory(v as ProductCategory); setSubCategory('') }}>
+              <Select value={category} onValueChange={v => handleCategoryChange(v as ProductCategory)}>
                 <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
                 <SelectContent>
                   {(Object.entries(CATEGORY_LABELS) as [ProductCategory, string][]).map(([v, l]) => (
@@ -157,13 +165,13 @@ export function NewProductForm({ profile }: NewProductFormProps) {
                 </SelectContent>
               </Select>
             </div>
-            {category && (
+            {category && (CATEGORY_SUBCATEGORIES[category as ProductCategory] ?? []).length > 1 && (
             <div className="space-y-1.5">
               <Label>Sub-Category <span className="text-red-500">*</span></Label>
               <Select value={subCategory} onValueChange={setSubCategory}>
                 <SelectTrigger><SelectValue placeholder="Select sub-category" /></SelectTrigger>
                 <SelectContent>
-                  {CATEGORY_SUBCATEGORIES[category as ProductCategory]?.map(sub => (
+                  {CATEGORY_SUBCATEGORIES[category as ProductCategory].map(sub => (
                     <SelectItem key={sub} value={sub}>{sub}</SelectItem>
                   ))}
                 </SelectContent>

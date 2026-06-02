@@ -81,6 +81,13 @@ export function DesignTab({ product, profile, data, salesData, files, submission
 
   const [category, setCategory]   = useState<ProductCategory | ''>(product.category || '')
   const [subCategory, setSubCategory] = useState<string>(product.sub_category || '')
+
+  function handleCategoryChange(val: ProductCategory | '') {
+    setCategory(val)
+    if (!val) { setSubCategory(''); return }
+    const subs = CATEGORY_SUBCATEGORIES[val as ProductCategory] ?? []
+    setSubCategory(subs.length === 1 ? subs[0] : '')
+  }
   const [brand, setBrand]         = useState<Brand | ''>(product.brand || '')
   const [newSku, setNewSku]       = useState('')
   const [saving, setSaving]       = useState(false)
@@ -1186,7 +1193,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div className="space-y-1">
                 <Label className="text-xs text-gray-500">Category</Label>
-                <Select value={category} onValueChange={(v) => { setCategory(v as ProductCategory); setSubCategory('') }} disabled={!canEditFields}>
+                <Select value={category} onValueChange={(v) => handleCategoryChange(v as ProductCategory)} disabled={!canEditFields}>
                   <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select category" /></SelectTrigger>
                   <SelectContent>
                     {(Object.entries(CATEGORY_LABELS) as [ProductCategory, string][]).map(([v, l]) => (
@@ -1195,17 +1202,24 @@ export function DesignTab({ product, profile, data, salesData, files, submission
                   </SelectContent>
                 </Select>
               </div>
+              {(CATEGORY_SUBCATEGORIES[category as ProductCategory] ?? []).length > 1 ? (
               <div className="space-y-1">
                 <Label className="text-xs text-gray-500">Sub-Category</Label>
-                <Select value={subCategory} onValueChange={setSubCategory} disabled={!canEditFields || !category}>
-                  <SelectTrigger className="h-8 text-sm"><SelectValue placeholder={category ? 'Select sub-category' : 'Select category first'} /></SelectTrigger>
+                <Select value={subCategory} onValueChange={setSubCategory} disabled={!canEditFields}>
+                  <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select sub-category" /></SelectTrigger>
                   <SelectContent>
-                    {category && CATEGORY_SUBCATEGORIES[category as ProductCategory]?.map(sub => (
+                    {CATEGORY_SUBCATEGORIES[category as ProductCategory].map(sub => (
                       <SelectItem key={sub} value={sub}>{sub}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
+              ) : (
+              <div className="space-y-1">
+                <Label className="text-xs text-gray-500">Sub-Category</Label>
+                <p className="h-8 flex items-center text-sm text-gray-500 px-1">{subCategory || <span className="text-gray-300 italic">—</span>}</p>
+              </div>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">

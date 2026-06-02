@@ -15,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createClient } from '@/lib/supabase/client'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { CATEGORY_LABELS, BRANDS, CHANNELS, type ProductCategory, type Brand } from '@/lib/types'
+import { CATEGORY_LABELS, CATEGORY_SUBCATEGORIES, BRANDS, CHANNELS, type ProductCategory, type Brand } from '@/lib/types'
 import type { Product, Profile, DesignData, SalesData, ProductFile, DesignSubmission } from '@/lib/types'
 import { parseTechPackRows } from '@/lib/parse-techpack'
 import { ImageLightbox, type LightboxImage } from '@/components/ui/image-lightbox'
@@ -80,6 +80,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
   })
 
   const [category, setCategory]   = useState<ProductCategory | ''>(product.category || '')
+  const [subCategory, setSubCategory] = useState<string>(product.sub_category || '')
   const [brand, setBrand]         = useState<Brand | ''>(product.brand || '')
   const [newSku, setNewSku]       = useState('')
   const [saving, setSaving]       = useState(false)
@@ -206,6 +207,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
       supabase.from('design_data').update({ ...form, updated_by: profile.id }).eq('product_id', product.id),
       supabase.from('products').update({
         ...(category && { category }),
+        sub_category: subCategory || null,
         ...(brand && { brand }),
         updated_by: profile.id,
       }).eq('id', product.id),
@@ -1181,10 +1183,10 @@ export function DesignTab({ product, profile, data, salesData, files, submission
           {/* Product identity */}
           <div>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Product</p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3 mb-3">
               <div className="space-y-1">
                 <Label className="text-xs text-gray-500">Category</Label>
-                <Select value={category} onValueChange={(v) => setCategory(v as ProductCategory)} disabled={!canEditFields}>
+                <Select value={category} onValueChange={(v) => { setCategory(v as ProductCategory); setSubCategory('') }} disabled={!canEditFields}>
                   <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select category" /></SelectTrigger>
                   <SelectContent>
                     {(Object.entries(CATEGORY_LABELS) as [ProductCategory, string][]).map(([v, l]) => (
@@ -1193,6 +1195,19 @@ export function DesignTab({ product, profile, data, salesData, files, submission
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-gray-500">Sub-Category</Label>
+                <Select value={subCategory} onValueChange={setSubCategory} disabled={!canEditFields || !category}>
+                  <SelectTrigger className="h-8 text-sm"><SelectValue placeholder={category ? 'Select sub-category' : 'Select category first'} /></SelectTrigger>
+                  <SelectContent>
+                    {category && CATEGORY_SUBCATEGORIES[category as ProductCategory]?.map(sub => (
+                      <SelectItem key={sub} value={sub}>{sub}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs text-gray-500">Brand</Label>
                 <Select value={brand} onValueChange={(v) => setBrand(v as Brand)} disabled={!canEditFields}>

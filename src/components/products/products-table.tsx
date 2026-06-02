@@ -25,6 +25,7 @@ interface ProductRow {
   name: string
   sku: string
   category: string
+  sub_category: string | null
   workflow_stage: string
   created_at: string
   design_data?: { designer_name: string | null; color_skus: string[] | null; channel: string | null } | null
@@ -166,9 +167,10 @@ export function ProductsTable({ products, profile }: ProductsTableProps) {
                     {design?.channel || <span className="text-gray-300">—</span>}
                   </td>
 
-                  {/* Category */}
-                  <td className="px-4 py-3.5 text-gray-600 text-sm">
-                    {CATEGORY_LABELS[p.category as ProductCategory] || p.category}
+                  {/* Category / Sub-Category */}
+                  <td className="px-4 py-3.5 text-sm">
+                    <p className="text-gray-700 font-medium">{CATEGORY_LABELS[p.category as ProductCategory] || p.category}</p>
+                    {p.sub_category && <p className="text-xs text-gray-400 mt-0.5">{p.sub_category}</p>}
                   </td>
 
                   {/* Stage */}

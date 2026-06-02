@@ -11,28 +11,26 @@ export type WorkflowStage =
   | 'product_live'
 
 export type ProductCategory =
-  | 'junior-backpacks'
-  | 'campus-backpacks'
-  | 'business-backpacks'
-  | 'trekking-backpacks'
   | 'luggage'
+  | 'business'
   | 'accessories'
-  | 'vegan-backpacks'
-  | 'duffle'
-  | 'duffle-wheeler'
-  | 'duffle-trolley'
+  | 'backpack'
+  | 'pu-collection'
 
 export const CATEGORY_LABELS: Record<ProductCategory, string> = {
-  'junior-backpacks':   'Junior Backpacks',
-  'campus-backpacks':   'Campus Backpacks',
-  'business-backpacks': 'Business Backpacks',
-  'trekking-backpacks': 'Trekking Backpacks',
-  'luggage':            'Luggage',
-  'accessories':        'Accessories',
-  'vegan-backpacks':    'Vegan Backpacks',
-  'duffle':             'Duffle',
-  'duffle-wheeler':     'Duffle Wheeler',
-  'duffle-trolley':     'Duffle Trolley',
+  'luggage':       'Luggage',
+  'business':      'Business',
+  'accessories':   'Accessories',
+  'backpack':      'Backpack',
+  'pu-collection': 'PU Collection',
+}
+
+export const CATEGORY_SUBCATEGORIES: Record<ProductCategory, string[]> = {
+  'luggage':       ['Hard Luggage'],
+  'business':      ['Overnighter/Expander', 'Backpack/Trolley'],
+  'accessories':   ['Pouch', 'Lunch Bag', 'Collection', 'Daypack', 'Shopping Bag', 'Sling Bag', 'Laptop Sleeve', 'Others'],
+  'backpack':      ['School Backpack', 'College Backpack', 'Laptop Backpack', 'Trekking Backpack'],
+  'pu-collection': ['Backpack', 'Pouch', 'Duffle Bag', 'Others'],
 }
 
 export type Brand =
@@ -74,6 +72,7 @@ export interface Product {
   display_name: string | null
   sku: string
   category: ProductCategory
+  sub_category: string | null
   brand: Brand | null
   description: string | null
   workflow_stage: WorkflowStage

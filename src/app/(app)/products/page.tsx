@@ -22,7 +22,7 @@ export default async function ProductsPage() {
   const query = supabase
     .from('products')
     .select(`
-      id, name, sku, category, workflow_stage, created_at,
+      id, name, sku, category, sub_category, workflow_stage, created_at,
       design_data(designer_name, color_skus, channel),
       bom_data(fg_inv_code)
     `)

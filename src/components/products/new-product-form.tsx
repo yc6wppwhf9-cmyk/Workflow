@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createClient } from '@/lib/supabase/client'
 import { DateInput } from '@/components/ui/date-input'
-import { CATEGORY_LABELS, BRANDS, CHANNELS, type Profile, type ProductCategory, type Brand } from '@/lib/types'
+import { CATEGORY_LABELS, CATEGORY_SUBCATEGORIES, BRANDS, CHANNELS, type Profile, type ProductCategory, type Brand } from '@/lib/types'
 
 interface NewProductFormProps {
   profile: Profile
@@ -23,6 +23,7 @@ export function NewProductForm({ profile }: NewProductFormProps) {
   const isDesignHead = profile.role === 'design_head'
 
   const [category, setCategory]   = useState<ProductCategory | ''>('')
+  const [subCategory, setSubCategory] = useState('')
   const [brand, setBrand]         = useState<Brand | ''>('')
   const [channel, setChannel]     = useState('')
   const [priceRange, setPriceRange]   = useState('')
@@ -52,6 +53,7 @@ export function NewProductForm({ profile }: NewProductFormProps) {
 
   async function handleSave() {
     if (!category) { setError('Category is required'); return }
+    if (!subCategory) { setError('Sub-category is required'); return }
     setSaving(true)
     setError('')
 
@@ -65,6 +67,7 @@ export function NewProductForm({ profile }: NewProductFormProps) {
         name: autoName,
         sku: autoSku,
         ...(category && { category }),
+        ...(subCategory && { sub_category: subCategory }),
         ...(brand && { brand }),
         created_by: profile.id,
         updated_by: profile.id,
@@ -145,7 +148,7 @@ export function NewProductForm({ profile }: NewProductFormProps) {
           <CardContent className="space-y-4">
             <div className="space-y-1.5">
               <Label>Category <span className="text-red-500">*</span></Label>
-              <Select value={category} onValueChange={v => setCategory(v as ProductCategory | '')}>
+              <Select value={category} onValueChange={v => { setCategory(v as ProductCategory); setSubCategory('') }}>
                 <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
                 <SelectContent>
                   {(Object.entries(CATEGORY_LABELS) as [ProductCategory, string][]).map(([v, l]) => (
@@ -154,6 +157,19 @@ export function NewProductForm({ profile }: NewProductFormProps) {
                 </SelectContent>
               </Select>
             </div>
+            {category && (
+            <div className="space-y-1.5">
+              <Label>Sub-Category <span className="text-red-500">*</span></Label>
+              <Select value={subCategory} onValueChange={setSubCategory}>
+                <SelectTrigger><SelectValue placeholder="Select sub-category" /></SelectTrigger>
+                <SelectContent>
+                  {CATEGORY_SUBCATEGORIES[category as ProductCategory]?.map(sub => (
+                    <SelectItem key={sub} value={sub}>{sub}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            )}
             <div className="space-y-1.5">
               <Label>Brand</Label>
               <Select value={brand} onValueChange={v => setBrand(v as Brand)}>

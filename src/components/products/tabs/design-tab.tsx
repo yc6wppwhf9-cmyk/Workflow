@@ -37,6 +37,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
 
   const isTeamMember   = profile.role === 'design'
   const isHead         = ['admin', 'design_head'].includes(profile.role)
+  const isManagement   = profile.role === 'management'
   const isRoleAllowed  = isTeamMember || isHead
   const isAssignedToMe = isTeamMember && data?.assigned_to === profile.id
 
@@ -499,8 +500,8 @@ export function DesignTab({ product, profile, data, salesData, files, submission
           product_id: product.id, name: file.name, file_url: url,
           file_type: file.type, file_size: file.size,
           department: 'design', uploaded_by: profile.id,
-          // Head uploads are auto-approved — no need to submit to themselves
-          ...(isHead ? { review_status: 'approved', reviewed_by: profile.id, reviewed_at: new Date().toISOString() } : {}),
+          // Head uploads go to management for approval (pending), same as designer uploads
+          review_status: 'pending',
         })
       }
       done++
@@ -510,6 +511,19 @@ export function DesignTab({ product, profile, data, salesData, files, submission
       product_id: product.id, user_id: profile.id,
       action: `uploaded ${selectedFiles.length} illustration(s)`, department: 'design',
     })
+    // If design head uploaded, notify management for review
+    if (isHead) {
+      fetch('/api/notify-management-review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_id:    product.id,
+          product_name:  product.name,
+          uploader_name: profile.full_name,
+          file_count:    selectedFiles.length,
+        }),
+      }).catch(() => {})
+    }
     setUploading(false)
     setUploadingName('')
     setUploadProgress(null)
@@ -730,11 +744,12 @@ export function DesignTab({ product, profile, data, salesData, files, submission
             </CardContent>
           </Card>
 
-          {/* Image Review Queue — only pending files */}
+          {/* Image Review Queue — designer submissions only (not head uploads) */}
           {(() => {
-            const pendingFiles  = designFiles.filter(f => f.review_status === 'pending')
-            const rejectedFiles = designFiles.filter(f => f.review_status === 'rejected')
-            const approvedFiles = designFiles.filter(f => f.review_status === 'approved')
+            const isHeadUpload  = (f: typeof designFiles[0]) => (f.uploader as unknown as { role?: string } | null)?.role === 'design_head'
+            const pendingFiles  = designFiles.filter(f => f.review_status === 'pending'  && !isHeadUpload(f))
+            const rejectedFiles = designFiles.filter(f => f.review_status === 'rejected' && !isHeadUpload(f))
+            const approvedFiles = designFiles.filter(f => f.review_status === 'approved' && !isHeadUpload(f))
             const reviewableFiles = [...pendingFiles, ...rejectedFiles]
             return (
               <Card className="border-violet-200">
@@ -878,6 +893,146 @@ export function DesignTab({ product, profile, data, salesData, files, submission
         </>
       )}
 
+      {/* ── Management: review design head illustrations ─────────── */}
+      {isManagement && (() => {
+        const headFiles = designFiles.filter(f =>
+          (f.uploader as unknown as { role?: string } | null)?.role === 'design_head'
+        )
+        const pendingHead   = headFiles.filter(f => f.review_status === 'pending')
+        const rejectedHead  = headFiles.filter(f => f.review_status === 'rejected')
+        const approvedHead  = headFiles.filter(f => f.review_status === 'approved')
+        const reviewable    = [...pendingHead, ...rejectedHead]
+        if (headFiles.length === 0) return null
+        return (
+          <Card className="border-blue-200">
+            <CardHeader className="pb-2 pt-4 flex flex-row items-center justify-between">
+              <CardTitle className="text-sm text-blue-900 flex items-center gap-2">
+                Design Head Illustrations — Management Review
+                {pendingHead.length > 0 && (
+                  <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-yellow-400 text-white text-xs font-bold">
+                    {pendingHead.length}
+                  </span>
+                )}
+              </CardTitle>
+              {pendingHead.length >= 2 && (
+                <Button
+                  size="sm"
+                  className="h-7 text-xs bg-green-600 hover:bg-green-700"
+                  disabled={approvingAll}
+                  onClick={() => approveAll(pendingHead)}
+                >
+                  {approvingAll ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                  Approve All ({pendingHead.length})
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent className="pb-4 space-y-3">
+              {reviewable.length === 0 && approvedHead.length > 0 && (
+                <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 rounded-lg px-3 py-2.5 border border-green-200">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  All {approvedHead.length} illustration{approvedHead.length !== 1 ? 's' : ''} approved.
+                </div>
+              )}
+              {reviewable.map(file => (
+                <div key={file.id} className={`border rounded-lg overflow-hidden ${
+                  file.review_status === 'rejected' ? 'border-red-200 bg-red-50' : 'border-yellow-200 bg-yellow-50'
+                }`}>
+                  <div className="flex items-start gap-3 p-3">
+                    <button
+                      onClick={() => setLightboxIdx(designFiles.indexOf(file))}
+                      className="relative shrink-0 w-24 h-24 rounded-md overflow-hidden border border-gray-200 bg-gray-50 hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={file.file_url} alt={file.name} className="w-full h-full object-cover" />
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <p className="text-sm font-medium text-gray-800 truncate">{file.name}</p>
+                        {file.review_status === 'rejected' && (
+                          <span className="inline-flex items-center gap-1 text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium shrink-0">
+                            <XCircle className="h-3 w-3" /> Rejected
+                          </span>
+                        )}
+                        {file.review_status === 'pending' && (
+                          <span className="inline-flex items-center gap-1 text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-medium shrink-0">
+                            <Clock className="h-3 w-3" /> Awaiting review
+                          </span>
+                        )}
+                      </div>
+                      {file.review_feedback && (
+                        <p className="text-xs text-red-700 mb-2">Feedback: {file.review_feedback}</p>
+                      )}
+                      {file.review_status === 'pending' && (
+                        <div className="flex items-start gap-2 mt-1">
+                          <Button
+                            size="sm"
+                            className="bg-green-600 hover:bg-green-700 h-7 text-xs"
+                            disabled={reviewingFileId === file.id}
+                            onClick={() => reviewImage(file.id, 'approved')}
+                          >
+                            {reviewingFileId === file.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                            Approve
+                          </Button>
+                          {showFileRejectBox === file.id ? (
+                            <div className="flex-1 space-y-1.5">
+                              <textarea
+                                placeholder="Reason for rejection (optional)…"
+                                rows={2}
+                                className="w-full text-xs bg-white border border-gray-200 rounded px-2 py-1 resize-none"
+                                value={fileRejectFeedback[file.id] || ''}
+                                onChange={e => setFileRejectFeedback(prev => ({ ...prev, [file.id]: e.target.value }))}
+                              />
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm" variant="destructive" className="h-7 text-xs"
+                                  disabled={reviewingFileId === file.id}
+                                  onClick={() => reviewImage(file.id, 'rejected', fileRejectFeedback[file.id])}
+                                >
+                                  {reviewingFileId === file.id ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                                  Confirm Reject
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-7 text-xs bg-white" onClick={() => setShowFileRejectBox(null)}>
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <Button
+                              size="sm" variant="outline"
+                              className="h-7 text-xs text-red-600 border-red-200 bg-white"
+                              onClick={() => setShowFileRejectBox(file.id)}
+                            >
+                              <XCircle className="h-3 w-3" /> Reject
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {approvedHead.length > 0 && reviewable.length > 0 && (
+                <div className="pt-1">
+                  <p className="text-xs font-medium text-green-700 mb-2 flex items-center gap-1.5">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> {approvedHead.length} illustration{approvedHead.length !== 1 ? 's' : ''} already approved
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {approvedHead.map(f => (
+                      <button key={f.id} onClick={() => setLightboxIdx(designFiles.indexOf(f))}
+                        className="relative w-14 h-14 rounded-md overflow-hidden border-2 border-green-300 bg-gray-50 hover:opacity-80 transition-opacity"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={f.file_url} alt={f.name} className="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )
+      })()}
+
       {/* ── Unassigned / wrong-assignee notice for designers ─────── */}
       {isTeamMember && !isAssignedToMe && !data?.is_locked && !data?.is_completed && (
         <Card className="border-amber-200 bg-amber-50">
@@ -908,7 +1063,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <div>
             <CardTitle className="text-base">Illustrations</CardTitle>
-            {isHead && <p className="text-xs text-green-600 mt-0.5">Your uploads are auto-approved</p>}
+            {isHead && <p className="text-xs text-amber-600 mt-0.5">Your uploads are sent to management for approval</p>}
           </div>
           {canUploadIllos && (
             <Button size="sm" variant="outline" onClick={() => illustrationRef.current?.click()} disabled={uploading}>

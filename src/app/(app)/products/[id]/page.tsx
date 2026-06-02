@@ -48,7 +48,7 @@ export default async function ProductPage({
     supabase.from('bom_data').select('*').eq('product_id', id).single(),
     supabase.from('marketing_data').select('*').eq('product_id', id).single(),
     supabase.from('sales_data').select('*').eq('product_id', id).single(),
-    supabase.from('product_files').select('*, uploader:profiles!uploaded_by(full_name)').eq('product_id', id).order('created_at', { ascending: false }).limit(200),
+    supabase.from('product_files').select('*, uploader:profiles!uploaded_by(full_name, role)').eq('product_id', id).order('created_at', { ascending: false }).limit(200),
     supabase.from('activity_logs').select('*, user:profiles(full_name)').eq('product_id', id).order('created_at', { ascending: false }).limit(50),
     supabase.from('design_submissions').select('*, submitter:profiles!submitted_by(id,full_name)').eq('product_id', id).order('created_at', { ascending: false }).limit(50),
     supabase.from('profiles').select('id, full_name, email').eq('role', 'design').eq('is_active', true).order('full_name'),

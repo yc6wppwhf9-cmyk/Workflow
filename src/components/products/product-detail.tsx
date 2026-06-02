@@ -1,8 +1,10 @@
 'use client'
 
-import { useEffect, useRef, useCallback, useMemo } from 'react'
+import { useEffect, useRef, useCallback, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Trash2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import * as TabsPrimitive from '@radix-ui/react-tabs'
 import { WorkflowBar } from '@/components/workflow/workflow-bar'
 import { OverviewTab } from '@/components/products/tabs/overview-tab'
@@ -66,6 +68,16 @@ export function ProductDetail({
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [deleteOpen, setDeleteOpen]   = useState(false)
+  const [deleting,   setDeleting]     = useState(false)
+  const canDelete = ['admin', 'design_head'].includes(profile.role)
+
+  async function handleDelete() {
+    setDeleting(true)
+    const res = await fetch(`/api/delete-product?product_id=${product.id}`, { method: 'DELETE' })
+    setDeleting(false)
+    if (res.ok) router.push('/products')
+  }
 
   const debouncedRefresh = useCallback(() => {
     if (refreshTimer.current) clearTimeout(refreshTimer.current)
@@ -113,6 +125,29 @@ export function ProductDetail({
         marketingData={marketingData}
         salesData={salesData}
       />
+
+      {canDelete && (
+        <>
+          <div className="flex justify-end px-4 sm:px-6 pt-3">
+            <button
+              onClick={() => setDeleteOpen(true)}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-red-600 border border-red-200 bg-red-50 hover:bg-red-100 px-2.5 py-1 rounded-lg transition-colors"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete Product
+            </button>
+          </div>
+          <ConfirmDialog
+            open={deleteOpen}
+            title="Delete this product?"
+            description={`"${product.display_name || product.name}" and all its data (design, sampling, files, BOM, etc.) will be permanently deleted. This cannot be undone.`}
+            confirmLabel="Yes, Delete"
+            loading={deleting}
+            onConfirm={handleDelete}
+            onCancel={() => setDeleteOpen(false)}
+          />
+        </>
+      )}
 
       <TabsPrimitive.Root defaultValue={initialTab}>
         <div className="border-b border-gray-200 bg-white overflow-x-auto">

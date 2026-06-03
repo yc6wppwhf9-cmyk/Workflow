@@ -16,6 +16,7 @@ export type ProductCategory =
   | 'accessories'
   | 'backpack'
   | 'pu-collection'
+  | 'duffle'
 
 export const CATEGORY_LABELS: Record<ProductCategory, string> = {
   'luggage':       'Luggage',
@@ -34,7 +35,6 @@ export const CATEGORY_SUBCATEGORIES: Record<ProductCategory, string[]> = {
   'pu-collection': ['Backpack', 'Pouch', 'Duffle Bag', 'Others'],
   'duffle':        ['Duffle Trolley', 'Duffle without Trolley', 'Others'],
 }
-
 export type Brand =
   | 'PRIORITY'
   | 'TRAWORLD'

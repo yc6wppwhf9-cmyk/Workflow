@@ -484,10 +484,24 @@ export function DesignTab({ product, profile, data, salesData, files, submission
     if (techPackRef.current) techPackRef.current.value = ''
   }
 
-  async function handleIllustrationUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const selectedFiles = Array.from(e.target.files || [])
-    if (selectedFiles.length === 0) return
-    setUploading(true)
+ async function handleIllustrationUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  const selectedFiles = Array.from(e.target.files || [])
+  if (selectedFiles.length === 0) return
+
+  const existingCount = designFiles.length
+  const allowedCount = 15 - existingCount
+  if (allowedCount <= 0) {
+    toast.error('Maximum 15 illustrations allowed per product')
+    if (illustrationRef.current) illustrationRef.current.value = ''
+    return
+  }
+  if (selectedFiles.length > allowedCount) {
+    toast.error(`Only ${allowedCount} more illustration${allowedCount !== 1 ? 's' : ''} can be added (15 max)`)
+    if (illustrationRef.current) illustrationRef.current.value = ''
+    return
+  }
+
+  setUploading(true)
     setUploadSuccess(null)
     setUploadProgress({ done: 0, total: selectedFiles.length })
     let done = 0

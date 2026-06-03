@@ -23,7 +23,7 @@ export const CATEGORY_LABELS: Record<ProductCategory, string> = {
   'accessories':   'Accessories',
   'backpack':      'Backpack',
   'pu-collection': 'PU Collection',
-  'Duffle': 'Duffle',
+  'duffle':        'Duffle',
 }
 
 export const CATEGORY_SUBCATEGORIES: Record<ProductCategory, string[]> = {
@@ -32,6 +32,7 @@ export const CATEGORY_SUBCATEGORIES: Record<ProductCategory, string[]> = {
   'accessories':   ['Pouch', 'Lunch Bag', 'Collection', 'Daypack', 'Shopping Bag', 'Sling Bag', 'Laptop Sleeve', 'Others'],
   'backpack':      ['School Backpack', 'College Backpack', 'Laptop Backpack', 'Trekking Backpack'],
   'pu-collection': ['Backpack', 'Pouch', 'Duffle Bag', 'Others'],
+  'duffle':        ['Duffle Trolley', 'Duffle without Trolley', 'Others'],
 }
 
 export type Brand =

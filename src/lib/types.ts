@@ -23,6 +23,7 @@ export const CATEGORY_LABELS: Record<ProductCategory, string> = {
   'accessories':   'Accessories',
   'backpack':      'Backpack',
   'pu-collection': 'PU Collection',
+  'Duffle': 'Duffle',
 }
 
 export const CATEGORY_SUBCATEGORIES: Record<ProductCategory, string[]> = {

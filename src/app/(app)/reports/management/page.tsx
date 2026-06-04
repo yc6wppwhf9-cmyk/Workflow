@@ -45,7 +45,7 @@ export default async function ManagementReviewPage() {
     supabase.from('products').select(`
       id, name, category, brand, workflow_stage, created_at,
       design_data(assigned_to, updated_at, is_completed, color_skus),
-      sampling_data(sample_review_status, designer_feedback, reviewed_at, is_completed, updated_at),
+      sampling_data(assigned_to, sample_review_status, designer_feedback, reviewed_at, is_completed, updated_at),
       merchandising_data(assigned_to, updated_at, is_completed),
       bom_data(fg_inv_code, updated_at, is_completed, updated_by),
       marketing_data(updated_at, is_completed, photoshoots, catalogs, launch_creatives, product_features, updated_by)
@@ -102,7 +102,8 @@ export default async function ManagementReviewPage() {
   // ── Product metrics ─────────────────────────────────────────────────────
   const productMetrics: ProductMetrics[] = products.map(p => {
     const design = one(p.design_data)
-    const sampling = one(p.sampling_data)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sampling = one(p.sampling_data) as any
     const merch = one(p.merchandising_data)
     const bom = one(p.bom_data)
     const mkt = one(p.marketing_data)
@@ -132,8 +133,9 @@ export default async function ManagementReviewPage() {
     const rejectedFiles = productFiles.filter(f => f.review_status === 'rejected').length
     const illustrationRounds = Math.max(1, 1 + rejectedFiles)
 
-    const designerName = design?.assigned_to ? (profileMap.get(design.assigned_to)?.full_name ?? null) : null
-    const jrMerchName  = merch?.assigned_to  ? (profileMap.get(merch.assigned_to)?.full_name  ?? null) : null
+    const designerName = design?.assigned_to   ? (profileMap.get(design.assigned_to)?.full_name   ?? null) : null
+    const jrMerchName  = merch?.assigned_to   ? (profileMap.get(merch.assigned_to)?.full_name    ?? null) : null
+    const samplerName  = sampling?.assigned_to ? (profileMap.get(sampling.assigned_to)?.full_name ?? null) : null
 
     // Number of colour variants (designs) in this product — each is one unit of sampling work
     const colourSkus  = (design as { color_skus?: string[] | null } | null)?.color_skus
@@ -172,6 +174,8 @@ export default async function ManagementReviewPage() {
       designerId: design?.assigned_to ?? null,
       jrMerchName,
       jrMerchId: merch?.assigned_to ?? null,
+      samplerName,
+      samplerId: sampling?.assigned_to ?? null,
       delayDays,
       designCount,
       sampleStatus: sampling?.sample_review_status ?? null,
@@ -228,6 +232,25 @@ export default async function ManagementReviewPage() {
     const accuracy = ms.products.length > 0
       ? `${Math.round(((ms.products.length - ms.reworks) / ms.products.length) * 100)}%` : '100%'
     return { id, name, products: ms.products.length, avgDays, reworks: ms.reworks, rejections: 0, onTime: ms.onTime, score, accuracy } as PersonStat
+  }).sort((a, b) => b.score - a.score)
+
+  // ── Sampler stats ───────────────────────────────────────────────────────
+  const samplerMap = new Map<string, { products: string[]; reworks: number; onTime: number }>()
+  for (const pm of productMetrics) {
+    if (!pm.samplerId) continue
+    if (!samplerMap.has(pm.samplerId)) samplerMap.set(pm.samplerId, { products: [], reworks: 0, onTime: 0 })
+    const ss = samplerMap.get(pm.samplerId)!
+    ss.products.push(pm.id)
+    if (pm.sampleStatus === 'rejected') ss.reworks++
+    if (pm.samplingDays > 0 && pm.samplingDays <= 9) ss.onTime++
+  }
+  const samplerStats: PersonStat[] = Array.from(samplerMap.entries()).map(([id, ss]) => {
+    const name = profileMap.get(id)?.full_name ?? id
+    const assigned = productMetrics.filter(pm => pm.samplerId === id)
+    const avgDays = assigned.length > 0
+      ? Math.round(assigned.reduce((s, pm) => s + pm.samplingDays, 0) / assigned.length * 10) / 10 : 0
+    const score = computeScore(avgDays, 9, ss.reworks, 0, ss.onTime, ss.products.length)
+    return { id, name, products: ss.products.length, avgDays, reworks: ss.reworks, rejections: 0, onTime: ss.onTime, score }
   }).sort((a, b) => b.score - a.score)
 
   // ── BOM log — only products that have ACTUAL BOM work done ──────────────
@@ -290,12 +313,14 @@ export default async function ManagementReviewPage() {
 
   // Merch head — sampling review TAT from submission logs
   const reviewedSamplings = products.filter(p => {
-    const s = one(p.sampling_data)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const s = one(p.sampling_data) as any
     return s?.reviewed_at && sampleSubmitTime.has(p.id)
   })
   const samplingHeadTAT: number | null = reviewedSamplings.length > 0
     ? Math.round(reviewedSamplings.reduce((sum, p) => {
-        const s = one(p.sampling_data)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const s = one(p.sampling_data) as any
         const submitAt = sampleSubmitTime.get(p.id)
         if (!s?.reviewed_at || !submitAt) return sum
         return sum + stageDays(submitAt, s.reviewed_at)
@@ -410,6 +435,7 @@ export default async function ManagementReviewPage() {
     products: productMetrics,
     designerStats,
     jrMerchStats,
+    samplerStats,
     bomLog,
     bomExecStats,
     mktRoles,

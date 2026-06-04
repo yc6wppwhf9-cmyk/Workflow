@@ -20,6 +20,7 @@ interface SamplingTabProps {
   designData: DesignData | null
   data: SamplingData | null
   files: ProductFile[]
+  samplingUsers: Pick<Profile, 'id' | 'full_name'>[]
 }
 
 function TechPackValue({ label, value }: { label: string; value?: string | null }) {
@@ -33,12 +34,13 @@ function TechPackValue({ label, value }: { label: string; value?: string | null 
 }
 
 
-export function SamplingTab({ product, profile, designData, data, files }: SamplingTabProps) {
+export function SamplingTab({ product, profile, designData, data, files, samplingUsers }: SamplingTabProps) {
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
   const sampleInputRef = useRef<HTMLInputElement>(null)
   const [samplerName, setSamplerName] = useState(data?.sampler_name || '')
   const [remarks, setRemarks] = useState(data?.sampler_remarks || '')
+  const [assignedTo, setAssignedTo] = useState(data?.assigned_to || '')
   const [feedback, setFeedback] = useState('')
   const [saving, setSaving] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -90,6 +92,16 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
   const isApproved = status === 'approved'
   const isPending = status === 'pending_review'
   const isRejected = status === 'rejected'
+
+  async function saveAssignment() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase.from('sampling_data') as any).update({
+      assigned_to: assignedTo || null,
+      updated_by: profile.id,
+    }).eq('product_id', product.id)
+    toast.success('Sampling assignment saved')
+    router.refresh()
+  }
 
   async function saveRemarks() {
     setSaving(true)
@@ -426,6 +438,29 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
           )}
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Assignment — only merchandising_head / admin can assign */}
+          {isMerchHead && (
+            <div className="flex items-center gap-3 pb-3 border-b border-gray-100">
+              <Label className="shrink-0 text-sm text-gray-600">Assign To</Label>
+              <select
+                value={assignedTo}
+                onChange={e => setAssignedTo(e.target.value)}
+                className="flex-1 h-8 text-sm border border-gray-200 rounded-md px-2 bg-white"
+              >
+                <option value="">— Unassigned —</option>
+                {samplingUsers.map(u => (
+                  <option key={u.id} value={u.id}>{u.full_name}</option>
+                ))}
+              </select>
+              <Button size="sm" variant="outline" onClick={saveAssignment}>Save</Button>
+            </div>
+          )}
+          {!isMerchHead && data?.assigned_to && (
+            <div className="text-xs text-gray-500 pb-2 border-b border-gray-100">
+              Assigned to: <span className="font-medium text-gray-800">{samplingUsers.find(u => u.id === data.assigned_to)?.full_name ?? data.assigned_to}</span>
+            </div>
+          )}
+
           {/* Upload progress */}
           {uploadProgress && (
             <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 space-y-2">

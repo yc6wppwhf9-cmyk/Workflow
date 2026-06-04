@@ -25,6 +25,8 @@ export type ProductMetrics = {
   designerId: string | null
   jrMerchName: string | null
   jrMerchId: string | null
+  samplerName: string | null
+  samplerId: string | null
   delayDays: number
   designCount: number
   sampleStatus: string | null
@@ -83,6 +85,7 @@ export type MgmtDashboardData = {
   products: ProductMetrics[]
   designerStats: PersonStat[]
   jrMerchStats: PersonStat[]
+  samplerStats: PersonStat[]
   bomLog: BomLogRow[]
   bomExecStats: PersonStat[]
   mktRoles: MktRole[]
@@ -492,7 +495,7 @@ function DesignTab({ data }: { data: MgmtDashboardData }) {
 // ─── Tab: Sampling ────────────────────────────────────────────────────────────
 
 function SamplingTab({ data }: { data: MgmtDashboardData }) {
-  const { products, heads, sampleRejectionReasons } = data
+  const { products, heads, sampleRejectionReasons, samplerStats } = data
   // Sampling work is counted per DESIGN (colour variant), not per product:
   // a product with 4 colour SKUs = 4 sampled designs.
   const sumDesigns = (list: ProductMetrics[]) => list.reduce((n, p) => n + (p.designCount || 1), 0)
@@ -576,6 +579,47 @@ function SamplingTab({ data }: { data: MgmtDashboardData }) {
             <p className="text-sm text-gray-400 py-4 text-center">No sample rejections recorded.</p>
           )}
         </div>
+      </div>
+
+      {/* Sampler leaderboard */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-white border border-gray-100 rounded-xl p-4">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Sampling Team Leaderboard</p>
+          {samplerStats.length > 0 ? (
+            <PersonBoard people={samplerStats} daysLabel="sampling" />
+          ) : (
+            <p className="text-sm text-gray-400 py-4 text-center">No sampling assignments yet. Assign team members on each product&apos;s Sampling tab.</p>
+          )}
+        </div>
+        {samplerStats.length > 0 && (
+          <div className="bg-white border border-gray-100 rounded-xl p-4">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Sampler Task Performance</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="border-b border-gray-100 text-xs text-gray-400 font-medium">
+                  <th className="text-left pb-2">Person</th>
+                  <th className="text-right pb-2">Products</th>
+                  <th className="text-right pb-2">Avg Days</th>
+                  <th className="text-right pb-2">Reworks</th>
+                  <th className="text-right pb-2">On-Time</th>
+                  <th className="text-right pb-2">Score</th>
+                </tr></thead>
+                <tbody className="divide-y divide-gray-50">
+                  {samplerStats.map(s => (
+                    <tr key={s.id}>
+                      <td className="py-2 font-medium">{s.name}</td>
+                      <td className="py-2 text-right text-gray-500">{s.products}</td>
+                      <td className="py-2 text-right text-gray-500">{s.avgDays}d</td>
+                      <td className="py-2 text-right text-gray-500">{s.reworks}</td>
+                      <td className="py-2 text-right text-gray-500">{s.onTime}/{s.products}</td>
+                      <td className="py-2 text-right"><ScoreBadge score={s.score} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Per-product sampling status */}

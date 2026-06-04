@@ -209,6 +209,10 @@ export default async function ManagementReviewPage() {
   const jrMerchMap = new Map<string, { products: string[]; reworks: number; onTime: number }>()
   for (const pm of productMetrics) {
     if (!pm.jrMerchId) continue
+    // Only count people whose role is actually merchandising — prevents sampling
+    // team members assigned to merch data from appearing in this leaderboard.
+    const role = profileMap.get(pm.jrMerchId)?.role
+    if (!role || !['merchandising', 'merchandising_head'].includes(role)) continue
     if (!jrMerchMap.has(pm.jrMerchId)) jrMerchMap.set(pm.jrMerchId, { products: [], reworks: 0, onTime: 0 })
     const ms = jrMerchMap.get(pm.jrMerchId)!
     ms.products.push(pm.id)

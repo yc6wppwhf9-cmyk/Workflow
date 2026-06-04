@@ -16,6 +16,7 @@ export type ProductCategory =
   | 'accessories'
   | 'backpack'
   | 'pu-collection'
+  | 'duffle'
 
 export const CATEGORY_LABELS: Record<ProductCategory, string> = {
   'luggage':       'Luggage',
@@ -23,6 +24,7 @@ export const CATEGORY_LABELS: Record<ProductCategory, string> = {
   'accessories':   'Accessories',
   'backpack':      'Backpack',
   'pu-collection': 'PU Collection',
+  'duffle':        'Duffle',
 }
 
 export const CATEGORY_SUBCATEGORIES: Record<ProductCategory, string[]> = {
@@ -31,6 +33,7 @@ export const CATEGORY_SUBCATEGORIES: Record<ProductCategory, string[]> = {
   'accessories':   ['Pouch', 'Lunch Bag', 'Collection', 'Daypack', 'Shopping Bag', 'Sling Bag', 'Laptop Sleeve', 'Others'],
   'backpack':      ['School Backpack', 'College Backpack', 'Laptop Backpack', 'Trekking Backpack'],
   'pu-collection': ['Backpack', 'Pouch', 'Duffle Bag', 'Others'],
+  'duffle':        ['Duffle Trolley', 'Duffle without Trolley', 'Others'],
 }
 
 export type Brand =
@@ -131,6 +134,7 @@ export interface DesignData {
   designer_sign: string | null
   is_completed: boolean
   is_locked: boolean
+  variants: any[] | null
   updated_by: string | null
   updated_at: string
 }
@@ -294,6 +298,8 @@ export const WORKFLOW_STAGES: WorkflowStage[] = [
   'merchandising_completed',
   'bom_finalized',
   'marketing_ready',
+  'sales_priced',
+  'product_live',
 ]
 
 export const STAGE_LABELS: Record<WorkflowStage, string> = {

@@ -756,7 +756,7 @@ function BomTab({ data }: { data: MgmtDashboardData }) {
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">BOM Entry Days per Product</p>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={bomLog.map(b => ({
-              name: b.productId,
+              name: b.productName.length > 12 ? b.productName.slice(0, 12) + '…' : b.productName,
               days: b.days,
               fill: b.errors > 0 ? '#EF9F27' : '#5DCAA5',
             }))} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>

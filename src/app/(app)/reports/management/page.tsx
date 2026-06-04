@@ -249,7 +249,7 @@ export default async function ManagementReviewPage() {
     const assigned = productMetrics.filter(pm => pm.samplerId === id)
     const avgDays = assigned.length > 0
       ? Math.round(assigned.reduce((s, pm) => s + pm.samplingDays, 0) / assigned.length * 10) / 10 : 0
-    const score = computeScore(avgDays, 9, ss.reworks, 0, ss.onTime, ss.products.length)
+    const score = avgDays > 0 ? computeScore(avgDays, 9, ss.reworks, 0, ss.onTime, ss.products.length) : 0
     return { id, name, products: ss.products.length, avgDays, reworks: ss.reworks, rejections: 0, onTime: ss.onTime, score }
   }).sort((a, b) => b.score - a.score)
 

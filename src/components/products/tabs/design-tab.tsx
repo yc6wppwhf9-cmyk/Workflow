@@ -85,9 +85,18 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
     designer_sign:  data?.designer_sign  || '',
   }
   
-  const initialForms = data?.variants && data.variants.length > 0 
-    ? data.variants 
-    : [defaultForm]
+  // A stored variant is considered "real" only if it has at least one meaningful field.
+  // Old products may have variants = [{}] or all-empty-string objects — in those cases
+  // we fall back to defaultForm which reads from the legacy flat columns.
+  const hasRealData = (v: any) =>
+    v && typeof v === 'object' &&
+    (v.fabric || v.designer_name || v.farma || v.sample_color || v.season_year ||
+     v.zipper || v.lining || v.branding || (Array.isArray(v.color_skus) && v.color_skus.length > 0))
+
+  const initialForms =
+    data?.variants && data.variants.length > 0 && data.variants.some(hasRealData)
+      ? data.variants
+      : [defaultForm]
     
   const [forms, setForms] = useState<any[]>(initialForms)
   const [activeVariantIdx, setActiveVariantIdx] = useState(0)

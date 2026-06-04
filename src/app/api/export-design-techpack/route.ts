@@ -92,66 +92,78 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  let r = 3
-  sectionHeader(r++, 'Product Information')
-  dataRow(r++, 'Product Name', product.name,          'Category',     product.category)
-  dataRow(r++, 'Brand',        product.brand,         'Channel',      designData.channel)
-  dataRow(r++, 'Season / Year', designData.season_year, 'Designer',    designData.designer_name)
-  dataRow(r++, 'Farma',        designData.farma,      '',             '')
+  const variants = designData.variants && designData.variants.length > 0 ? designData.variants : [designData];
+  let r = 3;
 
-  r++
-  sectionHeader(r++, 'Materials')
-  dataRow(r++, 'Fabric',       designData.fabric,     'Lining',       designData.lining)
-  dataRow(r++, 'Air Mesh',     designData.air_mesh,   'Sample Color', designData.sample_color)
+  for (let i = 0; i < variants.length; i++) {
+    const variant = variants[i];
+    
+    if (i > 0) {
+      r += 2; // spacing between variants
+    }
 
-  r++
-  sectionHeader(r++, 'Hardware & Trims')
-  dataRow(r++, 'Zipper',       designData.zipper,     'Puller',       designData.puller)
-  dataRow(r++, '9mm Patta',    designData.patta_9mm,  'Patta 1',      designData.patta_1)
-  dataRow(r++, 'Patta 2',      designData.patta_2,    'Lader Lock',   designData.lader_lock)
+    sectionHeader(r++, 'Variant ' + (i + 1) + (variant.sample_color ? ' - ' + variant.sample_color : ''));
+    
+    sectionHeader(r++, 'Product Information')
+    dataRow(r++, 'Product Name', product.name,          'Category',     product.category)
+    dataRow(r++, 'Brand',        product.brand,         'Channel',      variant.channel || designData.channel)
+    dataRow(r++, 'Season / Year', variant.season_year, 'Designer',    variant.designer_name)
+    dataRow(r++, 'Farma',        variant.farma,      '',             '')
 
-  r++
-  sectionHeader(r++, 'Branding & Print')
-  dataRow(r++, 'Branding',     designData.branding,   'Screen Print',  designData.screen_print)
-  dataRow(r++, 'Digital Print',designData.digital_print, 'Bartech',   designData.bartech)
-
-  r++
-  sectionHeader(r++, 'Additional')
-  dataRow(r++, 'Re-sampling By', designData.re_sampling_by, 'Designer Sign', designData.designer_sign)
-  dataRow(r++, 'Add On 1',    designData.add_on_1,   'Add On 2',     designData.add_on_2)
-  dataRow(r++, 'Add On 3',    designData.add_on_3,   '',             '')
-
-  if (designData.remarks) {
     r++
-    sectionHeader(r++, 'Remarks')
-    ws.mergeCells(`A${r}:D${r}`)
-    const rc = ws.getCell(`A${r}`)
-    rc.value = designData.remarks
-    rc.alignment = { wrapText: true, vertical: 'top' }
-    // 16px per line + 10px padding so no line is clipped
-    const lineCount = (designData.remarks as string).split('\n').length
-    ws.getRow(r).height = Math.max(20, lineCount * 16 + 10)
-    r++
-  }
+    sectionHeader(r++, 'Materials')
+    dataRow(r++, 'Fabric',       variant.fabric,     'Lining',       variant.lining)
+    dataRow(r++, 'Air Mesh',     variant.air_mesh,   'Sample Color', variant.sample_color)
 
-  if (designData.color_skus?.length) {
     r++
-    sectionHeader(r++, 'Colour SKUs')
-    ws.mergeCells(`A${r}:D${r}`)
-    ws.getCell(`A${r}`).value = (designData.color_skus as string[]).join('  |  ')
-    ws.getRow(r).height = 18
-    r++
-  }
+    sectionHeader(r++, 'Hardware & Trims')
+    dataRow(r++, 'Zipper',       variant.zipper,     'Puller',       variant.puller)
+    dataRow(r++, '9mm Patta',    variant.patta_9mm,  'Patta 1',      variant.patta_1)
+    dataRow(r++, 'Patta 2',      variant.patta_2,    'Lader Lock',   variant.lader_lock)
 
-  if (designData.unique_feature) {
     r++
-    sectionHeader(r++, 'Unique Feature / USP')
-    ws.mergeCells(`A${r}:D${r}`)
-    const uf = ws.getCell(`A${r}`)
-    uf.value = designData.unique_feature
-    uf.alignment = { wrapText: true, vertical: 'top' }
-    const ufLines = (designData.unique_feature as string).split('\n').length
-    ws.getRow(r).height = Math.max(20, ufLines * 16 + 10)
+    sectionHeader(r++, 'Branding & Print')
+    dataRow(r++, 'Branding',     variant.branding,   'Screen Print',  variant.screen_print)
+    dataRow(r++, 'Digital Print',variant.digital_print, 'Bartech',   variant.bartech)
+
+    r++
+    sectionHeader(r++, 'Additional')
+    dataRow(r++, 'Re-sampling By', variant.re_sampling_by, 'Designer Sign', variant.designer_sign)
+    dataRow(r++, 'Add On 1',    variant.add_on_1,   'Add On 2',     variant.add_on_2)
+    dataRow(r++, 'Add On 3',    variant.add_on_3,   '',             '')
+
+    if (variant.remarks) {
+      r++
+      sectionHeader(r++, 'Remarks')
+      ws.mergeCells(`A${r}:D${r}`)
+      const rc = ws.getCell(`A${r}`)
+      rc.value = variant.remarks
+      rc.alignment = { wrapText: true, vertical: 'top' }
+      const lineCount = (variant.remarks as string).split('\n').length
+      ws.getRow(r).height = Math.max(20, lineCount * 16 + 10)
+      r++
+    }
+
+    if (variant.color_skus?.length) {
+      r++
+      sectionHeader(r++, 'Colour SKUs')
+      ws.mergeCells(`A${r}:D${r}`)
+      ws.getCell(`A${r}`).value = (variant.color_skus as string[]).join('  |  ')
+      ws.getRow(r).height = 18
+      r++
+    }
+
+    if (variant.unique_feature) {
+      r++
+      sectionHeader(r++, 'Unique Feature / USP')
+      ws.mergeCells(`A${r}:D${r}`)
+      const uf = ws.getCell(`A${r}`)
+      uf.value = variant.unique_feature
+      uf.alignment = { wrapText: true, vertical: 'top' }
+      const ufLines = (variant.unique_feature as string).split('\n').length
+      ws.getRow(r).height = Math.max(20, ufLines * 16 + 10)
+      r++
+    }
   }
 
   // ── Sheet 2: Approved Illustrations ────────────────────────────────────

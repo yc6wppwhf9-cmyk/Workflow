@@ -135,6 +135,15 @@ export function NewProductForm({ profile }: NewProductFormProps) {
       department: isDesignHead ? 'design' : 'sales',
     })
 
+    // Notify design head when sales creates a new product
+    if (!isDesignHead) {
+      fetch('/api/notify-stage-advance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: product.id, product_name: product.name, next_stage: 'design_completed' }),
+      }).catch(() => {})
+    }
+
     router.push(`/products/${product.id}?tab=design`)
     router.refresh()
   }

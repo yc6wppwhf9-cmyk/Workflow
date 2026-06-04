@@ -13,3 +13,6 @@ images/
 .claude/
 test-*.mjs
 test-*.js
+
+.vercel
+.env*.local

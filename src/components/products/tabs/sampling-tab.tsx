@@ -2,7 +2,7 @@
 
 import { useRef, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCircle2, Clock, Download, ExternalLink, Loader2, Printer, Send, Trash2, Upload, XCircle } from 'lucide-react'
+import { CheckCircle2, Clock, Download, ExternalLink, Layers, Loader2, Printer, Send, Trash2, Upload, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -46,11 +46,46 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null)
   const [uploadSuccess, setUploadSuccess] = useState<number | null>(null)
   const [reviewing, setReviewing] = useState(false)
+  const [activeVariantIdx, setActiveVariantIdx] = useState(0)
+
+  const variants = designData?.variants && designData.variants.length > 0
+    ? designData.variants
+    : designData
+      ? [designData]
+      : []
+  const activeVariant = variants[activeVariantIdx] || null
 
   const isSampler = ['admin', 'sampling', 'merchandising', 'merchandising_head'].includes(profile.role)
   const isMerchHead = ['admin', 'merchandising_head'].includes(profile.role)
   const canReview = ['admin', 'management'].includes(profile.role)
   const sampleImages = files.filter(f => f.department === 'sampling' && f.file_type?.startsWith('image/'))
+
+  // Approved design illustrations — grouped by colour_tag for the sampling team
+  const approvedDesignIllos = files.filter(f =>
+    f.department === 'design' &&
+    f.review_status === 'approved' &&
+    f.file_type?.startsWith('image/') &&
+    f.colour_tag !== 'print'
+  )
+
+  // Colour SKUs: prefer top-level field, fall back to union across variants
+  const allSkus: string[] = designData?.color_skus?.length
+    ? designData.color_skus
+    : (designData?.variants ?? []).flatMap((v: any) => v.color_skus ?? [])
+
+  // Group illustrations by colour_tag so sampling team sees each colour separately
+  const colorGroups: Record<string, typeof approvedDesignIllos> = {}
+  for (const f of approvedDesignIllos) {
+    const key = f.colour_tag || '__none__'
+    if (!colorGroups[key]) colorGroups[key] = []
+    colorGroups[key].push(f)
+  }
+  // Colour entries: tagged colours first (alphabetical), untagged last
+  const colorGroupEntries = Object.entries(colorGroups).sort(([a], [b]) => {
+    if (a === '__none__') return 1
+    if (b === '__none__') return -1
+    return a.localeCompare(b)
+  })
   const status = data?.sample_review_status || 'not_started'
   const isApproved = status === 'approved'
   const isPending = status === 'pending_review'
@@ -77,6 +112,13 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const selectedFiles = Array.from(e.target.files || [])
     if (selectedFiles.length === 0) return
+    
+    if (sampleImages.length + selectedFiles.length > 10) {
+      toast.error(`You cannot upload more than 10 sample images in total. Currently you have ${sampleImages.length}.`)
+      if (sampleInputRef.current) sampleInputRef.current.value = ''
+      return
+    }
+
     setUploading(true)
     setUploadProgress({ done: 0, total: selectedFiles.length })
     setUploadSuccess(null)
@@ -180,6 +222,103 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
 
   return (
     <div className="space-y-4">
+
+      {/* ── Approved illustrations — grouped by colour ───────────────────── */}
+      {approvedDesignIllos.length > 0 && (
+        <Card className={`border-purple-200 ${product.workflow_stage === 'design_completed' ? 'border-2' : ''}`}>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2 text-purple-800">
+              <Layers className="h-4 w-4" />
+              Approved Illustrations for Sampling ({approvedDesignIllos.length})
+              {product.workflow_stage === 'design_completed' && (
+                <span className="ml-auto text-xs font-medium bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                  Design still in progress — early sampling
+                </span>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <p className="text-xs text-gray-500">
+              Approved by the Design Head. Each colour section shows which illustrations belong to that variant.
+              {product.workflow_stage === 'design_completed' && ' More colours may be added as remaining illustrations get approved.'}
+            </p>
+
+            {/* Colour-SKU reference strip (if SKUs exist) */}
+            {allSkus.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 p-2.5 bg-gray-50 rounded-lg border border-gray-200">
+                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide self-center mr-1">Colour SKUs:</span>
+                {allSkus.map(sku => (
+                  <span key={sku} className="text-xs font-mono bg-violet-100 text-violet-800 px-2 py-0.5 rounded-full">{sku}</span>
+                ))}
+                {designData.sample_color && (
+                  <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">
+                    Sample colour: {designData.sample_color}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Colour-specific remarks hint */}
+            {designData?.remarks && (
+              <div className="text-xs bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-blue-800">
+                <span className="font-semibold">Designer Remarks (colour notes):</span> {designData.remarks}
+              </div>
+            )}
+
+            {/* Grouped by colour */}
+            {colorGroupEntries.map(([colourKey, illos]) => (
+              <div key={colourKey}>
+                {/* Colour header */}
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="h-px flex-1 bg-gray-200" />
+                  {colourKey === '__none__' ? (
+                    <span className="text-xs font-medium text-gray-400 bg-gray-100 px-2.5 py-0.5 rounded-full whitespace-nowrap">
+                      General / All colours ({illos.length})
+                    </span>
+                  ) : (
+                    <span className="text-xs font-semibold text-violet-800 bg-violet-100 px-2.5 py-0.5 rounded-full whitespace-nowrap font-mono">
+                      {colourKey} — {illos.length} illustration{illos.length !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                  <div className="h-px flex-1 bg-gray-200" />
+                </div>
+
+                {/* Illustrations for this colour */}
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+                  {illos.map(f => (
+                    <a
+                      key={f.id}
+                      href={f.file_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group relative aspect-square rounded-lg overflow-hidden border-2 border-green-300 bg-gray-50 hover:opacity-90 transition-opacity"
+                      title={f.name}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={f.file_url} alt={f.name} className="w-full h-full object-cover" />
+                      <div className="absolute top-1 left-1 flex items-center gap-0.5 px-1 py-0.5 rounded-full bg-green-500 text-white text-[9px] font-medium pointer-events-none">
+                        <CheckCircle2 className="h-2.5 w-2.5" />
+                      </div>
+                      <div
+                        className={`absolute bottom-0 left-0 right-0 text-white text-[9px] text-center py-0.5 px-1 truncate pointer-events-none ${
+                          colourKey !== '__none__' ? 'bg-violet-700/80 font-semibold' : 'bg-black/60'
+                        }`}
+                        title={f.name}
+                      >
+                        {colourKey !== '__none__' ? `${colourKey} — ${f.name}` : f.name}
+                      </div>
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                        <ExternalLink className="h-5 w-5 text-white" />
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="text-base">Design Tech Pack</CardTitle>
@@ -204,31 +343,66 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
           </div>
         </CardHeader>
         <CardContent>
-          {designData ? (
+          {designData && activeVariant ? (
             <div className="space-y-4">
+              {variants.length > 1 && (
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {variants.map((v: any, i: number) => (
+                    <button
+                      key={i}
+                      onClick={() => setActiveVariantIdx(i)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                        i === activeVariantIdx
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      Variant {i + 1} {v.sample_color ? `(${v.sample_color})` : ''}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3">
-                <TechPackValue label="Designer" value={designData.designer_name} />
-                <TechPackValue label="Sample Color" value={designData.sample_color} />
-                <TechPackValue label="Farma" value={designData.farma} />
-                <TechPackValue label="Season Year" value={designData.season_year} />
-                <TechPackValue label="Fabric" value={designData.fabric} />
-                <TechPackValue label="Lining" value={designData.lining} />
-                <TechPackValue label="Air Mesh" value={designData.air_mesh} />
-                <TechPackValue label="Zipper" value={designData.zipper} />
-                <TechPackValue label="Puller" value={designData.puller} />
-                <TechPackValue label="9mm Patta" value={designData.patta_9mm} />
-                <TechPackValue label="Patta 1" value={designData.patta_1} />
-                <TechPackValue label="Patta 2" value={designData.patta_2} />
-                <TechPackValue label="Lader Lock" value={designData.lader_lock} />
-                <TechPackValue label="Branding" value={designData.branding} />
-                <TechPackValue label="Screen Print" value={designData.screen_print} />
-                <TechPackValue label="Digital Print" value={designData.digital_print} />
-                <TechPackValue label="Bartech" value={designData.bartech} />
-                <TechPackValue label="Re-sampling By" value={designData.re_sampling_by} />
+                <TechPackValue label="Designer" value={activeVariant.designer_name} />
+                <TechPackValue label="Sample Color" value={activeVariant.sample_color} />
+                <TechPackValue label="Farma" value={activeVariant.farma} />
+                <TechPackValue label="Season Year" value={activeVariant.season_year} />
+                <TechPackValue label="Fabric" value={activeVariant.fabric} />
+                <TechPackValue label="Lining" value={activeVariant.lining} />
+                <TechPackValue label="Air Mesh" value={activeVariant.air_mesh} />
+                <TechPackValue label="Zipper" value={activeVariant.zipper} />
+                <TechPackValue label="Puller" value={activeVariant.puller} />
+                <TechPackValue label="9mm Patta" value={activeVariant.patta_9mm} />
+                <TechPackValue label="Patta 1" value={activeVariant.patta_1} />
+                <TechPackValue label="Patta 2" value={activeVariant.patta_2} />
+                <TechPackValue label="Lader Lock" value={activeVariant.lader_lock} />
+                <TechPackValue label="Branding" value={activeVariant.branding} />
+                <TechPackValue label="Screen Print" value={activeVariant.screen_print} />
+                <TechPackValue label="Digital Print" value={activeVariant.digital_print} />
+                <TechPackValue label="Bartech" value={activeVariant.bartech} />
+                <TechPackValue label="Re-sampling By" value={activeVariant.re_sampling_by} />
               </div>
-              {designData.remarks && (
+
+              {activeVariant.color_skus && activeVariant.color_skus.length > 0 && (
                 <div className="border-t border-gray-100 pt-3">
-                  <TechPackValue label="Designer Remarks" value={designData.remarks} />
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Color SKUs</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {activeVariant.color_skus.map((sku: string) => (
+                      <span key={sku} className="text-xs font-mono bg-violet-100 text-violet-800 px-2.5 py-0.5 rounded-full">{sku}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {activeVariant.unique_feature && (
+                <div className="border-t border-gray-100 pt-3">
+                  <TechPackValue label="Unique Feature / USP" value={activeVariant.unique_feature} />
+                </div>
+              )}
+
+              {activeVariant.remarks && (
+                <div className="border-t border-gray-100 pt-3">
+                  <TechPackValue label="Designer Remarks" value={activeVariant.remarks} />
                 </div>
               )}
             </div>

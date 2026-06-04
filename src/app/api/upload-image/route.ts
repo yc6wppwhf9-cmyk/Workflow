@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { cloudinary } from '@/lib/cloudinary'
+import { cloudinaryConfigured, uploadToSupabaseStorage } from '@/lib/storage-fallback'
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp']
 const MAX_BYTES = 10 * 1024 * 1024 // 10 MB
@@ -28,6 +29,12 @@ export async function POST(req: NextRequest) {
   }
 
   const buffer = Buffer.from(await file.arrayBuffer())
+
+  // Local / no-Cloudinary fallback → store in Supabase Storage
+  if (!cloudinaryConfigured()) {
+    const { url, public_id } = await uploadToSupabaseStorage(buffer, file, safeFolder(folder))
+    return NextResponse.json({ url, public_id })
+  }
 
   const result = await new Promise<{ secure_url: string; public_id: string }>((resolve, reject) => {
     cloudinary.uploader.upload_stream(

@@ -26,6 +26,7 @@ export type ProductMetrics = {
   jrMerchName: string | null
   jrMerchId: string | null
   delayDays: number
+  designCount: number
   sampleStatus: string | null
   sampleFeedback: string | null
   invId: string | null
@@ -488,31 +489,163 @@ function DesignTab({ data }: { data: MgmtDashboardData }) {
   )
 }
 
+// ─── Tab: Sampling ────────────────────────────────────────────────────────────
+
+function SamplingTab({ data }: { data: MgmtDashboardData }) {
+  const { products, heads, sampleRejectionReasons } = data
+  // Sampling work is counted per DESIGN (colour variant), not per product:
+  // a product with 4 colour SKUs = 4 sampled designs.
+  const sumDesigns = (list: ProductMetrics[]) => list.reduce((n, p) => n + (p.designCount || 1), 0)
+  const approvedProducts = products.filter(p => p.sampleStatus === 'approved')
+  const rejectedProducts = products.filter(p => p.sampleStatus === 'rejected')
+  const pendingProducts  = products.filter(p => p.sampleStatus === 'pending_review')
+  const approvedCount   = sumDesigns(approvedProducts)
+  const rejectedCount   = sumDesigns(rejectedProducts)
+  const pendingCount    = sumDesigns(pendingProducts)
+  const sampledProducts = products.filter(p => p.samplingDays > 0)
+  const totalDesignsSampled = sumDesigns(sampledProducts)
+
+  const samplingChartData = sampledProducts.map(p => ({
+    name: p.name.length > 10 ? p.name.slice(0, 10) + '…' : p.name,
+    days: p.samplingDays,
+    fill: p.samplingDays <= 9 ? '#5DCAA5' : '#EF9F27',
+  }))
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <MetricCard label="Designs Sampled"   value={totalDesignsSampled} sub={`${sampledProducts.length} products`} color="#3B6D11" />
+        <MetricCard label="Approved"          value={approvedCount}   sub={`${approvedProducts.length} products · designs`} color="#3B6D11" />
+        <MetricCard label="Rejected / Rework" value={rejectedCount}   sub="designs sent back"     color={rejectedCount > 0 ? '#854F0B' : undefined} />
+        <MetricCard label="Pending Review"    value={pendingCount}    sub={`${pendingProducts.length} products · designs`} />
+        <MetricCard label="Avg Sampling Time" value={data.stageAvgs.sampling > 0 ? `${data.stageAvgs.sampling}d` : '—'} sub="Target: 9 days" color={data.stageAvgs.sampling > 9 ? '#E24B4A' : '#3B6D11'} />
+      </div>
+
+      <HeadCard title={`${heads.merch.name} — Sample Review Performance`} stats={{
+        'Avg Review Turnaround': heads.merch.avgReviewDays !== null ? `${heads.merch.avgReviewDays}d` : '—',
+        'First-Pass Rate': `${heads.merch.firstPassRate}%`,
+        'Total Rejections': heads.merch.rejections,
+        'Rework Requests': heads.merch.reworks,
+      }} />
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-white border border-gray-100 rounded-xl p-4">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Sampling Days per Product</p>
+          {samplingChartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={samplingChartData} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(v) => [`${v}d`, 'Sampling days']} />
+                <ReferenceLine y={9} stroke={TARGET_COLOR} strokeDasharray="5 5" label={{ value: 'Target 9d', position: 'right', fontSize: 10, fill: TARGET_COLOR }} />
+                <Bar dataKey="days" radius={[4, 4, 0, 0]}>
+                  {samplingChartData.map((_, i) => <Cell key={i} fill={samplingChartData[i].fill} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-[220px] text-sm text-gray-400">No sampling data yet</div>
+          )}
+        </div>
+
+        <div className="bg-white border border-gray-100 rounded-xl p-4">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Sample Rejection Analysis</p>
+          {sampleRejectionReasons.length > 0 ? (
+            <div className="space-y-4">
+              <ResponsiveContainer width="100%" height={180}>
+                <PieChart>
+                  <Pie data={sampleRejectionReasons} cx="50%" cy="50%" innerRadius={40} outerRadius={70} dataKey="count" nameKey="reason">
+                    {sampleRejectionReasons.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip />
+                  <Legend iconType="circle" iconSize={8} formatter={(v) => <span className="text-xs">{v}</span>} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="space-y-2">
+                {sampleRejectionReasons.map((r, i) => (
+                  <div key={r.reason} className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
+                    <span className="text-sm text-gray-700 flex-1">{r.reason}</span>
+                    <span className="text-sm font-medium text-gray-500">{r.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400 py-4 text-center">No sample rejections recorded.</p>
+          )}
+        </div>
+      </div>
+
+      {/* Per-product sampling status */}
+      <div className="bg-white border border-gray-100 rounded-xl p-4">
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Per-Product Sampling Status</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr className="border-b border-gray-100 text-xs text-gray-400 font-medium">
+              <th className="text-left pb-2">Product</th>
+              <th className="text-center pb-2">Designs</th>
+              <th className="text-right pb-2">Days at Sampling</th>
+              <th className="text-center pb-2">Status</th>
+              {rejectedCount > 0 && <th className="text-left pb-2">Notes</th>}
+            </tr></thead>
+            <tbody className="divide-y divide-gray-50">
+              {products.map(p => (
+                <tr key={p.id}>
+                  <td className="py-2 font-medium text-xs text-gray-800">{p.name}</td>
+                  <td className="py-2 text-center">
+                    <span className="inline-block px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full text-xs font-medium">{p.designCount}</span>
+                  </td>
+                  <td className="py-2 text-right text-xs text-gray-500">{p.samplingDays > 0 ? `${p.samplingDays}d` : '—'}</td>
+                  <td className="py-2 text-center">
+                    {p.sampleStatus === 'approved'
+                      ? <span className="inline-block px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs">Approved</span>
+                      : p.sampleStatus === 'rejected'
+                      ? <span className="inline-block px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs">Rejected</span>
+                      : p.sampleStatus === 'pending_review'
+                      ? <span className="inline-block px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-xs">In Review</span>
+                      : <span className="inline-block px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full text-xs">Not Started</span>
+                    }
+                  </td>
+                  {rejectedCount > 0 && (
+                    <td className="py-2 text-xs text-gray-500 max-w-[200px] truncate">{p.sampleFeedback ?? '—'}</td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Tab: Merchandising ───────────────────────────────────────────────────────
 
 function MerchandisingTab({ data }: { data: MgmtDashboardData }) {
-  const { products, jrMerchStats, heads, sampleRejectionReasons } = data
+  const { products, jrMerchStats, heads } = data
 
-  const samplingChartData = products.map(p => ({
+  const techpackChartData = products.map(p => ({
     name: p.name.length > 10 ? p.name.slice(0, 10) + '…' : p.name,
-    Sampling: p.samplingDays,
-    Techpack: p.techpackDays,
+    days: p.techpackDays,
+    fill: p.techpackDays <= 3 ? '#5DCAA5' : '#EF9F27',
   }))
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <MetricCard label="Avg Sampling Time"    value={`${data.stageAvgs.sampling}d`}  sub="Target: 9 days"     color={data.stageAvgs.sampling > 9 ? '#E24B4A' : '#3B6D11'} />
-        <MetricCard label="Sample Approval Rate" value={`${heads.merch.firstPassRate}%`} sub="First-pass"        color="#3B6D11" />
-        <MetricCard label="Sample Reworks"       value={heads.merch.reworks}             sub="Sampling stage"    color={heads.merch.reworks > 2 ? '#854F0B' : undefined} />
-        <MetricCard label="Techpack TAT"         value={`${data.stageAvgs.techpack}d`}  sub="Target: 3 days"    color={data.stageAvgs.techpack > 3 ? '#E24B4A' : '#3B6D11'} />
+        <MetricCard label="Techpack TAT"         value={data.stageAvgs.techpack > 0 ? `${data.stageAvgs.techpack}d` : '—'} sub="Target: 3 days" color={data.stageAvgs.techpack > 3 ? '#E24B4A' : '#3B6D11'} />
+        <MetricCard label="Techpack Approvals"   value={`${heads.merch.firstPassRate > 0 ? heads.merch.firstPassRate : 0}%`} sub="Accuracy" color="#3B6D11" />
+        <MetricCard label="Reworks"              value={jrMerchStats.reduce((s, j) => s + j.reworks, 0)} sub="Across all Jr Merch" color={jrMerchStats.reduce((s, j) => s + j.reworks, 0) > 2 ? '#854F0B' : undefined} />
+        <MetricCard label="Jr Merch Assigned"    value={jrMerchStats.length} sub="Team members with work" />
       </div>
 
-      <HeadCard title={`${heads.merch.name} — Merchandising Head Review`} stats={{
-        'Sample Review Turnaround': `${heads.merch.avgReviewDays}d`,
+      <HeadCard title={`${heads.merch.name} — Merchandising Head Overview`} stats={{
+        'Sample Review Turnaround': heads.merch.avgReviewDays !== null ? `${heads.merch.avgReviewDays}d` : '—',
         'Sample Rejections': heads.merch.rejections,
-        'Rework Requests': heads.merch.reworks,
-        'Techpack Approvals': `${heads.merch.firstPassRate > 0 ? heads.merch.firstPassRate : 90}%`,
+        'Techpack Reworks': jrMerchStats.reduce((s, j) => s + j.reworks, 0),
+        'Techpack Accuracy': `${heads.merch.firstPassRate > 0 ? heads.merch.firstPassRate : 0}%`,
       }} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -525,22 +658,26 @@ function MerchandisingTab({ data }: { data: MgmtDashboardData }) {
         </div>
 
         <div className="bg-white border border-gray-100 rounded-xl p-4">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Sampling Time vs Techpack Time</p>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={samplingChartData} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-              <YAxis tick={{ fontSize: 11 }} />
-              <Tooltip formatter={(v, n) => [`${v}d`, n]} />
-              <Bar dataKey="Sampling" fill={STAGE_COLORS.sampling} radius={[4, 4, 0, 0]} />
-              <Bar dataKey="Techpack" fill={STAGE_COLORS.techpack} radius={[4, 4, 0, 0]} />
-              <Legend iconType="square" iconSize={8} formatter={(v) => <span className="text-xs">{v}</span>} />
-            </BarChart>
-          </ResponsiveContainer>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Techpack Entry Time per Product</p>
+          {techpackChartData.some(d => d.days > 0) ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={techpackChartData} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(v) => [`${v}d`, 'Techpack days']} />
+                <ReferenceLine y={3} stroke={TARGET_COLOR} strokeDasharray="5 5" label={{ value: 'Target 3d', position: 'right', fontSize: 10, fill: TARGET_COLOR }} />
+                <Bar dataKey="days" radius={[4, 4, 0, 0]}>
+                  {techpackChartData.map((_, i) => <Cell key={i} fill={techpackChartData[i].fill} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-[220px] text-sm text-gray-400">No techpack data yet</div>
+          )}
         </div>
       </div>
 
-      {/* Jr merch table */}
       {jrMerchStats.length > 0 && (
         <div className="bg-white border border-gray-100 rounded-xl p-4">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Jr Merchandiser Task Performance</p>
@@ -572,34 +709,6 @@ function MerchandisingTab({ data }: { data: MgmtDashboardData }) {
           </div>
         </div>
       )}
-
-      {/* Sample rejection analysis */}
-      <div className="bg-white border border-gray-100 rounded-xl p-4">
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Sample Rejection Analysis</p>
-        {sampleRejectionReasons.length > 0 ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-center">
-            <ResponsiveContainer width="100%" height={180}>
-              <PieChart>
-                <Pie data={sampleRejectionReasons} cx="50%" cy="50%" innerRadius={40} outerRadius={70} dataKey="count" nameKey="reason">
-                  {sampleRejectionReasons.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="space-y-2">
-              {sampleRejectionReasons.map((r, i) => (
-                <div key={r.reason} className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
-                  <span className="text-sm text-gray-700 flex-1">{r.reason}</span>
-                  <span className="text-sm font-medium text-gray-500">{r.count}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <p className="text-sm text-gray-400 py-4 text-center">No sample rejections recorded.</p>
-        )}
-      </div>
     </div>
   )
 }
@@ -620,7 +729,7 @@ function BomTab({ data }: { data: MgmtDashboardData }) {
         <MetricCard label="Avg BOM Entry Time" value={`${avgBomDays || '—'}${avgBomDays ? 'd' : ''}`} sub="Target: 3 days"     color={avgBomDays > 3 ? '#E24B4A' : '#3B6D11'} />
         <MetricCard label="INV Generated"      value={completedBom.length}                             sub="Unique SKUs"        color="#3B6D11" />
         <MetricCard label="Entry Errors"        value={bomLog.filter(b => b.errors > 0).length}        sub="Required correction" color={bomLog.filter(b => b.errors > 0).length > 0 ? '#A32D2D' : undefined} />
-        <MetricCard label="Approval Rate"       value={`${heads.bom.approvalRate}%`}                  sub="Products with INV"  color={heads.bom.approvalRate === 100 ? '#3B6D11' : '#854F0B'} />
+        <MetricCard label="Approval Rate"       value={completedBom.length > 0 ? `${heads.bom.approvalRate}%` : '—'} sub="Products with INV" color={completedBom.length > 0 && heads.bom.approvalRate === 100 ? '#3B6D11' : '#854F0B'} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -731,7 +840,7 @@ function MarketingTab({ data }: { data: MgmtDashboardData }) {
       </div>
 
       <HeadCard title={`${heads.marketing.name} — Marketing Head Overview`} stats={{
-        'Content Review TAT': `${heads.marketing.avgReviewDays}d`,
+        'Content Review TAT': heads.marketing.avgReviewDays != null ? `${heads.marketing.avgReviewDays}d` : '—',
         'Revision Requests': heads.marketing.revisions,
         'On-Time Approvals': `${heads.marketing.onTimeRate}%`,
         'Launch Decks Signed Off': heads.marketing.decksSignedOff,
@@ -850,6 +959,7 @@ function MarketingTab({ data }: { data: MgmtDashboardData }) {
 const TABS = [
   { id: 'overall',    label: 'Overall' },
   { id: 'design',     label: 'Design' },
+  { id: 'sampling',   label: 'Sampling' },
   { id: 'merch',      label: 'Merchandising' },
   { id: 'bom',        label: 'BOM' },
   { id: 'marketing',  label: 'Marketing' },
@@ -880,6 +990,7 @@ export function MgmtDashboard({ data }: { data: MgmtDashboardData }) {
       {/* Tab content */}
       {activeTab === 'overall'   && <OverallTab       data={data} />}
       {activeTab === 'design'    && <DesignTab        data={data} />}
+      {activeTab === 'sampling'  && <SamplingTab      data={data} />}
       {activeTab === 'merch'     && <MerchandisingTab data={data} />}
       {activeTab === 'bom'       && <BomTab           data={data} />}
       {activeTab === 'marketing' && <MarketingTab     data={data} />}

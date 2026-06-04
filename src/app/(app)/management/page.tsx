@@ -37,26 +37,22 @@ export default async function ManagementPage() {
     { data: designDataRows },
     { data: assignmentLogs },
     { data: designFiles },
-    { data: actorProfiles },
   ] = await Promise.all([
     supabase.from('design_submissions')
       .select('id, product_id, submitted_by, status, created_at, reviewed_at, feedback, product:products(id,name), submitter:profiles!submitted_by(id,full_name)')
       .order('created_at', { ascending: true })
-      .limit(2000),
+      .limit(5000),
     supabase.from('design_data')
       .select('product_id, assigned_to, is_completed, product:products(id,name,workflow_stage), assignee:profiles!assigned_to(id,full_name)')
       .not('assigned_to', 'is', null),
     supabase.from('activity_logs')
-      .select('product_id, created_at, action, user_id')
+      .select('product_id, created_at, action, user_id, actor:profiles(full_name)')
       .ilike('action', 'assigned design to%')
       .order('created_at', { ascending: false }),
     supabase.from('product_files')
       .select('product_id, uploaded_by, created_at')
       .eq('department', 'design')
       .like('file_type', 'image/%'),
-    supabase.from('profiles')
-      .select('id, full_name')
-      .in('role', ['admin', 'design_head']),
   ])
 
   // ── Latest assignment date per product ──────────────────────────────────────
@@ -188,10 +184,6 @@ export default async function ManagementPage() {
   const allDays          = designerStats.flatMap(d => d.daysToSubmitList)
   const avgDaysToSubmit  = allDays.length > 0 ? Math.round(allDays.reduce((a, b) => a + b, 0) / allDays.length) : null
 
-  // ── Actor profile map (for assignment log) ───────────────────────────────────
-  const actorMap = new Map<string, string>()
-  for (const p of actorProfiles || []) actorMap.set(p.id, p.full_name)
-
   // ── Assignment log rows ──────────────────────────────────────────────────────
   // One row per product showing latest assignment + completion info
   const assignmentReport = (designDataRows || []).map(dd => {
@@ -199,7 +191,8 @@ export default async function ManagementPage() {
     const product = one(dd.product) as { id: string; name: string; workflow_stage: string } | null
     const assignedOn = latestAssignDate[dd.product_id] || null
     const latestLog = (assignmentLogs || []).find(l => l.product_id === dd.product_id)
-    const assignedBy = latestLog?.user_id ? (actorMap.get(latestLog.user_id) || '—') : '—'
+    const actor = one((latestLog as { actor?: unknown } | undefined)?.actor) as { full_name: string } | null
+    const assignedBy = actor?.full_name || '—'
     const pSub = productSubMap[dd.product_id]
     const completedOn = pSub?.approvedAt ?? null
     return {

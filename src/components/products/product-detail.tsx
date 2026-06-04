@@ -65,6 +65,7 @@ export function ProductDetail({
   defaultTab,
 }: ProductDetailProps) {
   const initialTab = defaultTab && VALID_TABS.has(defaultTab) ? defaultTab : 'overview'
+  const [activeTab, setActiveTab] = useState(initialTab)
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -124,6 +125,7 @@ export function ProductDetail({
         bomData={bomData}
         marketingData={marketingData}
         salesData={salesData}
+        onTabChange={setActiveTab}
       />
 
       {canDelete && (
@@ -149,7 +151,7 @@ export function ProductDetail({
         </>
       )}
 
-      <TabsPrimitive.Root defaultValue={initialTab}>
+      <TabsPrimitive.Root value={activeTab} onValueChange={setActiveTab}>
         <div className="border-b border-gray-200 bg-white overflow-x-auto">
           <TabsPrimitive.List className="flex gap-0 -mb-px px-4 sm:px-6 min-w-max">
             {TABS.map((tab) => (
@@ -173,7 +175,7 @@ export function ProductDetail({
             <OverviewTab product={product} designData={designData} merchandisingData={merchandisingData} bomData={bomData} marketingData={marketingData} salesData={salesData} files={files} />
           </TabsPrimitive.Content>
           <TabsPrimitive.Content value="design">
-            <DesignTab product={product} profile={profile} data={designData} salesData={salesData} files={files} submissions={designSubmissions} designers={designers} designerWorkloads={designerWorkloads} />
+            <DesignTab product={product} profile={profile} data={designData} samplingData={samplingData} salesData={salesData} files={files} submissions={designSubmissions} designers={designers} designerWorkloads={designerWorkloads} />
           </TabsPrimitive.Content>
           <TabsPrimitive.Content value="sampling">
             <SamplingTab product={product} profile={profile} designData={designData} data={samplingData} files={files} />

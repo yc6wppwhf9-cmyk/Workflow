@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import { Check, ChevronRight, Unlock, AlertCircle, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
@@ -20,11 +21,12 @@ interface WorkflowBarProps {
   bomData: BomData | null
   marketingData: MarketingData | null
   salesData: SalesData | null
+  onTabChange?: (tab: string) => void
 }
 
 export function WorkflowBar({
   product, profile, designData, samplingData, merchandisingData,
-  bomData, marketingData, salesData,
+  bomData, marketingData, salesData, onTabChange,
 }: WorkflowBarProps) {
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
@@ -38,14 +40,14 @@ export function WorkflowBar({
   const currentIndex = WORKFLOW_STAGES.indexOf(product.workflow_stage as WorkflowStage)
   const isAdmin = ['admin', 'management'].includes(profile.role)
 
-  // 5 display stages matching the new hierarchy: Sales → Design → Merch → BOM → Marketing
   const DISPLAY_STAGES = [
-    { label: 'Sales',         doneAfter: 0 },  // done when past draft
-    { label: 'Design',        doneAfter: 1 },
-    { label: 'Sampling',      doneAfter: 2 },
-    { label: 'Merchandising', doneAfter: 3 },
-    { label: 'BOM',           doneAfter: 4 },
-    { label: 'Marketing',     doneAfter: 5 },
+    { label: 'Sales',         doneAfter: 0, tab: 'sales'         },
+    { label: 'Design',        doneAfter: 1, tab: 'design'        },
+    { label: 'Sampling',      doneAfter: 2, tab: 'sampling'      },
+    { label: 'Merchandising', doneAfter: 3, tab: 'merchandising' },
+    { label: 'BOM',           doneAfter: 4, tab: 'bom'           },
+    { label: 'Marketing',     doneAfter: 5, tab: 'marketing'     },
+    { label: 'Sales Priced',  doneAfter: 6, tab: 'sales'         },
   ]
 
   const isCurrentStageComplete = () => {
@@ -68,7 +70,7 @@ export function WorkflowBar({
   const isDesignHead = profile.role === 'design_head'
   const isOwner = profile.role === currentStageOwner
     || (['draft', 'design_completed'].includes(product.workflow_stage) && isDesignHead)
-  const canAdvance = (isAdmin || isOwner) && (currentStageCompleted || isAdmin || isDesignHead)
+  const canAdvance = (isAdmin || isOwner) && (currentStageCompleted || isAdmin)
 
   const prevStage = currentIndex > 0 ? WORKFLOW_STAGES[currentIndex - 1] : null
 
@@ -88,6 +90,7 @@ export function WorkflowBar({
 
     if (rpcError) {
       setAdvanceError(rpcError.message)
+      toast.error(`Stage advance failed: ${rpcError.message}`)
       setAdvancing(false)
       return
     }
@@ -128,6 +131,7 @@ export function WorkflowBar({
         requested_by: profile.id,
         reason: unlockReason,
       })
+      toast.success('Unlock request submitted — admin will be notified.')
     }
 
     setUnlockOpen(false)
@@ -145,15 +149,22 @@ export function WorkflowBar({
             const isDone = currentIndex > stage.doneAfter
             const isCurrent = currentIndex === stage.doneAfter
             const isFuture = currentIndex < stage.doneAfter
+            const isClickable = (isDone || isCurrent) && !!onTabChange
 
             return (
               <div key={stage.label} className="flex items-center gap-1 shrink-0">
-                <div className={cn(
-                  'flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap',
-                  isDone && 'bg-green-100 text-green-700',
-                  isCurrent && 'bg-blue-600 text-white shadow-sm',
-                  isFuture && 'bg-gray-100 text-gray-400',
-                )}>
+                <div
+                  onClick={() => isClickable && onTabChange(stage.tab)}
+                  title={isClickable ? `Go to ${stage.label} tab` : undefined}
+                  className={cn(
+                    'flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap',
+                    isDone && 'bg-green-100 text-green-700',
+                    isCurrent && 'bg-blue-600 text-white shadow-sm',
+                    isFuture && 'bg-gray-100 text-gray-400',
+                    isClickable && 'cursor-pointer hover:opacity-75 active:scale-95',
+                    !isClickable && 'cursor-default',
+                  )}
+                >
                   {isDone && <Check className="h-3 w-3" />}
                   {isCurrent && <div className="h-2 w-2 rounded-full bg-white" />}
                   {stage.label}

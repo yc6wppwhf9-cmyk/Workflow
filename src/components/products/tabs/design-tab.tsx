@@ -16,14 +16,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { createClient } from '@/lib/supabase/client'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { CATEGORY_LABELS, CATEGORY_SUBCATEGORIES, BRANDS, CHANNELS, type ProductCategory, type Brand } from '@/lib/types'
-import type { Product, Profile, DesignData, SalesData, ProductFile, DesignSubmission } from '@/lib/types'
+import type { Product, Profile, DesignData, SamplingData, SalesData, ProductFile, DesignSubmission } from '@/lib/types'
 import { parseTechPackAllVariants, type TechPackVariant } from '@/lib/parse-techpack'
+import { cn } from '@/lib/utils'
 import { ImageLightbox, type LightboxImage } from '@/components/ui/image-lightbox'
 
 interface DesignTabProps {
   product: Product
   profile: Profile
   data: DesignData | null
+  samplingData: SamplingData | null
   salesData: SalesData | null
   files: ProductFile[]
   submissions: DesignSubmission[]
@@ -31,7 +33,7 @@ interface DesignTabProps {
   designerWorkloads?: Record<string, number>
 }
 
-export function DesignTab({ product, profile, data, salesData, files, submissions, designers, designerWorkloads }: DesignTabProps) {
+export function DesignTab({ product, profile, data, samplingData, salesData, files, submissions, designers, designerWorkloads }: DesignTabProps) {
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
 
@@ -54,7 +56,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
   // canUploadIllos is open until design is marked complete — approval state does not block new uploads
   const canUploadIllos = !data?.is_locked && !data?.is_completed && (isHead || isAssignedToMe)
 
-  const [form, setForm] = useState({
+  const defaultForm = {
     channel:        data?.channel        || '',
     designer_name:  data?.designer_name  || '',
     sample_color:   data?.sample_color   || '',
@@ -81,7 +83,24 @@ export function DesignTab({ product, profile, data, salesData, files, submission
     add_on_2:       data?.add_on_2       || '',
     add_on_3:       data?.add_on_3       || '',
     designer_sign:  data?.designer_sign  || '',
-  })
+  }
+  
+  // A stored variant is considered "real" only if it has at least one meaningful field.
+  // Old products may have variants = [{}] or all-empty-string objects — in those cases
+  // we fall back to defaultForm which reads from the legacy flat columns.
+  const hasRealData = (v: any) =>
+    v && typeof v === 'object' &&
+    (v.fabric || v.designer_name || v.farma || v.sample_color || v.season_year ||
+     v.zipper || v.lining || v.branding || (Array.isArray(v.color_skus) && v.color_skus.length > 0))
+
+  const initialForms =
+    data?.variants && data.variants.length > 0 && data.variants.some(hasRealData)
+      ? data.variants
+      : [defaultForm]
+    
+  const [forms, setForms] = useState<any[]>(initialForms)
+  const [activeVariantIdx, setActiveVariantIdx] = useState(0)
+  const activeVariant = forms[activeVariantIdx] || defaultForm
 
   const [category, setCategory]   = useState<ProductCategory | ''>(product.category || '')
   const [subCategory, setSubCategory] = useState<string>(product.sub_category || '')
@@ -98,12 +117,76 @@ export function DesignTab({ product, profile, data, salesData, files, submission
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [saved, setSaved]         = useState(false)
   const [assignedTo, setAssignedTo] = useState<string>(data?.assigned_to || '__none__')
+  const [showReassign, setShowReassign] = useState(false)  // collapsed by default when already assigned
   const [savingAssign, setSavingAssign] = useState(false)
   const [headNotes, setHeadNotes] = useState(data?.head_notes || '')
   const [savingNotes, setSavingNotes] = useState(false)
   const [notesSaved, setNotesSaved] = useState(false)
 
+  
+  const allColorSkus = Array.from(new Set(forms.flatMap(f => f.color_skus || [])))
+  const allSampleColors = Array.from(new Set(forms.map(f => f.sample_color).filter(Boolean)))
+
+  const samplingStatus = samplingData?.sample_review_status ?? 'not_started'
+  const samplingApproved  = samplingStatus === 'approved'
+  const samplingSent      = samplingStatus === 'pending_review'
+  const samplingRejected  = samplingStatus === 'rejected'
+
+  const [sendingSampling, setSendingSampling] = useState(false)
+
+  async function sendForSampling() {
+    setSendingSampling(true)
+    const approvedCount = designFiles.filter(f => f.review_status === 'approved').length
+    await supabase.from('sampling_data')
+      .update({ sample_review_status: 'pending_review', updated_by: profile.id })
+      .eq('product_id', product.id)
+    await supabase.from('activity_logs').insert({
+      product_id: product.id, user_id: profile.id,
+      action: `sent ${approvedCount} approved illustration(s) to sampling team`,
+      department: 'design',
+    })
+    // Email + push the sampling team
+    fetch('/api/notify-send-for-sampling', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        product_id:     product.id,
+        product_name:   product.name,
+        approved_count: approvedCount,
+        sender_name:    profile.full_name,
+      }),
+    }).catch(() => {})
+    toast.success(`${approvedCount} illustration(s) sent to sampling team.`)
+    setSendingSampling(false)
+    router.refresh()
+  }
+
+  // Batch hold status — populated when this product is complete but waiting for siblings
+  const [batchPending, setBatchPending] = useState<{ id: string; name: string }[]>([])
+
+  useEffect(() => {
+    if (!data?.is_completed || !data?.assigned_to) { setBatchPending([]); return }
+    if (!['design_completed', 'draft'].includes(product.workflow_stage)) { setBatchPending([]); return }
+    supabase
+      .from('products')
+      .select('id, name, design_data(is_completed, assigned_to)')
+      .eq('category', product.category)
+      .eq('workflow_stage', product.workflow_stage)
+      .neq('id', product.id)
+      .then(({ data: siblings }) => {
+        type SDD = { assigned_to: string | null; is_completed: boolean }
+        const pending = (siblings || []).filter(s => {
+          const dd = (Array.isArray(s.design_data) ? s.design_data[0] : s.design_data) as SDD | null
+          return dd?.assigned_to === data.assigned_to && !dd?.is_completed
+        })
+        setBatchPending(pending.map(s => ({ id: s.id, name: s.name })))
+      })
+  }, [data?.is_completed, data?.assigned_to, product.category, product.workflow_stage, product.id, supabase])
+
   // Submission state
+  // Colour tag applied to the next batch of illustration uploads
+  const [illoColorTag, setIlloColorTag] = useState<string>('')
+
   const [submitting, setSubmitting]   = useState(false)
   const [submitDone, setSubmitDone]   = useState(false)
   const [approvingAll, setApprovingAll] = useState(false)
@@ -112,6 +195,9 @@ export function DesignTab({ product, profile, data, salesData, files, submission
   const [reviewingFileId, setReviewingFileId]           = useState<string | null>(null)
   const [fileRejectFeedback, setFileRejectFeedback]     = useState<Record<string, string>>({})
   const [showFileRejectBox, setShowFileRejectBox]       = useState<string | null>(null)
+
+  // Per-image colour tagging state
+  const [taggingFileId, setTaggingFileId] = useState<string | null>(null)
 
   // Lightbox
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null)
@@ -199,14 +285,18 @@ export function DesignTab({ product, profile, data, salesData, files, submission
   const [techPackVariants, setTechPackVariants] = useState<TechPackVariant[]>([])
   const [selectedVariantIdx, setSelectedVariantIdx] = useState(0)
 
-  function F({ label, field, placeholder, mono }: { label: string; field: keyof typeof form; placeholder?: string; mono?: boolean }) {
+  function F({ label, field, placeholder, mono, formIdx }: { label: string; field: string; placeholder?: string; mono?: boolean; formIdx: number }) {
     return (
       <div className="space-y-1">
         <Label className="text-xs text-gray-500">{label}</Label>
         <Input
           placeholder={placeholder || ''}
-          value={(form[field] as string) || ''}
-          onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))}
+          value={(forms[formIdx][field] as string) || ''}
+          onChange={e => setForms(prev => {
+            const copy = [...prev]
+            copy[formIdx] = { ...copy[formIdx], [field]: e.target.value }
+            return copy
+          })}
           disabled={!canEditFields}
           className={`h-8 text-sm ${mono ? 'font-mono' : ''}`}
         />
@@ -217,7 +307,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
   async function handleSave() {
     setSaving(true)
     await Promise.all([
-      supabase.from('design_data').update({ ...form, updated_by: profile.id }).eq('product_id', product.id),
+      supabase.from('design_data').update({ variants: forms, updated_by: profile.id } as any).eq('product_id', product.id),
       supabase.from('products').update({
         ...(category && { category }),
         sub_category: subCategory || null,
@@ -239,29 +329,99 @@ export function DesignTab({ product, profile, data, salesData, files, submission
   async function markComplete() {
     const becomingComplete = !data?.is_completed
     setSaving(true)
+
     await supabase.from('design_data').update({
-      ...form, is_completed: becomingComplete, updated_by: profile.id,
-    }).eq('product_id', product.id)
+      variants: forms, is_completed: becomingComplete, updated_by: profile.id } as any
+    ).eq('product_id', product.id)
     await supabase.from('activity_logs').insert({
       product_id: product.id, user_id: profile.id,
       action: becomingComplete ? 'marked design as complete' : 'marked design as incomplete',
       department: profile.role,
     })
 
-    if (becomingComplete && (product.workflow_stage === 'design_completed' || product.workflow_stage === 'draft')) {
+    if (!becomingComplete || !['design_completed', 'draft'].includes(product.workflow_stage)) {
+      setSaving(false)
+      router.refresh()
+      return
+    }
+
+    // ── Batch gate ─────────────────────────────────────────────────────────────
+    // Products with the same category and same assigned designer form a batch.
+    // All of them must be design-complete before any advances to Sampling.
+    const assignedTo = data?.assigned_to
+    if (assignedTo) {
+      type SDD = { assigned_to: string | null; is_completed: boolean }
+
+      const { data: siblings } = await supabase
+        .from('products')
+        .select('id, name, design_data(is_completed, assigned_to)')
+        .eq('category', product.category)
+        .eq('workflow_stage', product.workflow_stage)
+        .neq('id', product.id)
+
+      const batchSiblings = (siblings || []).filter(s => {
+        const dd = (Array.isArray(s.design_data) ? s.design_data[0] : s.design_data) as SDD | null
+        return dd?.assigned_to === assignedTo
+      })
+      const incompleteInBatch = batchSiblings.filter(s => {
+        const dd = (Array.isArray(s.design_data) ? s.design_data[0] : s.design_data) as SDD | null
+        return !dd?.is_completed
+      })
+
+      if (incompleteInBatch.length > 0) {
+        const names = incompleteInBatch.map(s => s.name).slice(0, 3).join(', ')
+        const extra  = incompleteInBatch.length > 3 ? ` +${incompleteInBatch.length - 3} more` : ''
+        toast.info(
+          `Batch held — ${incompleteInBatch.length} other product(s) still in progress: ${names}${extra}. Stage advances once the full batch is complete.`,
+          { duration: 7000 },
+        )
+        setSaving(false)
+        router.refresh()
+        return
+      }
+
+      // All complete — advance this product then cascade-advance held siblings
       await supabase.rpc('advance_product_stage', {
         p_product_id: product.id,
-        p_next_stage: 'sampling_completed',
-        p_user_id: profile.id,
-        p_action: 'marked design complete — stage advanced to Merchandising',
+        p_next_stage: 'merchandising_completed',
+        p_user_id:    profile.id,
+        p_action:     'marked design complete — stage advanced to Sampling',
         p_department: profile.role,
       })
-      fetch('/api/notify-stage-advance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product_id: product.id, product_name: product.name, next_stage: 'sampling_completed' }),
-      }).catch(() => {})
+
+      const heldSiblings = batchSiblings.filter(s => {
+        const dd = (Array.isArray(s.design_data) ? s.design_data[0] : s.design_data) as SDD | null
+        return dd?.is_completed   // already marked complete but was held back
+      })
+      for (const sibling of heldSiblings) {
+        await supabase.rpc('advance_product_stage', {
+          p_product_id: sibling.id,
+          p_next_stage: 'merchandising_completed',
+          p_user_id:    profile.id,
+          p_action:     'batch complete — advancing to Sampling',
+          p_department: profile.role,
+        })
+      }
+
+      if (heldSiblings.length > 0) {
+        toast.success(`Batch complete! All ${heldSiblings.length + 1} products advanced to Sampling.`)
+      }
+    } else {
+      // No assigned designer — no batch, advance immediately
+      await supabase.rpc('advance_product_stage', {
+        p_product_id: product.id,
+        p_next_stage: 'merchandising_completed',
+        p_user_id:    profile.id,
+        p_action:     'marked design complete — stage advanced to Sampling',
+        p_department: profile.role,
+      })
     }
+
+    fetch('/api/notify-stage-advance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_id: product.id, product_name: product.name, next_stage: 'merchandising_completed' }),
+    }).catch(() => {})
 
     setSaving(false)
     router.refresh()
@@ -361,19 +521,26 @@ export function DesignTab({ product, profile, data, salesData, files, submission
       action:     `${status} illustration: ${file?.name || fileId}${feedback ? ` — ${feedback}` : ''}`,
       department: 'design',
     })
-    // Email + push the designer when their illustration is approved
     if (status === 'approved') {
       fetch('/api/notify-illustration-approved', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          product_id: product.id,
-          file_id:    fileId,
-          file_name:  file?.name || fileId,
-          feedback,
-        }),
+        body: JSON.stringify({ product_id: product.id, file_id: fileId, file_name: file?.name || fileId, feedback }),
       }).catch(() => {})
     }
+
+    // Notify the designer in-app when their illustration is rejected
+    if (status === 'rejected' && file?.uploaded_by) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from('notifications').insert({
+        user_id:      file.uploaded_by,
+        product_id:   product.id,
+        product_name: product.name,
+        message:      `Illustration "${file.name || 'image'}" was rejected${feedback ? `: ${feedback}` : ''}. Please upload a revision.`,
+        is_read:      false,
+      }).catch(() => {})
+    }
+
     setReviewingFileId(null)
     setShowFileRejectBox(null)
     setFileRejectFeedback(prev => { const next = { ...prev }; delete next[fileId]; return next })
@@ -405,10 +572,11 @@ export function DesignTab({ product, profile, data, salesData, files, submission
     router.refresh()
   }
 
+  
   function variantToFormUpdates(f: TechPackVariant) {
-    const updates: Partial<typeof form> = {}
+    const updates: Partial<Record<keyof typeof defaultForm, string>> = {}
     const filled: string[] = []
-    const map: Array<[keyof typeof form, string, string]> = [
+    const map: Array<[keyof typeof defaultForm, string, string]> = [
       ['designer_name',  f.designerName,  'Designer Name'],
       ['farma',          f.farma,         'Farma'],
       ['season_year',    f.seasonYear,    'Season Year'],
@@ -437,17 +605,6 @@ export function DesignTab({ product, profile, data, salesData, files, submission
     }
     return { updates, filled }
   }
-
-  async function loadVariantIntoForm(variant: TechPackVariant) {
-    const { updates, filled } = variantToFormUpdates(variant)
-    setForm(prev => ({ ...prev, ...updates, sample_color: variant.colourName || prev.sample_color }))
-    if (variant.styleName) {
-      await supabase.from('products').update({ name: variant.styleName, updated_by: profile.id }).eq('id', product.id)
-    }
-    setTechPackResult({ filled })
-    router.refresh()
-  }
-
   async function handleTechPackUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -462,20 +619,24 @@ export function DesignTab({ product, profile, data, salesData, files, submission
       const rows = utils.sheet_to_json<string[]>(ws, { header: 1, defval: '' }) as string[][]
       const variants = parseTechPackAllVariants(rows)
 
-      // Email the Excel to all design heads (fire-and-forget)
       const fd = new FormData()
       fd.append('file', file)
       fd.append('product_id', product.id)
       fd.append('product_name', product.name)
       fetch('/api/notify-techpack-uploaded', { method: 'POST', body: fd }).catch(() => {})
 
-      if (variants.length > 1) {
-        // Multi-colour: let the user choose which colour to load
-        setTechPackVariants(variants)
-        setSelectedVariantIdx(0)
-      } else {
-        // Single colour: auto-load immediately (existing behaviour)
-        await loadVariantIntoForm(variants[0])
+      if (variants.length > 0) {
+        setForms(variants.map(v => {
+          const { updates } = variantToFormUpdates(v)
+          const newColorSkus = v.colorSkusStr
+            ? v.colorSkusStr.split(/[\n,/]/).map(s => s.trim()).filter(Boolean)
+            : []
+          return { ...defaultForm, ...updates, sample_color: v.colourName || '', color_skus: newColorSkus }
+        }))
+        if (variants[0].styleName) {
+           await supabase.from('products').update({ name: variants[0].styleName, updated_by: profile.id }).eq('id', product.id)
+        }
+        setTechPackResult({ filled: ['Loaded ' + variants.length + ' variants'] })
       }
     } catch {
       setTechPackResult({ filled: [] })
@@ -484,27 +645,21 @@ export function DesignTab({ product, profile, data, salesData, files, submission
     if (techPackRef.current) techPackRef.current.value = ''
   }
 
- async function handleIllustrationUpload(e: React.ChangeEvent<HTMLInputElement>) {
-  const selectedFiles = Array.from(e.target.files || [])
-  if (selectedFiles.length === 0) return
+  async function handleIllustrationUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const selectedFiles = Array.from(e.target.files || [])
+    if (selectedFiles.length === 0) return
+    
+    if (designFiles.length + selectedFiles.length > 15) {
+      toast.error(`You cannot upload more than 15 illustrations in total. Currently you have ${designFiles.length}.`)
+      if (illustrationRef.current) illustrationRef.current.value = ''
+      return
+    }
 
-  const existingCount = designFiles.length
-  const allowedCount = 15 - existingCount
-  if (allowedCount <= 0) {
-    toast.error('Maximum 15 illustrations allowed per product')
-    if (illustrationRef.current) illustrationRef.current.value = ''
-    return
-  }
-  if (selectedFiles.length > allowedCount) {
-    toast.error(`Only ${allowedCount} more illustration${allowedCount !== 1 ? 's' : ''} can be added (15 max)`)
-    if (illustrationRef.current) illustrationRef.current.value = ''
-    return
-  }
-
-  setUploading(true)
+    setUploading(true)
     setUploadSuccess(null)
     setUploadProgress({ done: 0, total: selectedFiles.length })
     let done = 0
+    let savedCount = 0
     for (const file of selectedFiles) {
       setUploadingName(file.name)
       const fd = new FormData()
@@ -513,13 +668,36 @@ export function DesignTab({ product, profile, data, salesData, files, submission
       const res = await fetch('/api/upload-image', { method: 'POST', body: fd })
       if (res.ok) {
         const { url } = await res.json() as { url: string }
-        await supabase.from('product_files').insert({
+
+        let finalTag = illoColorTag.trim() || null
+        if (!finalTag) {
+          const nameUpper = file.name.toUpperCase()
+          const matchedSku = allColorSkus.find(sku => sku && nameUpper.includes(sku.toUpperCase()))
+          if (matchedSku) {
+            finalTag = matchedSku
+          } else {
+            const matchedColor = allSampleColors.find(sc => sc && nameUpper.includes(sc.toUpperCase()))
+            if (matchedColor) {
+              finalTag = matchedColor
+            }
+          }
+        }
+
+        const { error: insertError } = await supabase.from('product_files').insert({
           product_id: product.id, name: file.name, file_url: url,
           file_type: file.type, file_size: file.size,
           department: 'design', uploaded_by: profile.id,
-          // Head uploads go to management for approval (pending), same as designer uploads
           review_status: 'pending',
+          colour_tag: finalTag,
         })
+        if (insertError) {
+          toast.error(`Failed to save "${file.name}": ${insertError.message}`)
+        } else {
+          savedCount++
+        }
+      } else {
+        const body = await res.json().catch(() => ({})) as { error?: string }
+        toast.error(`Upload failed for "${file.name}": ${body.error || res.statusText}`)
       }
       done++
       setUploadProgress({ done, total: selectedFiles.length })
@@ -544,19 +722,36 @@ export function DesignTab({ product, profile, data, salesData, files, submission
     setUploading(false)
     setUploadingName('')
     setUploadProgress(null)
-    setUploadSuccess(selectedFiles.length)
-    setTimeout(() => setUploadSuccess(null), 3000)
-    toast.success(`${selectedFiles.length} illustration${selectedFiles.length !== 1 ? 's' : ''} uploaded`)
+    if (savedCount > 0) {
+      setUploadSuccess(savedCount)
+      setTimeout(() => setUploadSuccess(null), 3000)
+      toast.success(`${savedCount} illustration${savedCount !== 1 ? 's' : ''} uploaded`)
+      router.refresh()
+    }
     if (illustrationRef.current) illustrationRef.current.value = ''
-    router.refresh()
   }
 
   async function deleteFile(file: ProductFile) {
+    if (file.review_status === 'approved') {
+      toast.error('Approved illustrations cannot be deleted.')
+      return
+    }
     await fetch('/api/delete-image', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ file_url: file.file_url, file_id: file.id }),
     })
+    router.refresh()
+  }
+
+  async function tagIllustration(fileId: string, colourTag: string | null) {
+    setTaggingFileId(fileId)
+    await fetch('/api/tag-illustration', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_id: fileId, colour_tag: colourTag }),
+    })
+    setTaggingFileId(null)
     router.refresh()
   }
 
@@ -578,7 +773,10 @@ export function DesignTab({ product, profile, data, salesData, files, submission
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={file.file_url} alt={file.name} className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[9px] text-center py-0.5 px-1 truncate pointer-events-none" title={file.name}>
+                      {file.colour_tag ? `${file.colour_tag} — ${file.name}` : file.name}
+                    </div>
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/35 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
                       <Plus className="h-5 w-5 text-white rotate-45 scale-150" />
                     </div>
                   </button>
@@ -594,29 +792,47 @@ export function DesignTab({ product, profile, data, salesData, files, submission
         {/* Tech Pack summary */}
         {data && (
           <Card>
-            <CardHeader className="pb-3">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <CardTitle className="text-base">Design Tech Pack</CardTitle>
             </CardHeader>
             <CardContent>
+              {forms.length > 1 && (
+                <div className="flex flex-wrap gap-2 mb-6">
+                  {forms.map((f: any, i: number) => (
+                    <button
+                      key={i}
+                      onClick={() => setActiveVariantIdx(i)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                        i === activeVariantIdx
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      Variant {i + 1} {f.sample_color ? `(${f.sample_color})` : ''}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="grid grid-cols-3 gap-x-6 gap-y-3 text-sm">
                 {([
-                  ['Designer', data.designer_name],
-                  ['Farma', data.farma],
-                  ['Season Year', data.season_year],
-                  ['Fabric', data.fabric],
-                  ['Lining', data.lining],
-                  ['Air Mesh', data.air_mesh],
-                  ['Zipper', data.zipper],
-                  ['Puller', data.puller],
-                  ['9mm Patta', data.patta_9mm],
-                  ['Patta 1', data.patta_1],
-                  ['Patta 2', data.patta_2],
-                  ['Lader Lock', data.lader_lock],
-                  ['Branding', data.branding],
-                  ['Screen Print', data.screen_print],
-                  ['Digital Print', data.digital_print],
-                  ['Bartech', data.bartech],
-                  ['Re-sampling By', data.re_sampling_by],
+                  ['Designer', activeVariant.designer_name],
+                  ['Sample Color', activeVariant.sample_color],
+                  ['Farma', activeVariant.farma],
+                  ['Season Year', activeVariant.season_year],
+                  ['Fabric', activeVariant.fabric],
+                  ['Lining', activeVariant.lining],
+                  ['Air Mesh', activeVariant.air_mesh],
+                  ['Zipper', activeVariant.zipper],
+                  ['Puller', activeVariant.puller],
+                  ['9mm Patta', activeVariant.patta_9mm],
+                  ['Patta 1', activeVariant.patta_1],
+                  ['Patta 2', activeVariant.patta_2],
+                  ['Lader Lock', activeVariant.lader_lock],
+                  ['Branding', activeVariant.branding],
+                  ['Screen Print', activeVariant.screen_print],
+                  ['Digital Print', activeVariant.digital_print],
+                  ['Bartech', activeVariant.bartech],
+                  ['Re-sampling By', activeVariant.re_sampling_by],
                 ] as [string, string | null | undefined][]).filter(([, v]) => v).map(([label, value]) => (
                   <div key={label}>
                     <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-0.5">{label}</p>
@@ -624,13 +840,32 @@ export function DesignTab({ product, profile, data, salesData, files, submission
                   </div>
                 ))}
               </div>
-              {data.remarks && (
-                <div className="mt-3 pt-3 border-t border-gray-100">
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-0.5">Remarks</p>
-                  <p className="text-sm text-gray-800 whitespace-pre-wrap">{data.remarks}</p>
+
+              {activeVariant.color_skus && activeVariant.color_skus.length > 0 && (
+                <div className="mt-4 pt-3 border-t border-gray-100">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Color SKUs</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {activeVariant.color_skus.map((sku: string) => (
+                      <span key={sku} className="text-xs font-mono bg-violet-100 text-violet-800 px-2.5 py-0.5 rounded-full">{sku}</span>
+                    ))}
+                  </div>
                 </div>
               )}
-              {(!data.fabric && !data.designer_name && !data.farma) && (
+
+              {activeVariant.unique_feature && (
+                <div className="mt-4 pt-3 border-t border-gray-100">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-0.5">Unique Feature / USP</p>
+                  <p className="text-sm text-gray-800 whitespace-pre-wrap">{activeVariant.unique_feature}</p>
+                </div>
+              )}
+
+              {activeVariant.remarks && (
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-0.5">Remarks</p>
+                  <p className="text-sm text-gray-800 whitespace-pre-wrap">{activeVariant.remarks}</p>
+                </div>
+              )}
+              {(!activeVariant.fabric && !activeVariant.designer_name && !activeVariant.farma) && (
                 <p className="text-sm text-gray-400 italic">Tech pack not yet uploaded by design team.</p>
               )}
             </CardContent>
@@ -687,28 +922,33 @@ export function DesignTab({ product, profile, data, salesData, files, submission
           {/* Assignment + Head Notes */}
           <Card className="border-violet-200 bg-violet-50">
             <CardHeader className="pb-2 pt-4">
-              <CardTitle className="text-sm flex items-center gap-2 text-violet-900">
-                <UserCheck className="h-4 w-4" />
-                {data?.assigned_to ? 'Reassign Designer' : 'Assign Designer'}
-                {savingAssign && <Loader2 className="h-4 w-4 animate-spin ml-2" />}
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm flex items-center gap-2 text-violet-900">
+                  <UserCheck className="h-4 w-4" />
+                  {data?.assigned_to
+                    ? <>Assigned to: <strong>{designers.find(d => d.id === data.assigned_to)?.full_name || 'Unknown'}</strong></>
+                    : 'Assign Designer'}
+                  {savingAssign && <Loader2 className="h-4 w-4 animate-spin ml-1" />}
+                </CardTitle>
+                {/* Only show Change button when someone is already assigned */}
+                {data?.assigned_to && (
+                  <button
+                    onClick={() => setShowReassign(v => !v)}
+                    className="text-xs text-violet-600 hover:text-violet-800 underline"
+                  >
+                    {showReassign ? 'Cancel' : 'Change'}
+                  </button>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="pb-4 space-y-4">
-              {designers.length === 0 ? (
-                <p className="text-xs text-violet-500">No active designers found.</p>
-              ) : (
-                <div className="space-y-2">
-                  {data?.assigned_to && (
-                    <p className="text-xs text-violet-600">
-                      Currently: <strong>{designers.find(d => d.id === data.assigned_to)?.full_name || 'Unknown'}</strong>
-                    </p>
-                  )}
+              {/* Show full picker only when: no designer yet, or head clicked "Change" */}
+              {(!data?.assigned_to || showReassign) && (
+                designers.length === 0 ? (
+                  <p className="text-xs text-violet-500">No active designers found.</p>
+                ) : (
                   <div className="flex items-center gap-3">
-                    <Select
-                      value={assignedTo}
-                      onValueChange={v => setAssignedTo(v)}
-                      disabled={savingAssign}
-                    >
+                    <Select value={assignedTo} onValueChange={v => setAssignedTo(v)} disabled={savingAssign}>
                       <SelectTrigger className="w-56 bg-white">
                         <SelectValue placeholder="Select designer..." />
                       </SelectTrigger>
@@ -730,7 +970,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
                       </SelectContent>
                     </Select>
                     <Button
-                      onClick={() => saveAssignment(assignedTo)}
+                      onClick={() => { saveAssignment(assignedTo); setShowReassign(false) }}
                       disabled={savingAssign}
                       className="bg-violet-600 hover:bg-violet-700"
                     >
@@ -738,7 +978,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
                       {data?.assigned_to ? 'Reassign' : 'Assign'}
                     </Button>
                   </div>
-                </div>
+                )
               )}
 
               <div className="space-y-1.5">
@@ -1065,6 +1305,31 @@ export function DesignTab({ product, profile, data, salesData, files, submission
         </Card>
       )}
 
+      {/* ── Batch hold indicator ──────────────────────────────────── */}
+      {data?.is_completed && batchPending.length > 0 && (isAssignedToMe || isHead) && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-start gap-3">
+              <Clock className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-blue-900">Design complete — waiting for batch</p>
+                <p className="text-xs text-blue-700 mt-0.5">
+                  This product will advance to Sampling once the following {batchPending.length === 1 ? 'product is' : `${batchPending.length} products are`} also complete:
+                </p>
+                <ul className="mt-2 space-y-1">
+                  {batchPending.map(s => (
+                    <li key={s.id} className="text-xs text-blue-800 font-medium flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-blue-400 shrink-0" />
+                      {s.name}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* ── Head Remarks visible to designers ─────────────────────── */}
       {isAssignedToMe && data?.head_notes && (
         <Card className="border-violet-200 bg-violet-50">
@@ -1091,6 +1356,36 @@ export function DesignTab({ product, profile, data, salesData, files, submission
           <input ref={illustrationRef} type="file" accept="image/*" multiple className="hidden" onChange={handleIllustrationUpload} />
         </CardHeader>
         <CardContent className="space-y-3">
+          {/* Colour tag selector — applied to every file in the next upload */}
+          {canUploadIllos && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-gray-500 shrink-0">Colour / Variant for next upload:</span>
+              {allColorSkus.length > 0 ? (
+                <Select value={illoColorTag || "all_colours"} onValueChange={(val) => setIlloColorTag(val === "all_colours" ? "" : val)}>
+                  <SelectTrigger className="h-7 text-xs w-40 bg-white">
+                    <SelectValue placeholder="All colours" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all_colours">All colours</SelectItem>
+                    {allColorSkus.map((sku: any) => (
+                      <SelectItem key={sku} value={sku}>{sku}</SelectItem>
+                    ))}
+                    {allSampleColors.filter(sc => !allColorSkus.includes(sc)).map((sc: any) => (
+                      <SelectItem key={sc} value={sc}>{sc} (sample)</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  placeholder="e.g. Black, Blue, Red…"
+                  value={illoColorTag}
+                  onChange={e => setIlloColorTag(e.target.value)}
+                  className="h-7 text-xs w-40"
+                />
+              )}
+              <span className="text-[10px] text-gray-400">Tag tells sampling which colour each illustration is for</span>
+            </div>
+          )}
           {/* Upload progress */}
           {uploadProgress && (
             <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 space-y-2">
@@ -1142,6 +1437,37 @@ export function DesignTab({ product, profile, data, salesData, files, submission
                       </div>
                     )}
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 pointer-events-none">
+                      {canUploadIllos && (
+                        <>
+                          {/* Colour tag dropdown */}
+                          {(allColorSkus.length > 0 || allSampleColors.length > 0) && taggingFileId === file.id ? (
+                            <div className="flex gap-1 pointer-events-auto">
+                              <Select value={file.colour_tag || ''} onValueChange={(val) => tagIllustration(file.id, val || null)}>
+                                <SelectTrigger className="h-7 w-32 text-xs bg-white">
+                                  <SelectValue placeholder="Tag colour…" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="">—</SelectItem>
+                                  {allColorSkus.map((sku: any) => (
+                                    <SelectItem key={sku} value={sku}>{sku}</SelectItem>
+                                  ))}
+                                  {allSampleColors.filter(sc => !allColorSkus.includes(sc)).map((sc: any) => (
+                                    <SelectItem key={sc} value={sc}>{sc}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          ) : (
+                            <button
+                              className="h-7 w-7 rounded-full bg-white flex items-center justify-center hover:bg-violet-50 pointer-events-auto"
+                              onClick={e => { e.stopPropagation(); setTaggingFileId(file.id) }}
+                              title="Tag colour"
+                            >
+                              <span className="text-xs font-semibold text-violet-600">🏷️</span>
+                            </button>
+                          )}
+                        </>
+                      )}
                       {canUploadIllos && file.review_status !== 'approved' && (
                         <button
                           className="h-7 w-7 rounded-full bg-white flex items-center justify-center hover:bg-red-50 pointer-events-auto"
@@ -1151,8 +1477,16 @@ export function DesignTab({ product, profile, data, salesData, files, submission
                         </button>
                       )}
                     </div>
-                    {file.review_status === 'rejected' && file.review_feedback && (
-                      <p className="absolute bottom-0 left-0 right-0 px-2 py-1 text-xs text-white bg-red-600/80 truncate pointer-events-none">{file.review_feedback}</p>
+                    {/* Colour tag label — always visible at bottom */}
+                    {file.review_status === 'rejected' && file.review_feedback ? (
+                      <p className="absolute bottom-0 left-0 right-0 px-2 py-1 text-xs text-white bg-red-600/80 truncate pointer-events-none" title={file.review_feedback}>{file.review_feedback}</p>
+                    ) : (
+                      <div className={cn(
+                        "absolute bottom-0 left-0 right-0 text-white text-[9px] text-center py-0.5 px-1 truncate pointer-events-none",
+                        file.colour_tag ? "bg-violet-700/80 font-semibold" : "bg-black/60"
+                      )} title={file.name}>
+                        {file.colour_tag ? `${file.colour_tag} — ${file.name}` : file.name}
+                      </div>
                     )}
                   </div>
                 ))}
@@ -1186,10 +1520,10 @@ export function DesignTab({ product, profile, data, salesData, files, submission
                 <div>
                   <p className="text-sm font-semibold text-gray-800">Submit Illustrations for Review</p>
                   {designFiles.some(f => f.review_status === 'pending') && (
-                    <p className="text-xs text-yellow-600 mt-0.5 flex items-center gap-1"><Clock className="h-3 w-3" /> Awaiting design head review…</p>
+                    <p className="text-xs text-yellow-600 mt-0.5 flex items-center gap-1"><Clock className="h-3 w-3" /> Some illustrations are awaiting the design head&apos;s review. You can still submit or add more.</p>
                   )}
                   {!designFiles.some(f => f.review_status === 'pending') && designFiles.some(f => f.review_status === 'rejected') && (
-                    <p className="text-xs text-red-600 mt-0.5">Some images rejected — remove them, upload revisions, then resubmit.</p>
+                    <p className="text-xs text-red-600 mt-0.5">Some images were rejected — remove them or upload revisions, then resubmit.</p>
                   )}
                   {!designFiles.some(f => f.review_status) && (
                     <p className="text-xs text-gray-500 mt-0.5">Upload your design images above, then submit for the design head&apos;s approval.</p>
@@ -1198,16 +1532,99 @@ export function DesignTab({ product, profile, data, salesData, files, submission
                 <Button
                   size="sm"
                   onClick={submitForReview}
-                  disabled={
-                    submitting ||
-                    designFiles.length === 0 ||
-                    designFiles.some(f => f.review_status === 'pending')
-                  }
+                  disabled={submitting || designFiles.length === 0}
                   className="shrink-0"
                 >
                   {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                   {submitDone ? 'Submitted!' : 'Submit for Review'}
                 </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Sampling Gate ─────────────────────────────────────────────────── */}
+      {(isAssignedToMe || isHead) && !data?.is_locked && !data?.is_completed && (
+        <Card className={cn(
+          'border-2',
+          samplingApproved  ? 'border-green-300 bg-green-50'  :
+          samplingRejected  ? 'border-red-300 bg-red-50'      :
+          samplingSent      ? 'border-yellow-200 bg-yellow-50' :
+          hasAnyApproved    ? 'border-violet-200 bg-violet-50' :
+          'border-gray-200 bg-gray-50',
+        )}>
+          <CardContent className="pt-4 pb-4">
+            {/* Not sent yet — show send button if any illustration is approved */}
+            {samplingStatus === 'not_started' && (
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">Send Illustrations for Sampling</p>
+                  {hasAnyApproved ? (
+                    <p className="text-xs text-violet-700 mt-0.5">
+                      {designFiles.filter(f => f.review_status === 'approved').length} illustration(s) approved — sampling team can now create physical samples.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-400 mt-0.5">Illustrations must be approved by the design head before sending for sampling.</p>
+                  )}
+                </div>
+                {hasAnyApproved && (
+                  <Button
+                    size="sm"
+                    onClick={sendForSampling}
+                    disabled={sendingSampling}
+                    className="bg-violet-600 hover:bg-violet-700 shrink-0"
+                  >
+                    {sendingSampling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    Send for Sampling
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {/* Sent — waiting for sampling team */}
+            {samplingSent && (
+              <div className="flex items-center gap-3">
+                <Clock className="h-5 w-5 text-yellow-600 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-yellow-900">Sent to Sampling Team</p>
+                  <p className="text-xs text-yellow-700 mt-0.5">
+                    The sampling team is creating physical samples. Once they approve, you can mark design complete.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Approved — design can be marked complete */}
+            {samplingApproved && (
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-green-800">Sample Approved</p>
+                  <p className="text-xs text-green-700 mt-0.5">
+                    Physical sample passed. You can now mark design as complete — product will advance directly to Merchandising.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Rejected — needs revision */}
+            {samplingRejected && (
+              <div className="flex items-start gap-3">
+                <XCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-red-800">Sample Rejected</p>
+                  {samplingData?.designer_feedback && (
+                    <p className="text-xs text-red-700 mt-0.5 italic">&ldquo;{samplingData.designer_feedback}&rdquo;</p>
+                  )}
+                  <p className="text-xs text-red-600 mt-1">Review the feedback, update the design if needed, and send for sampling again.</p>
+                  {(isAssignedToMe || isHead) && (
+                    <Button size="sm" onClick={sendForSampling} disabled={sendingSampling} className="mt-2 bg-red-600 hover:bg-red-700 h-7 text-xs">
+                      {sendingSampling ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                      Resend for Sampling
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
           </CardContent>
@@ -1234,72 +1651,6 @@ export function DesignTab({ product, profile, data, salesData, files, submission
               </Button>
               <input ref={techPackRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleTechPackUpload} />
             </div>
-            {/* Multi-colour variant selector */}
-            {techPackVariants.length > 1 && (
-              <div className="mt-3 pt-3 border-t border-purple-200 space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold text-purple-800">
-                    {techPackVariants.length} colour variants found — select one to load
-                  </p>
-                </div>
-                {/* Colour pills */}
-                <div className="flex flex-wrap gap-2">
-                  {techPackVariants.map((v, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setSelectedVariantIdx(i)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                        i === selectedVariantIdx
-                          ? 'bg-purple-600 text-white border-purple-600'
-                          : 'bg-white text-purple-700 border-purple-300 hover:border-purple-500'
-                      }`}
-                    >
-                      {v.colourName || `Colour ${i + 1}`}
-                    </button>
-                  ))}
-                </div>
-                {/* Selected variant preview */}
-                {(() => {
-                  const v = techPackVariants[selectedVariantIdx]
-                  const rows: [string, string][] = [
-                    ['Fabric',        v.fabric],
-                    ['Lining',        v.lining],
-                    ['Air Mesh',      v.airMesh],
-                    ['Zipper',        v.zipper],
-                    ['Puller',        v.puller],
-                    ['9mm Patta',     v.patta9mm],
-                    ['Patta 1',       v.patta1],
-                    ['Patta 2',       v.patta2],
-                    ['Lader Lock',    v.laderLock],
-                    ['Branding',      v.branding],
-                    ['Screen Print',  v.screenPrint],
-                    ['Digital Print', v.digitalPrint],
-                    ['Bartech',       v.bartech],
-                    ['Remarks',       v.remarks],
-                  ].filter(([, val]) => val) as [string, string][]
-                  return rows.length > 0 ? (
-                    <div className="bg-white rounded-lg border border-purple-100 px-3 py-2.5">
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
-                        {rows.map(([label, val]) => (
-                          <div key={label}>
-                            <p className="text-[10px] font-semibold text-purple-300 uppercase tracking-wide">{label}</p>
-                            <p className="text-xs text-gray-800 truncate">{val}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null
-                })()}
-                <Button
-                  size="sm"
-                  className="bg-purple-600 hover:bg-purple-700 h-7 text-xs"
-                  onClick={() => loadVariantIntoForm(techPackVariants[selectedVariantIdx])}
-                >
-                  <CheckCircle2 className="h-3 w-3" />
-                  Load {techPackVariants[selectedVariantIdx]?.colourName || `Colour ${selectedVariantIdx + 1}`} into form
-                </Button>
-              </div>
-            )}
             {/* Single colour result */}
             {techPackResult && techPackVariants.length <= 1 && (
               <div className="mt-3 pt-3 border-t border-purple-200">
@@ -1495,7 +1846,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
               </div>
               <div className="space-y-1">
                 <Label className="text-xs text-gray-500">Channel</Label>
-                <Select value={form.channel} onValueChange={(v) => setForm(f => ({ ...f, channel: v }))} disabled={!canEditFields}>
+                <Select value={forms[0]?.channel || ""} onValueChange={(v) => setForms(prev => { const copy = [...prev]; copy[0] = { ...copy[0], channel: v }; return copy })} disabled={!canEditFields}>
                   <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select channel" /></SelectTrigger>
                   <SelectContent>
                     {CHANNELS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
@@ -1505,76 +1856,97 @@ export function DesignTab({ product, profile, data, salesData, files, submission
             </div>
           </div>
 
-          {/* Tech Pack fields */}
+          
+          {forms.length > 1 && (
+            <div className="flex flex-wrap gap-2 mb-6">
+              {forms.map((f: any, i: number) => (
+                <button
+                  key={i}
+                  onClick={() => setActiveVariantIdx(i)}
+                  className={`px-4 py-2 rounded-full text-xs font-semibold border transition-all ${
+                    i === activeVariantIdx
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  Variant {i + 1} {f.sample_color ? `(${f.sample_color})` : ''}
+                </button>
+              ))}
+            </div>
+          )}
+          {forms.map((form, formIdx) => (
+  <div key={formIdx} className={`mb-8 border-t pt-6 first:border-0 first:pt-0 ${formIdx !== activeVariantIdx ? 'hidden' : ''}`}>
+    <h3 className="text-sm font-bold text-gray-700 mb-4">Design Variant {formIdx + 1} {form.sample_color && `(${form.sample_color})`}</h3>
+    {/* Tech Pack fields */}
           <div>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Tech Pack</p>
             <div className="grid grid-cols-3 gap-3 mb-3">
-              {F({ label: "Designer Name", field: "designer_name" })}
+              {F({  label: "Designer Name", field: "designer_name" , formIdx })}
               <div className="space-y-1">
                 <Label className="text-xs text-gray-500">Style Name</Label>
                 <Input value={product.name} disabled className="h-8 text-sm bg-gray-50 text-gray-500" />
               </div>
-              {F({ label: "Farma", field: "farma", placeholder: "e.g. DAYSTEP", mono: true })}
+              {F({  label: "Farma", field: "farma", placeholder: "e.g. DAYSTEP", mono: true , formIdx })}
             </div>
             <div className="grid grid-cols-2 gap-3 mb-3">
-              {F({ label: "Season Year", field: "season_year", placeholder: "e.g. 2026-2027" })}
+              {F({  label: "Season Year", field: "season_year", placeholder: "e.g. 2026-2027" , formIdx })}
               <div className="space-y-1">
                 <Label className="text-xs text-gray-500">Sample Color</Label>
                 <Input placeholder="e.g. Midnight Black" value={form.sample_color}
-                  onChange={e => setForm(f => ({ ...f, sample_color: e.target.value }))}
+                  onChange={e => setForms(prev => { const copy = [...prev]; copy[formIdx] = { ...copy[formIdx], sample_color: e.target.value }; return copy })}
                   disabled={!canEditFields} className="h-8 text-sm" />
               </div>
             </div>
           </div>
 
           <div className="grid grid-cols-3 gap-3">
-            {F({ label: "Fabric", field: "fabric", placeholder: "e.g. 600*600 PU-BLK" })}
-            {F({ label: "Lining", field: "lining", placeholder: "e.g. PLN LGR" })}
-            {F({ label: "Air Mesh", field: "air_mesh", placeholder: "YES / NO / NA" })}
+            {F({  label: "Fabric", field: "fabric", placeholder: "e.g. 600*600 PU-BLK" , formIdx })}
+            {F({  label: "Lining", field: "lining", placeholder: "e.g. PLN LGR" , formIdx })}
+            {F({  label: "Air Mesh", field: "air_mesh", placeholder: "YES / NO / NA" , formIdx })}
           </div>
           <div className="grid grid-cols-3 gap-3">
-            {F({ label: "Zipper", field: "zipper", placeholder: "e.g. 8 NO.-BLK" })}
-            {F({ label: "Puller", field: "puller", placeholder: "e.g. PVC PRIO NEW-BLK" })}
-            {F({ label: "9mm Patta", field: "patta_9mm", placeholder: "e.g. BLK+HANGER" })}
+            {F({  label: "Zipper", field: "zipper", placeholder: "e.g. 8 NO.-BLK" , formIdx })}
+            {F({  label: "Puller", field: "puller", placeholder: "e.g. PVC PRIO NEW-BLK" , formIdx })}
+            {F({  label: "9mm Patta", field: "patta_9mm", placeholder: "e.g. BLK+HANGER" , formIdx })}
           </div>
           <div className="grid grid-cols-3 gap-3">
-            {F({ label: "Patta 1", field: "patta_1", placeholder: 'e.g. 0.75"-BLK' })}
-            {F({ label: "Patta 2", field: "patta_2", placeholder: "e.g. NA" })}
-            {F({ label: "Lader Lock", field: "lader_lock", placeholder: 'e.g. 0.75"-BLK' })}
+            {F({  label: "Patta 1", field: "patta_1", placeholder: 'e.g. 0.75"-BLK' , formIdx })}
+            {F({  label: "Patta 2", field: "patta_2", placeholder: "e.g. NA" , formIdx })}
+            {F({  label: "Lader Lock", field: "lader_lock", placeholder: 'e.g. 0.75"-BLK' , formIdx })}
           </div>
           <div className="grid grid-cols-3 gap-3">
-            {F({ label: "Branding", field: "branding", placeholder: "e.g. PBR PRIO HOPE-BLK-RED" })}
-            {F({ label: "Screen Print", field: "screen_print", placeholder: "YES / NO / NA" })}
-            {F({ label: "Digital Print", field: "digital_print", placeholder: "YES / NO / NA" })}
+            {F({  label: "Branding", field: "branding", placeholder: "e.g. PBR PRIO HOPE-BLK-RED" , formIdx })}
+            {F({  label: "Screen Print", field: "screen_print", placeholder: "YES / NO / NA" , formIdx })}
+            {F({  label: "Digital Print", field: "digital_print", placeholder: "YES / NO / NA" , formIdx })}
           </div>
           <div className="grid grid-cols-3 gap-3">
-            {F({ label: "Bartech", field: "bartech", placeholder: "e.g. BLK" })}
-            {F({ label: "Re-sampling By", field: "re_sampling_by" })}
+            {F({  label: "Bartech", field: "bartech", placeholder: "e.g. BLK" , formIdx })}
+            {F({  label: "Re-sampling By", field: "re_sampling_by" , formIdx })}
             <div className="space-y-1">
-              <Label className="text-xs text-gray-500">Remarks</Label>
-              <Textarea placeholder="e.g. USE 600×600 PVC FABRIC IN BACK" value={form.remarks}
-                onChange={e => setForm(f => ({ ...f, remarks: e.target.value }))}
+              <Label className="text-xs text-gray-500">Remarks <span className="text-gray-400 font-normal">(use for colour-specific differences, e.g. "BLACK: BLK zipper — GREEN: GRN zipper")</span></Label>
+              <Textarea placeholder="e.g. BLACK: 8NO BLK zipper, BLK puller — GREEN: 8NO GRN zipper, GRN puller" value={form.remarks}
+                onChange={e => setForms(prev => { const copy = [...prev]; copy[formIdx] = { ...copy[formIdx], remarks: e.target.value }; return copy })}
                 disabled={!canEditFields} rows={2} className="text-sm" />
             </div>
           </div>
           <div className="grid grid-cols-3 gap-3">
-            {F({ label: "Add On 1", field: "add_on_1" })}
-            {F({ label: "Add On 2", field: "add_on_2" })}
-            {F({ label: "Add On 3", field: "add_on_3" })}
+            {F({  label: "Add On 1", field: "add_on_1" , formIdx })}
+            {F({  label: "Add On 2", field: "add_on_2" , formIdx })}
+            {F({  label: "Add On 3", field: "add_on_3" , formIdx })}
           </div>
           <div className="grid grid-cols-2 gap-3">
-            {F({ label: "Designer Sign", field: "designer_sign" })}
+            {F({  label: "Designer Sign", field: "designer_sign" , formIdx })}
           </div>
 
           {/* Colour SKUs */}
           <div className="space-y-1.5">
             <Label className="text-xs text-gray-500">Colour SKUs</Label>
             <div className="flex flex-wrap gap-2 mb-2">
-              {form.color_skus.map((sku, i) => (
+              {(form.color_skus as string[]).map((sku: string, i: number) => (
                 <span key={i} className="flex items-center gap-1 bg-gray-100 text-gray-700 text-xs px-2.5 py-1 rounded-full font-mono">
                   {sku}
                   {canEditFields && (
-                    <button onClick={() => setForm(f => ({ ...f, color_skus: f.color_skus.filter((_, j) => j !== i) }))}>
+                    <button onClick={() => setForms(prev => { const copy = [...prev]; copy[formIdx] = { ...copy[formIdx], color_skus: copy[formIdx].color_skus.filter((_: any, j: number) => j !== i) }; return copy })}>
                       <X className="h-3 w-3 hover:text-red-500" />
                     </button>
                   )}
@@ -1587,14 +1959,14 @@ export function DesignTab({ product, profile, data, salesData, files, submission
                   onChange={e => setNewSku(e.target.value.toUpperCase())}
                   onKeyDown={e => {
                     if (e.key === 'Enter' && newSku.trim()) {
-                      setForm(f => ({ ...f, color_skus: [...f.color_skus, newSku.trim()] }))
+                      setForms(prev => { const copy = [...prev]; copy[formIdx] = { ...copy[formIdx], color_skus: [...copy[formIdx].color_skus, newSku.trim()] }; return copy })
                       setNewSku('')
                     }
                   }}
                   className="font-mono h-8 text-sm"
                 />
                 <Button type="button" variant="outline" size="icon" className="h-8 w-8"
-                  onClick={() => { if (newSku.trim()) { setForm(f => ({ ...f, color_skus: [...f.color_skus, newSku.trim()] })); setNewSku('') } }}
+                  onClick={() => { if (newSku.trim()) { setForms(prev => { const copy = [...prev]; copy[formIdx] = { ...copy[formIdx], color_skus: [...copy[formIdx].color_skus, newSku.trim()] }; return copy }); setNewSku('') } }}
                 >
                   <Plus className="h-3.5 w-3.5" />
                 </Button>
@@ -1607,11 +1979,14 @@ export function DesignTab({ product, profile, data, salesData, files, submission
             <Label className="text-xs text-gray-500">Unique Feature / USP</Label>
             <Textarea placeholder="Unique selling point or feature…"
               value={form.unique_feature}
-              onChange={e => setForm(f => ({ ...f, unique_feature: e.target.value }))}
+              onChange={e => setForms(prev => { const copy = [...prev]; copy[formIdx] = { ...copy[formIdx], unique_feature: e.target.value }; return copy })}
               disabled={!canEditFields} rows={3} className="text-sm" />
           </div>
 
-          {saved && (
+          
+  </div>
+))}
+{saved && (
             <p className="text-sm text-green-600 bg-green-50 border border-green-200 rounded-lg px-3 py-2">Changes saved.</p>
           )}
           {showActions && (
@@ -1623,9 +1998,30 @@ export function DesignTab({ product, profile, data, salesData, files, submission
                 </Button>
               )}
               {!data?.is_completed && (
-                <Button variant="outline" onClick={() => setConfirmOpen(true)} disabled={saving} className="text-green-600 border-green-200">
+                <Button
+                  variant="outline"
+                  disabled={saving || !samplingApproved}
+                  className="text-green-600 border-green-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={!samplingApproved ? 'The sample must be approved before design can be marked complete' : undefined}
+                  onClick={() => {
+                    const missing: string[] = []
+                    if (!forms[0]?.channel)  missing.push('Channel')
+                    if (!forms.some(f => f.farma)) missing.push('Farma')
+                    if (!forms.some(f => f.fabric)) missing.push('Fabric')
+                    if (!forms.some(f => f.zipper)) missing.push('Zipper')
+                    if (!designFiles.some(f => f.review_status === 'approved')) missing.push('at least 1 approved illustration')
+                    if (missing.length > 0) {
+                      toast.error(`Complete required fields first: ${missing.join(', ')}`)
+                      return
+                    }
+                    setConfirmOpen(true)
+                  }}
+                >
                   Mark Complete
                 </Button>
+              )}
+              {!data?.is_completed && !samplingApproved && (
+                <span className="text-xs text-gray-400">Mark Complete unlocks once the sample is approved</span>
               )}
             </div>
           )}
@@ -1634,7 +2030,7 @@ export function DesignTab({ product, profile, data, salesData, files, submission
       <ConfirmDialog
         open={confirmOpen}
         title="Mark Design Complete?"
-        description="This will advance the product to the Sampling stage and notify the sampling team. Design fields will be locked."
+        description="Sampling has been approved. This will advance the product directly to Merchandising and lock the design fields."
         confirmLabel="Yes, Mark Complete"
         loading={saving}
         onConfirm={() => { setConfirmOpen(false); markComplete() }}

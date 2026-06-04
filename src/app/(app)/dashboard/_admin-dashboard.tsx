@@ -2,16 +2,16 @@ import { createClient } from '@/lib/supabase/server'
 import { Header } from '@/components/layout/header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
-import { Package, TrendingUp, Clock, CheckCircle2, ArrowRight, AlertCircle } from 'lucide-react'
+import { Package, TrendingUp, Clock, CheckCircle2, ArrowRight, AlertCircle, CalendarDays } from 'lucide-react'
 import Link from 'next/link'
 import { STAGE_LABELS, type WorkflowStage } from '@/lib/types'
-import { one, formatDateTime, formatShortDate, daysSince, isOverdue } from '@/lib/utils'
+import { one, formatDateTime, formatShortDate, daysSince, daysUntil, isOverdue } from '@/lib/utils'
 import type { Profile } from '@/lib/types'
 import { KpiCard, StageBadge } from './_shared'
+import { UnlockRequestsPanel, type UnlockRequest } from './_unlock-requests'
 
-// Active pipeline products are fetched with a hard limit per page to prevent
-// unbounded queries as the catalog grows. Bottleneck/aging analysis stays accurate
-// because it only looks at active (non-live) products within the page window.
+// Pipeline products are paginated for detailed per-product panels (exceptions, launch readiness).
+// Bottleneck counts use a separate global query; aging uses activity_logs for accurate stage-entry times.
 const PAGE_SIZE = 50
 
 type ManagementProduct = {
@@ -45,6 +45,9 @@ export async function AdminDashboard({ profile, filter, page }: { profile: Profi
     { count: marketingComplete },
     { count: salesComplete },
     { data: pendingSamples },
+    { data: allActiveStagesData },
+    { data: stageEntryLogs },
+    { data: rawUnlockRequests },
   ] = await Promise.all([
     supabase.from('products').select('*', { count: 'exact', head: true }),
     supabase.from('products').select('*', { count: 'exact', head: true }).eq('workflow_stage', 'product_live'),
@@ -65,6 +68,21 @@ export async function AdminDashboard({ profile, filter, page }: { profile: Profi
     supabase.from('sampling_data')
       .select('product_id, sample_review_status, updated_at, product:products(id, name, workflow_stage)')
       .eq('sample_review_status', 'pending_review'),
+    // Global stage distribution for bottleneck (all active products, not paged)
+    supabase.from('products')
+      .select('workflow_stage')
+      .not('workflow_stage', 'eq', 'product_live'),
+    // Stage entry timestamps for accurate aging (most recent stage-advance per product)
+    supabase.from('activity_logs')
+      .select('product_id, created_at')
+      .ilike('action', 'advanced stage to%')
+      .order('created_at', { ascending: false })
+      .limit(2000),
+    // Pending stage unlock requests
+    supabase.from('stage_unlock_requests')
+      .select('id, product_id, stage, reason, created_at, requester:profiles!requested_by(full_name), product:products(id, name)')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true }),
   ])
 
   const total    = totalProducts || 0
@@ -75,10 +93,55 @@ export async function AdminDashboard({ profile, filter, page }: { profile: Profi
   const totalPages = Math.ceil((activeCount || 0) / PAGE_SIZE)
 
   const mgmtProducts    = (managementProducts || []) as unknown as ManagementProduct[]
-  const stageCounts     = mgmtProducts.reduce<Record<string, number>>((acc, p) => { acc[p.workflow_stage] = (acc[p.workflow_stage] || 0) + 1; return acc }, {})
-  const bottlenecks     = Object.entries(stageCounts).map(([stage, count]) => ({ stage, count, owner: STAGE_LABELS[stage as WorkflowStage] ?? stage })).sort((a, b) => b.count - a.count).slice(0, 5)
-  const stuckProducts   = mgmtProducts.map(p => ({ ...p, ageDays: daysSince(p.updated_at || p.created_at) })).filter(p => p.ageDays >= 7).sort((a, b) => b.ageDays - a.ageDays).slice(0, 6)
+
+  // Global bottleneck: counts across ALL active products (not just current page)
+  const globalStageCounts = (allActiveStagesData || []).reduce<Record<string, number>>((acc, p) => {
+    const stage = (p as { workflow_stage: string }).workflow_stage
+    acc[stage] = (acc[stage] || 0) + 1
+    return acc
+  }, {})
+  const globalActiveCount = (allActiveStagesData || []).length
+  const bottlenecks = Object.entries(globalStageCounts)
+    .map(([stage, count]) => ({ stage, count, owner: STAGE_LABELS[stage as WorkflowStage] ?? stage }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5)
+
+  // Accurate aging: time since last stage transition (from activity_logs), not last updated_at
+  const stageEntryMap: Record<string, string> = {}
+  for (const log of stageEntryLogs || []) {
+    const l = log as { product_id: string | null; created_at: string }
+    if (l.product_id && !stageEntryMap[l.product_id]) stageEntryMap[l.product_id] = l.created_at
+  }
+  const stuckProducts = mgmtProducts
+    .map(p => ({ ...p, ageDays: daysSince(stageEntryMap[p.id] || p.created_at) }))
+    .filter(p => p.ageDays >= 7)
+    .sort((a, b) => b.ageDays - a.ageDays)
+    .slice(0, 6)
+
+  // Pending unlock requests normalised for the client component
+  const pendingUnlockRequests: UnlockRequest[] = (rawUnlockRequests || []).map(r => {
+    const req = r as {
+      id: string; product_id: string; stage: string; reason: string | null; created_at: string
+      requester: { full_name: string } | { full_name: string }[] | null
+      product: { id: string; name: string } | { id: string; name: string }[] | null
+    }
+    return {
+      id: req.id,
+      product_id: req.product_id,
+      stage: req.stage as WorkflowStage,
+      reason: req.reason,
+      created_at: req.created_at,
+      requesterName: (one(req.requester) as { full_name: string } | null)?.full_name ?? null,
+      productName: (one(req.product) as { name: string } | null)?.name ?? null,
+    }
+  })
   const overdueProducts = mgmtProducts.map(p => ({ ...p, sales: one(p.sales_data) as { deadline_date: string | null } | null })).filter(p => isOverdue(p.sales?.deadline_date)).sort((a, b) => new Date(a.sales?.deadline_date || '').getTime() - new Date(b.sales?.deadline_date || '').getTime()).slice(0, 6)
+  const upcomingDeadlines = mgmtProducts
+    .map(p => ({ ...p, sales: one(p.sales_data) as { deadline_date: string | null } | null }))
+    .map(p => ({ ...p, daysLeft: daysUntil(p.sales?.deadline_date ?? null) }))
+    .filter(p => p.daysLeft !== null && p.daysLeft >= 0 && p.daysLeft <= 7)
+    .sort((a, b) => (a.daysLeft ?? 99) - (b.daysLeft ?? 99))
+    .slice(0, 6)
   const launchReadiness = mgmtProducts
     .filter(p => ['bom_finalized', 'marketing_ready', 'sales_priced'].includes(p.workflow_stage))
     .map(p => ({
@@ -129,6 +192,10 @@ export async function AdminDashboard({ profile, filter, page }: { profile: Profi
           </Card>
         </div>
 
+        {pendingUnlockRequests.length > 0 && (
+          <UnlockRequestsPanel requests={pendingUnlockRequests} adminId={profile.id} />
+        )}
+
         {show('sample-approval') && pendingSampleApproval > 0 && (
           <Card className="border-cyan-200">
             <CardHeader className="pb-3">
@@ -169,7 +236,7 @@ export async function AdminDashboard({ profile, filter, page }: { profile: Profi
             </CardHeader>
             <CardContent className="space-y-3">
               {bottlenecks.length > 0 ? bottlenecks.map(item => {
-                const pct = mgmtProducts.length > 0 ? Math.round((item.count / mgmtProducts.length) * 100) : 0
+                const pct = globalActiveCount > 0 ? Math.round((item.count / globalActiveCount) * 100) : 0
                 return (
                   <div key={item.stage}>
                     <div className="flex items-center justify-between mb-1">
@@ -211,6 +278,42 @@ export async function AdminDashboard({ profile, filter, page }: { profile: Profi
               {overdueProducts.length === 0 && exceptions.length === 0 && <p className="text-sm text-gray-400">No critical exceptions found.</p>}
             </CardContent>
           </Card>
+
+          {upcomingDeadlines.length > 0 && (
+            <Card className="border-orange-200 xl:col-span-2">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2 text-orange-700">
+                  <CalendarDays className="h-4 w-4" /> Deadlines in the Next 7 Days ({upcomingDeadlines.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead><tr className="border-b border-gray-100 bg-gray-50">
+                    <th className="text-left px-6 py-2 text-xs font-semibold text-gray-400 uppercase">Product</th>
+                    <th className="text-left px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Stage</th>
+                    <th className="text-right px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Deadline</th>
+                    <th className="px-4 py-2" />
+                  </tr></thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {upcomingDeadlines.map(p => (
+                      <tr key={`upcoming-${p.id}`} className="hover:bg-orange-50">
+                        <td className="px-6 py-3"><Link href={`/products/${p.id}`} className="font-medium text-gray-900 hover:text-blue-600">{p.name || p.sku}</Link></td>
+                        <td className="px-4 py-3"><StageBadge stage={p.workflow_stage} /></td>
+                        <td className="px-4 py-3 text-right text-xs">
+                          {p.daysLeft === 0
+                            ? <span className="font-semibold text-red-600">Due today</span>
+                            : <span className="text-amber-600 font-medium">{p.daysLeft}d · {formatShortDate(p.sales?.deadline_date || '')}</span>}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <Link href={`/products/${p.id}`} className="text-xs text-blue-600 hover:underline flex items-center gap-1 justify-end">Open <ArrowRight className="h-3 w-3" /></Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader className="pb-3">
@@ -267,7 +370,7 @@ export async function AdminDashboard({ profile, filter, page }: { profile: Profi
         {/* Pipeline pagination — shows which page of active products the analysis covers */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between text-sm text-gray-500 bg-gray-50 rounded-lg px-4 py-3">
-            <span>Pipeline analysis: page {page} of {totalPages} ({PAGE_SIZE} products/page)</span>
+            <span>Detailed panels cover page {page} of {totalPages} ({PAGE_SIZE} products/page). Bottleneck analysis covers all {globalActiveCount} active products.</span>
             <div className="flex gap-2">
               {page > 1 && (
                 <Link href={`?page=${page - 1}${filter ? `&f=${filter}` : ''}`} className="text-blue-600 hover:underline">← Previous</Link>

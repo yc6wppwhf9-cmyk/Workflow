@@ -72,32 +72,41 @@ export async function GET(request: NextRequest) {
   if (design) {
     const ws1 = wb.addWorksheet('Design Tech Pack')
     addTitleRow(ws1, `Design Tech Pack — ${product.name}`)
-    let r = 3
-    secHeader(ws1, r++, 'Product Information')
-    dataRow(ws1, r++, 'Product Name',  product.name,            'Category',      product.category)
-    dataRow(ws1, r++, 'Sub-Category',  product.sub_category,    'Brand',         product.brand)
-    dataRow(ws1, r++, 'Channel',       design.channel,          'Season / Year', design.season_year)
-    dataRow(ws1, r++, 'Designer',      design.designer_name,    'Farma',         design.farma)
-    r++; secHeader(ws1, r++, 'Materials')
-    dataRow(ws1, r++, 'Fabric',        design.fabric,           'Lining',        design.lining)
-    dataRow(ws1, r++, 'Air Mesh',      design.air_mesh,         'Sample Color',  design.sample_color)
-    r++; secHeader(ws1, r++, 'Hardware & Trims')
-    dataRow(ws1, r++, 'Zipper',        design.zipper,           'Puller',        design.puller)
-    dataRow(ws1, r++, '9mm Patta',     design.patta_9mm,        'Patta 1',       design.patta_1)
-    dataRow(ws1, r++, 'Patta 2',       design.patta_2,          'Lader Lock',    design.lader_lock)
-    r++; secHeader(ws1, r++, 'Branding & Print')
-    dataRow(ws1, r++, 'Branding',      design.branding,         'Screen Print',  design.screen_print)
-    dataRow(ws1, r++, 'Digital Print', design.digital_print,    'Bartech',       design.bartech)
-    r++; secHeader(ws1, r++, 'Additional')
-    dataRow(ws1, r++, 'Re-sampling By',design.re_sampling_by,   'Designer Sign', design.designer_sign)
-    dataRow(ws1, r++, 'Add On 1',      design.add_on_1,         'Add On 2',      design.add_on_2)
-    dataRow(ws1, r++, 'Add On 3',      design.add_on_3,         '',              '')
-    if (design.remarks) {
-      r++; secHeader(ws1, r++, 'Remarks')
-      ws1.mergeCells(`A${r}:D${r}`)
-      ws1.getCell(`A${r}`).value = design.remarks
-      ws1.getCell(`A${r}`).alignment = { wrapText: true, vertical: 'top' }
-      ws1.getRow(r).height = Math.max(20, String(design.remarks).split('\n').length * 16 + 10)
+    const variants = design.variants && design.variants.length > 0 ? design.variants : [design];
+    let r = 3;
+
+    for (let i = 0; i < variants.length; i++) {
+      const variant = variants[i];
+      if (i > 0) r += 2;
+      secHeader(ws1, r++, 'Variant ' + (i + 1) + (variant.sample_color ? ' - ' + variant.sample_color : ''));
+
+      secHeader(ws1, r++, 'Product Information')
+      dataRow(ws1, r++, 'Product Name', product.name,            'Category',      product.category)
+      dataRow(ws1, r++, 'Sub-Category', product.sub_category,    'Brand',         product.brand)
+      dataRow(ws1, r++, 'Channel',      variant.channel || design.channel, 'Season / Year', variant.season_year)
+      dataRow(ws1, r++, 'Designer',     variant.designer_name,    'Farma',         variant.farma)
+      r++; secHeader(ws1, r++, 'Materials')
+      dataRow(ws1, r++, 'Fabric',       variant.fabric,           'Lining',        variant.lining)
+      dataRow(ws1, r++, 'Air Mesh',     variant.air_mesh,         'Sample Color',  variant.sample_color)
+      r++; secHeader(ws1, r++, 'Hardware & Trims')
+      dataRow(ws1, r++, 'Zipper',       variant.zipper,           'Puller',        variant.puller)
+      dataRow(ws1, r++, '9mm Patta',    variant.patta_9mm,        'Patta 1',       variant.patta_1)
+      dataRow(ws1, r++, 'Patta 2',      variant.patta_2,          'Lader Lock',    variant.lader_lock)
+      r++; secHeader(ws1, r++, 'Branding & Print')
+      dataRow(ws1, r++, 'Branding',     variant.branding,         'Screen Print',  variant.screen_print)
+      dataRow(ws1, r++, 'Digital Print',variant.digital_print,    'Bartech',       variant.bartech)
+      r++; secHeader(ws1, r++, 'Additional')
+      dataRow(ws1, r++, 'Re-sampling By', variant.re_sampling_by, 'Designer Sign', variant.designer_sign)
+      dataRow(ws1, r++, 'Add On 1',     variant.add_on_1,         'Add On 2',      variant.add_on_2)
+      dataRow(ws1, r++, 'Add On 3',     variant.add_on_3,         '',              '')
+      if (variant.remarks) {
+        r++; secHeader(ws1, r++, 'Remarks')
+        ws1.mergeCells(`A${r}:D${r}`)
+        ws1.getCell(`A${r}`).value = variant.remarks
+        ws1.getCell(`A${r}`).alignment = { wrapText: true, vertical: 'top' }
+        ws1.getRow(r).height = Math.max(20, String(variant.remarks).split('\n').length * 16 + 10)
+        r++
+      }
     }
   }
 

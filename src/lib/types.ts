@@ -133,6 +133,7 @@ export interface DesignData {
   designer_sign: string | null
   is_completed: boolean
   is_locked: boolean
+  variants: any[] | null
   updated_by: string | null
   updated_at: string
 }
@@ -296,6 +297,8 @@ export const WORKFLOW_STAGES: WorkflowStage[] = [
   'merchandising_completed',
   'bom_finalized',
   'marketing_ready',
+  'sales_priced',
+  'product_live',
 ]
 
 export const STAGE_LABELS: Record<WorkflowStage, string> = {

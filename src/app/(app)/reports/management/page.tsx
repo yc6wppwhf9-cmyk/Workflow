@@ -15,8 +15,9 @@ function stageDays(start: string | null | undefined, end: string | null | undefi
 }
 
 function computeScore(avgDays: number, targetDays: number, reworks: number, rejections: number, onTimeCount: number, total: number): number {
+  if (total === 0) return 0
   const overTarget = Math.max(0, avgDays - targetDays)
-  const onTimeRate = total > 0 ? onTimeCount / total : 0
+  const onTimeRate = onTimeCount / total
   const raw = 100 - overTarget * 6 - reworks * 7 - rejections * 4 + onTimeRate * 8
   return Math.max(0, Math.min(100, Math.round(raw)))
 }
@@ -43,7 +44,7 @@ export default async function ManagementReviewPage() {
   ] = await Promise.all([
     supabase.from('products').select(`
       id, name, category, brand, workflow_stage, created_at,
-      design_data(assigned_to, updated_at, is_completed),
+      design_data(assigned_to, updated_at, is_completed, color_skus),
       sampling_data(sample_review_status, designer_feedback, reviewed_at, is_completed, updated_at),
       merchandising_data(assigned_to, updated_at, is_completed),
       bom_data(fg_inv_code, updated_at, is_completed, updated_by),
@@ -106,11 +107,19 @@ export default async function ManagementReviewPage() {
     const bom = one(p.bom_data)
     const mkt = one(p.marketing_data)
 
-    const designEnd   = design?.is_completed   ? design.updated_at   : null
-    const samplingEnd = sampling?.is_completed ? sampling.updated_at : null
-    const merchEnd    = merch?.is_completed    ? merch.updated_at    : null
-    const bomEnd      = bom?.is_completed      ? bom.updated_at      : null
-    const mktEnd      = mkt?.is_completed      ? mkt.updated_at      : null
+    // If the product has advanced past a stage (even without is_completed flag being set),
+    // use updated_at as a proxy for when that stage was finished.
+    const s = p.workflow_stage
+    const pastDesign   = ['sampling_completed','merchandising_completed','bom_finalized','marketing_ready','sales_priced','product_live'].includes(s)
+    const pastSampling = ['merchandising_completed','bom_finalized','marketing_ready','sales_priced','product_live'].includes(s)
+    const pastMerch    = ['bom_finalized','marketing_ready','sales_priced','product_live'].includes(s)
+    const pastBom      = ['marketing_ready','sales_priced','product_live'].includes(s)
+
+    const designEnd   = (design?.is_completed   || pastDesign)   ? (design?.updated_at   ?? null) : null
+    const samplingEnd = (sampling?.is_completed || pastSampling) ? (sampling?.updated_at ?? null) : null
+    const merchEnd    = (merch?.is_completed    || pastMerch)    ? (merch?.updated_at    ?? null) : null
+    const bomEnd      = (bom?.is_completed      || pastBom)      ? (bom?.updated_at      ?? null) : null
+    const mktEnd      = mkt?.is_completed                        ? (mkt?.updated_at      ?? null) : null
 
     const designDays    = stageDays(p.created_at, designEnd)
     const samplingDays  = designEnd   ? stageDays(designEnd,   samplingEnd) : 0
@@ -125,6 +134,10 @@ export default async function ManagementReviewPage() {
 
     const designerName = design?.assigned_to ? (profileMap.get(design.assigned_to)?.full_name ?? null) : null
     const jrMerchName  = merch?.assigned_to  ? (profileMap.get(merch.assigned_to)?.full_name  ?? null) : null
+
+    // Number of colour variants (designs) in this product — each is one unit of sampling work
+    const colourSkus  = (design as { color_skus?: string[] | null } | null)?.color_skus
+    const designCount = Math.max(1, Array.isArray(colourSkus) ? colourSkus.length : 0)
 
     const isFullyComplete = ['sales_priced', 'product_live'].includes(p.workflow_stage) || Boolean(mkt?.is_completed)
     const delayDays = Math.max(0, totalDays - 30)
@@ -160,6 +173,7 @@ export default async function ManagementReviewPage() {
       jrMerchName,
       jrMerchId: merch?.assigned_to ?? null,
       delayDays,
+      designCount,
       sampleStatus: sampling?.sample_review_status ?? null,
       sampleFeedback: sampling?.designer_feedback ?? null,
       invId: bom?.fg_inv_code ?? null,
@@ -195,6 +209,10 @@ export default async function ManagementReviewPage() {
   const jrMerchMap = new Map<string, { products: string[]; reworks: number; onTime: number }>()
   for (const pm of productMetrics) {
     if (!pm.jrMerchId) continue
+    // Only count people whose role is actually merchandising — prevents sampling
+    // team members assigned to merch data from appearing in this leaderboard.
+    const role = profileMap.get(pm.jrMerchId)?.role
+    if (!role || !['merchandising', 'merchandising_head'].includes(role)) continue
     if (!jrMerchMap.has(pm.jrMerchId)) jrMerchMap.set(pm.jrMerchId, { products: [], reworks: 0, onTime: 0 })
     const ms = jrMerchMap.get(pm.jrMerchId)!
     ms.products.push(pm.id)
@@ -212,24 +230,30 @@ export default async function ManagementReviewPage() {
     return { id, name, products: ms.products.length, avgDays, reworks: ms.reworks, rejections: 0, onTime: ms.onTime, score, accuracy } as PersonStat
   }).sort((a, b) => b.score - a.score)
 
-  // ── BOM log (per-product executor from updated_by) ──────────────────────
-  const bomLog: BomLogRow[] = productMetrics.map(pm => {
-    const execId   = pm.bomUpdatedBy
-    const execName = execId ? (profileMap.get(execId)?.full_name ?? 'BOM Team') : 'BOM Team'
-    return {
-      productId:   pm.id,
-      productName: pm.name,
-      exec:        execName,
-      days:        pm.bomDays,
-      errors:      0,
-      invId:       pm.invId,
-      status:      pm.invId ? 'Approved' : pm.bomDays > 0 ? 'In Progress' : '—',
-    }
-  })
+  // ── BOM log — only products that have ACTUAL BOM work done ──────────────
+  // Products at BOM stage with zero work (bomDays=0, no invId, no updatedBy) are
+  // excluded — they're pending, not "logged". They show up in the pending count only.
+  const BOM_STAGES = ['bom_finalized', 'marketing_ready', 'sales_priced', 'product_live']
+  const bomLog: BomLogRow[] = productMetrics
+    .filter(pm => BOM_STAGES.includes(pm.stage) && (pm.bomDays > 0 || pm.invId !== null || pm.bomUpdatedBy !== null))
+    .map(pm => {
+      const execId   = pm.bomUpdatedBy
+      const execName = execId ? (profileMap.get(execId)?.full_name ?? 'BOM Team') : 'BOM Team'
+      return {
+        productId:   pm.id,
+        productName: pm.name,
+        exec:        execName,
+        days:        pm.bomDays,
+        errors:      0,
+        invId:       pm.invId,
+        status:      pm.invId ? 'Approved' : pm.bomDays > 0 ? 'In Progress' : 'Pending',
+      }
+    })
 
-  // BOM exec stats grouped by person
+  // BOM exec stats — only people who have actually done work (exclude generic fallback)
   const bomExecMap = new Map<string, { name: string; products: string[]; totalDays: number; withInv: number }>()
   for (const row of bomLog) {
+    if (!row.exec || row.exec === 'BOM Team') continue  // skip generic fallback
     const key = row.exec
     if (!bomExecMap.has(key)) bomExecMap.set(key, { name: key, products: [], totalDays: 0, withInv: 0 })
     const bs = bomExecMap.get(key)!
@@ -327,20 +351,28 @@ export default async function ManagementReviewPage() {
   }
 
   // ── Marketing deliverables ───────────────────────────────────────────────
+  // Only products that have REACHED the marketing stage are "due" — products
+  // still in design/sampling/BOM aren't delayed on marketing, they just aren't there yet.
+  const MKT_STAGES = ['marketing_ready', 'sales_priced', 'product_live']
+  const mktEligible  = productMetrics.filter(pm => MKT_STAGES.includes(pm.stage))
   const mktCompleted = productMetrics.filter(pm => pm.mktPhotoshoot).length
   const mktCatalog   = productMetrics.filter(pm => pm.mktCatalog).length
   const mktLaunch    = productMetrics.filter(pm => pm.mktLaunchCreative).length
   const mktDone      = productMetrics.filter(pm => pm.stage === 'marketing_ready' || pm.status === 'completed').length
 
+  const pending = (done: number) => Math.max(0, mktEligible.length - done)
   const marketingDeliverables = [
-    { label: 'Photoshoot',     completed: mktCompleted, delayed: productMetrics.length - mktCompleted },
-    { label: 'A+ / Catalog',  completed: mktCatalog,   delayed: productMetrics.length - mktCatalog   },
-    { label: 'Launch Deck',   completed: mktLaunch,    delayed: productMetrics.length - mktLaunch    },
-    { label: 'Final Approval', completed: mktDone,     delayed: productMetrics.length - mktDone      },
+    { label: 'Photoshoot',     completed: mktCompleted, delayed: pending(mktCompleted) },
+    { label: 'A+ / Catalog',  completed: mktCatalog,   delayed: pending(mktCatalog)   },
+    { label: 'Launch Deck',   completed: mktLaunch,    delayed: pending(mktLaunch)     },
+    { label: 'Final Approval', completed: mktDone,     delayed: pending(mktDone)       },
   ]
 
-  // Per-product marketing deliverable rows (real data)
-  const mktDeliverableRows: MktDeliverableRow[] = productMetrics.map(pm => ({
+  // Per-product marketing deliverable rows — only products that have ACTUAL marketing
+  // work (at marketing stage AND at least one deliverable started or updatedBy set)
+  const mktDeliverableRows: MktDeliverableRow[] = productMetrics
+    .filter(pm => MKT_STAGES.includes(pm.stage) && (pm.mktPhotoshoot || pm.mktCatalog || pm.mktLaunchCreative || pm.mktUpdatedBy !== null || pm.marketingDays > 0))
+    .map(pm => ({
     productId:       pm.id,
     productName:     pm.name,
     photoshoot:      pm.mktPhotoshoot,

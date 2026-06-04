@@ -1,18 +1,17 @@
 import { createClient } from '@/lib/supabase/server'
 import { Header } from '@/components/layout/header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Clock, CheckCircle2, ArrowRight, XCircle, UserCheck, AlertCircle, Inbox } from 'lucide-react'
+import { Clock, CheckCircle2, ArrowRight, XCircle, UserCheck, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
 import { one, isOverdue, formatShortDate } from '@/lib/utils'
 import type { Profile } from '@/lib/types'
 import { KpiCard } from './_shared'
-import { AssignToMeButton } from '@/components/products/assign-to-me-button'
 
 export async function DesignDashboard({ profile, filter }: { profile: Profile; filter?: string }) {
   const show = (key: string) => !filter || filter === key
   const supabase = await createClient()
 
-  const [{ data: myAssignments }, { data: mySubmissions }, { data: myFiles }, { data: availableWork }] = await Promise.all([
+  const [{ data: myAssignments }, { data: mySubmissions }, { data: myFiles }] = await Promise.all([
     supabase.from('design_data')
       .select('product_id, is_completed, product:products(id, name, workflow_stage, created_at, sales_data(deadline_date), sampling_data(sample_review_status, updated_at))')
       .eq('assigned_to', profile.id),
@@ -25,11 +24,6 @@ export async function DesignDashboard({ profile, filter }: { profile: Profile; f
       .eq('uploaded_by', profile.id)
       .eq('department', 'design')
       .like('file_type', 'image/%'),
-    supabase.from('design_data')
-      .select('product_id, product:products(id, name, workflow_stage, sales_data(deadline_date))')
-      .is('assigned_to', null)
-      .eq('is_completed', false)
-      .limit(20),
   ])
 
   type MySubRow = NonNullable<typeof mySubmissions>[number]
@@ -42,34 +36,33 @@ export async function DesignDashboard({ profile, filter }: { profile: Profile; f
     imagesByProduct[f.product_id] = (imagesByProduct[f.product_id] || 0) + 1
   }
 
-  const assignments = (myAssignments || []).map(a => {
-    const prod = one(a.product) as { id: string; name: string; workflow_stage: string; created_at: string; sales_data?: { deadline_date?: string | null }[] | null } | null
-    const deadline = prod?.sales_data ? (one(prod.sales_data) as { deadline_date?: string | null } | null)?.deadline_date ?? null : null
-    return {
-      ...a,
-      product: prod,
-      deadline,
-      latestSub: latestSubByProduct[a.product_id] ?? null,
-      imagesUploaded: imagesByProduct[a.product_id] ?? 0,
-    }
-  })
+  const assignments = (myAssignments || [])
+    .map(a => {
+      const prod = one(a.product) as { id: string; name: string; workflow_stage: string; created_at: string; sales_data?: { deadline_date?: string | null }[] | null } | null
+      const deadline = prod?.sales_data ? (one(prod.sales_data) as { deadline_date?: string | null } | null)?.deadline_date ?? null : null
+      return {
+        ...a,
+        product: prod,
+        deadline,
+        latestSub: latestSubByProduct[a.product_id] ?? null,
+        imagesUploaded: imagesByProduct[a.product_id] ?? 0,
+      }
+    })
+    // Only show products still actively in the design stage — exclude those that have already advanced
+    .filter(a => a.product?.workflow_stage === 'design_completed' || a.product?.workflow_stage === 'draft')
 
   const allSubs      = mySubmissions || []
   const pendingReview = assignments.filter(a => a.latestSub?.status === 'pending').length
   const needsWork     = assignments.filter(a => !a.latestSub || a.latestSub.status === 'rejected').length
 
-  type AvailRow = { product_id: string; product: { id: string; name: string; sales_data: { deadline_date: string | null }[] | null }[] | null }
-  const available = (availableWork as unknown as AvailRow[] | null) || []
-
   return (
     <div>
       <Header title={`My Work, ${profile.full_name.split(' ')[0]}`} subtitle="Design assignments and submission status" />
       <div className="p-4 sm:p-6 space-y-6">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <KpiCard label="Assigned to Me"      value={assignments.length} icon={UserCheck}   color="bg-violet-50 [&>svg]:text-violet-600" href="?f=all"        active={filter === 'all'} />
-          <KpiCard label="Needs Work"          value={needsWork}          sub="not submitted" icon={AlertCircle} color="bg-amber-50 [&>svg]:text-amber-500"   href="?f=needs-work" active={filter === 'needs-work'} />
-          <KpiCard label="In Review"           value={pendingReview}      sub="awaiting head" icon={Clock}       color="bg-blue-50 [&>svg]:text-blue-600"     href="?f=in-review"  active={filter === 'in-review'} />
-          <KpiCard label="Available to Pick Up" value={available.length}  sub="unassigned"   icon={Inbox}       color="bg-green-50 [&>svg]:text-green-600"   href="?f=available"  active={filter === 'available'} />
+        <div className="grid grid-cols-3 gap-4">
+          <KpiCard label="Assigned to Me" value={assignments.length} icon={UserCheck}   color="bg-violet-50 [&>svg]:text-violet-600" href="?f=all"        active={filter === 'all'} />
+          <KpiCard label="Needs Work"     value={needsWork}          sub="not submitted" icon={AlertCircle} color="bg-amber-50 [&>svg]:text-amber-500"   href="?f=needs-work" active={filter === 'needs-work'} />
+          <KpiCard label="In Review"      value={pendingReview}      sub="awaiting head" icon={Clock}       color="bg-blue-50 [&>svg]:text-blue-600"     href="?f=in-review"  active={filter === 'in-review'} />
         </div>
 
         {show('all') && (
@@ -173,45 +166,6 @@ export async function DesignDashboard({ profile, filter }: { profile: Profile; f
           </Card>
         )}
 
-        {show('available') && (
-          <Card className="border-green-200">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm text-green-700 flex items-center gap-2">
-                <Inbox className="h-4 w-4" /> Available to Pick Up
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0 overflow-x-auto">
-              {available.length === 0 ? (
-                <p className="text-sm text-gray-400 px-6 py-6 text-center">No unassigned products right now.</p>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead><tr className="border-b border-gray-100 bg-gray-50">
-                    <th className="text-left px-6 py-2 text-xs font-semibold text-gray-400 uppercase">Product</th>
-                    <th className="text-left px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Deadline</th>
-                    <th className="px-4 py-2"></th>
-                  </tr></thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {available.map(a => {
-                      const prod     = one(a.product) as { id: string; name: string; sales_data: { deadline_date: string | null }[] | null } | null
-                      const deadline = prod?.sales_data ? (one(prod.sales_data) as { deadline_date?: string | null } | null)?.deadline_date ?? null : null
-                      return (
-                        <tr key={a.product_id} className="hover:bg-green-50">
-                          <td className="px-6 py-3 font-medium text-gray-900">{prod?.name || a.product_id}</td>
-                          <td className="px-4 py-3 text-xs text-gray-500">
-                            {deadline ? <span className={isOverdue(deadline) ? 'text-red-600 font-semibold' : ''}>{formatShortDate(deadline)}</span> : <span className="text-gray-300">—</span>}
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <AssignToMeButton productId={prod?.id || a.product_id} profileId={profile.id} />
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </CardContent>
-          </Card>
-        )}
       </div>
     </div>
   )

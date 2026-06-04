@@ -723,6 +723,10 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
   }
 
   async function deleteFile(file: ProductFile) {
+    if (file.review_status === 'approved') {
+      toast.error('Approved illustrations cannot be deleted.')
+      return
+    }
     await fetch('/api/delete-image', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

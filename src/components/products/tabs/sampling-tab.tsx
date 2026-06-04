@@ -250,7 +250,7 @@ export function SamplingTab({ product, profile, designData, data, files }: Sampl
                 {allSkus.map(sku => (
                   <span key={sku} className="text-xs font-mono bg-violet-100 text-violet-800 px-2 py-0.5 rounded-full">{sku}</span>
                 ))}
-                {designData.sample_color && (
+                {designData?.sample_color && (
                   <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">
                     Sample colour: {designData.sample_color}
                   </span>

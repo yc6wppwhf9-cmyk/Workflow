@@ -230,10 +230,12 @@ export default async function ManagementReviewPage() {
     return { id, name, products: ms.products.length, avgDays, reworks: ms.reworks, rejections: 0, onTime: ms.onTime, score, accuracy } as PersonStat
   }).sort((a, b) => b.score - a.score)
 
-  // ── BOM log — only products that have reached/are at BOM stage ──────────
+  // ── BOM log — only products that have ACTUAL BOM work done ──────────────
+  // Products at BOM stage with zero work (bomDays=0, no invId, no updatedBy) are
+  // excluded — they're pending, not "logged". They show up in the pending count only.
   const BOM_STAGES = ['bom_finalized', 'marketing_ready', 'sales_priced', 'product_live']
   const bomLog: BomLogRow[] = productMetrics
-    .filter(pm => BOM_STAGES.includes(pm.stage))
+    .filter(pm => BOM_STAGES.includes(pm.stage) && (pm.bomDays > 0 || pm.invId !== null || pm.bomUpdatedBy !== null))
     .map(pm => {
       const execId   = pm.bomUpdatedBy
       const execName = execId ? (profileMap.get(execId)?.full_name ?? 'BOM Team') : 'BOM Team'
@@ -248,9 +250,10 @@ export default async function ManagementReviewPage() {
       }
     })
 
-  // BOM exec stats grouped by person
+  // BOM exec stats — only people who have actually done work (exclude generic fallback)
   const bomExecMap = new Map<string, { name: string; products: string[]; totalDays: number; withInv: number }>()
   for (const row of bomLog) {
+    if (!row.exec || row.exec === 'BOM Team') continue  // skip generic fallback
     const key = row.exec
     if (!bomExecMap.has(key)) bomExecMap.set(key, { name: key, products: [], totalDays: 0, withInv: 0 })
     const bs = bomExecMap.get(key)!
@@ -365,8 +368,11 @@ export default async function ManagementReviewPage() {
     { label: 'Final Approval', completed: mktDone,     delayed: pending(mktDone)       },
   ]
 
-  // Per-product marketing deliverable rows (real data)
-  const mktDeliverableRows: MktDeliverableRow[] = productMetrics.map(pm => ({
+  // Per-product marketing deliverable rows — only products that have ACTUAL marketing
+  // work (at marketing stage AND at least one deliverable started or updatedBy set)
+  const mktDeliverableRows: MktDeliverableRow[] = productMetrics
+    .filter(pm => MKT_STAGES.includes(pm.stage) && (pm.mktPhotoshoot || pm.mktCatalog || pm.mktLaunchCreative || pm.mktUpdatedBy !== null || pm.marketingDays > 0))
+    .map(pm => ({
     productId:       pm.id,
     productName:     pm.name,
     photoshoot:      pm.mktPhotoshoot,

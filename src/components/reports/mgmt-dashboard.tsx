@@ -629,6 +629,7 @@ function SamplingTab({ data }: { data: MgmtDashboardData }) {
           <table className="w-full text-sm">
             <thead><tr className="border-b border-gray-100 text-xs text-gray-400 font-medium">
               <th className="text-left pb-2">Product</th>
+              <th className="text-left pb-2">Assigned To</th>
               <th className="text-center pb-2">Designs</th>
               <th className="text-right pb-2">Days at Sampling</th>
               <th className="text-center pb-2">Status</th>
@@ -638,6 +639,7 @@ function SamplingTab({ data }: { data: MgmtDashboardData }) {
               {products.map(p => (
                 <tr key={p.id}>
                   <td className="py-2 font-medium text-xs text-gray-800">{p.name}</td>
+                  <td className="py-2 text-xs text-gray-500">{p.samplerName ?? <span className="text-gray-300">Unassigned</span>}</td>
                   <td className="py-2 text-center">
                     <span className="inline-block px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full text-xs font-medium">{p.designCount}</span>
                   </td>

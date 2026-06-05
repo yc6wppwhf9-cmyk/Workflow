@@ -2,7 +2,7 @@
 
 import { useRef, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCircle2, Clock, Download, ExternalLink, Layers, Loader2, Printer, Send, Trash2, Upload, XCircle } from 'lucide-react'
+import { CheckCircle2, Clock, Download, ExternalLink, FileText, Layers, Loader2, Printer, Send, Trash2, Upload, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -38,6 +38,7 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
   const sampleInputRef = useRef<HTMLInputElement>(null)
+  const pdfInputRef = useRef<HTMLInputElement>(null)
   const [samplerName, setSamplerName] = useState(data?.sampler_name || '')
   const [remarks, setRemarks] = useState(data?.sampler_remarks || '')
   const [assignedTo, setAssignedTo] = useState(data?.assigned_to || '')
@@ -47,6 +48,8 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null)
   const [uploadSuccess, setUploadSuccess] = useState<number | null>(null)
+  const [pdfUploading, setPdfUploading] = useState(false)
+  const [pdfProgress, setPdfProgress] = useState<{ done: number; total: number } | null>(null)
   const [reviewing, setReviewing] = useState(false)
   const [activeVariantIdx, setActiveVariantIdx] = useState(0)
 
@@ -61,6 +64,7 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
   const isMerchHead = ['admin', 'merchandising_head'].includes(profile.role)
   const canReview = ['admin', 'management'].includes(profile.role)
   const sampleImages = files.filter(f => f.department === 'sampling' && f.file_type?.startsWith('image/'))
+  const samplePdfs = files.filter(f => f.department === 'sampling' && f.file_type === 'application/pdf')
 
   // Approved design illustrations — grouped by colour_tag for the sampling team
   const approvedDesignIllos = files.filter(f =>
@@ -176,6 +180,45 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ file_url: file.file_url, file_id: file.id }),
     })
+    router.refresh()
+  }
+
+  async function handlePdfUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const selectedFiles = Array.from(e.target.files || []).filter(f => f.type === 'application/pdf')
+    if (selectedFiles.length === 0) return
+    setPdfUploading(true)
+    setPdfProgress({ done: 0, total: selectedFiles.length })
+    let done = 0
+    for (const file of selectedFiles) {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('folder', `products/${product.id}/sampling`)
+      const res = await fetch('/api/upload-file', { method: 'POST', body: fd })
+      if (res.ok) {
+        const { url } = await res.json() as { url: string }
+        await supabase.from('product_files').insert({
+          product_id: product.id,
+          name: file.name,
+          file_url: url,
+          file_type: file.type,
+          file_size: file.size,
+          department: 'sampling',
+          uploaded_by: profile.id,
+        })
+      }
+      done++
+      setPdfProgress({ done, total: selectedFiles.length })
+    }
+    await supabase.from('activity_logs').insert({
+      product_id: product.id,
+      user_id: profile.id,
+      action: `uploaded ${selectedFiles.length} sampling PDF(s)`,
+      department: 'sampling',
+    })
+    setPdfUploading(false)
+    setPdfProgress(null)
+    toast.success(`${selectedFiles.length} PDF${selectedFiles.length !== 1 ? 's' : ''} uploaded`)
+    if (pdfInputRef.current) pdfInputRef.current.value = ''
     router.refresh()
   }
 
@@ -557,6 +600,72 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 Send for Approval
               </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Sampling PDF Documents ──────────────────────────────────── */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <FileText className="h-4 w-4 text-gray-500" />
+            Sampling Documents (PDF)
+          </CardTitle>
+          {isSampler && !isApproved && (
+            <>
+              <Button size="sm" variant="outline" onClick={() => pdfInputRef.current?.click()} disabled={pdfUploading}>
+                {pdfUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                {pdfProgress ? `${pdfProgress.done}/${pdfProgress.total} uploaded` : 'Upload PDF'}
+              </Button>
+              <input ref={pdfInputRef} type="file" accept="application/pdf" multiple className="hidden" onChange={handlePdfUpload} />
+            </>
+          )}
+        </CardHeader>
+        <CardContent>
+          {pdfProgress && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 mb-3 space-y-2">
+              <div className="flex items-center justify-between text-sm text-blue-700 font-medium">
+                <span className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Uploading PDFs…</span>
+                <span>{pdfProgress.done} / {pdfProgress.total}</span>
+              </div>
+              <div className="h-1.5 bg-blue-100 rounded-full overflow-hidden">
+                <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${Math.round((pdfProgress.done / pdfProgress.total) * 100)}%` }} />
+              </div>
+            </div>
+          )}
+          {samplePdfs.length === 0 ? (
+            <div className="border-2 border-dashed border-gray-200 rounded-lg py-8 text-center">
+              <FileText className="h-7 w-7 text-gray-300 mx-auto mb-2" />
+              <p className="text-sm text-gray-500">No PDFs uploaded yet.</p>
+              {isSampler && !isApproved && <p className="text-xs text-gray-400 mt-1">Click &quot;Upload PDF&quot; to add documents</p>}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {samplePdfs.map(file => (
+                <div key={file.id} className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors">
+                  <FileText className="h-5 w-5 text-red-500 shrink-0" />
+                  <span className="flex-1 text-sm text-gray-800 truncate">{file.name}</span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <a
+                      href={file.file_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 px-2 py-1 rounded border border-blue-200 bg-white"
+                    >
+                      <Download className="h-3.5 w-3.5" /> Download
+                    </a>
+                    {isSampler && !isApproved && (
+                      <button
+                        onClick={() => deleteFile(file)}
+                        className="h-7 w-7 flex items-center justify-center rounded border border-red-200 bg-white text-red-500 hover:bg-red-50"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </CardContent>

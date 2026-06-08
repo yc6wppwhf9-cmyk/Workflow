@@ -246,7 +246,6 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
   const [printUploading, setPrintUploading]     = useState(false)
   const [printProgress, setPrintProgress]       = useState<{ done: number; total: number } | null>(null)
   const [variantImgUploading, setVariantImgUploading] = useState<number | null>(null)
-  const [variantSampleUploading, setVariantSampleUploading] = useState<number | null>(null)
   const [printLightboxIdx, setPrintLightboxIdx] = useState<number | null>(null)
   const printImageFiles = printFiles.filter(f => f.file_type?.startsWith('image/'))
   const printLightboxImages: LightboxImage[] = printImageFiles.map(f => ({ url: f.file_url, name: f.name }))
@@ -2408,92 +2407,6 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
                   {(form as any).variant_image_url ? 'Replace Image' : 'Upload Image'}
                 </span>
               </label>
-            )}
-          </div>
-
-          {/* Sample Images (multiple per variant) */}
-          <div className="space-y-2 border-t pt-4 mt-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="text-xs text-gray-500">Sample Images</Label>
-                <p className="text-xs text-gray-400 mt-0.5">Upload photos of the physical sample for this colour variant.</p>
-              </div>
-              {canEditFields && (
-                <label className="cursor-pointer">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    className="hidden"
-                    disabled={variantSampleUploading !== null}
-                    onChange={async (e) => {
-                      const files = Array.from(e.target.files || [])
-                      if (!files.length) return
-                      setVariantSampleUploading(formIdx)
-                      const uploaded: string[] = []
-                      for (const f of files) {
-                        const fd = new FormData()
-                        fd.append('file', f)
-                        fd.append('folder', `products/${product.id}/variant-samples`)
-                        const res = await fetch('/api/upload-file', { method: 'POST', body: fd })
-                        if (res.ok) {
-                          const { url } = await res.json() as { url: string }
-                          uploaded.push(url)
-                        }
-                      }
-                      if (uploaded.length > 0) {
-                        const existing: string[] = (form as any).variant_sample_images || []
-                        const updatedForms = forms.map((f, i) =>
-                          i === formIdx ? { ...f, variant_sample_images: [...existing, ...uploaded] } : f
-                        )
-                        setForms(updatedForms)
-                        await supabase.from('design_data').update({ variants: updatedForms, updated_by: profile.id } as any).eq('product_id', product.id)
-                        toast.success(`${uploaded.length} sample image(s) uploaded.`)
-                      }
-                      setVariantSampleUploading(null)
-                      e.target.value = ''
-                    }}
-                  />
-                  <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border ${variantSampleUploading === formIdx ? 'bg-gray-100 text-gray-400 border-gray-200' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}>
-                    {variantSampleUploading === formIdx ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
-                    {variantSampleUploading === formIdx ? 'Uploading…' : 'Upload Samples'}
-                  </span>
-                </label>
-              )}
-            </div>
-            {((form as any).variant_sample_images as string[] | undefined)?.length ? (
-              <div className="flex flex-wrap gap-2 mt-1">
-                {((form as any).variant_sample_images as string[]).map((url, imgIdx) => (
-                  <div key={imgIdx} className="relative group">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={url}
-                      alt={`Sample ${imgIdx + 1}`}
-                      className="h-24 w-24 object-cover rounded-lg border border-gray-200 cursor-pointer"
-                      onClick={() => window.open(url, '_blank')}
-                    />
-                    {canEditFields && (
-                      <button
-                        type="button"
-                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
-                        onClick={async () => {
-                          const existing: string[] = (form as any).variant_sample_images || []
-                          const updatedForms = forms.map((f, i) =>
-                            i === formIdx ? { ...f, variant_sample_images: existing.filter((_, j) => j !== imgIdx) } : f
-                          )
-                          setForms(updatedForms)
-                          await supabase.from('design_data').update({ variants: updatedForms, updated_by: profile.id } as any).eq('product_id', product.id)
-                          toast.success('Sample image removed.')
-                        }}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs text-gray-400 italic">No sample images yet.</p>
             )}
           </div>
 

@@ -63,8 +63,18 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
   const isSampler = ['admin', 'sampling', 'merchandising', 'merchandising_head'].includes(profile.role)
   const isMerchHead = ['admin', 'merchandising_head'].includes(profile.role)
   const canReview = ['admin', 'management'].includes(profile.role)
-  const sampleImages = files.filter(f => f.department === 'sampling' && f.file_type?.startsWith('image/'))
+  const allSampleImages = files.filter(f => f.department === 'sampling' && f.file_type?.startsWith('image/'))
   const samplePdfs = files.filter(f => f.department === 'sampling' && f.file_type === 'application/pdf')
+
+  // Variant tag helpers — images are tagged with the variant's sample_color (or "variant_N" fallback)
+  function variantTag(idx: number): string {
+    const v = variants[idx] as any
+    return v?.sample_color ? String(v.sample_color) : `variant_${idx}`
+  }
+  const sampleImages = allSampleImages.filter(f => {
+    if (variants.length <= 1) return true
+    return f.colour_tag === variantTag(activeVariantIdx)
+  })
 
   // Approved design illustrations — grouped by colour_tag for the sampling team
   const approvedDesignIllos = files.filter(f =>
@@ -132,9 +142,14 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const selectedFiles = Array.from(e.target.files || [])
     if (selectedFiles.length === 0) return
-    
-    if (sampleImages.length + selectedFiles.length > 10) {
-      toast.error(`You cannot upload more than 10 sample images in total. Currently you have ${sampleImages.length}.`)
+
+    const tag = variants.length > 1 ? variantTag(activeVariantIdx) : undefined
+    const variantImagesForThisVariant = variants.length > 1
+      ? allSampleImages.filter(f => f.colour_tag === tag)
+      : allSampleImages
+
+    if (variantImagesForThisVariant.length + selectedFiles.length > 10) {
+      toast.error(`Max 10 sample images per variant. Currently ${variantImagesForThisVariant.length}.`)
       if (sampleInputRef.current) sampleInputRef.current.value = ''
       return
     }
@@ -157,6 +172,7 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
           file_type: file.type,
           file_size: file.size,
           department: 'sampling',
+          colour_tag: tag ?? null,
           uploaded_by: profile.id,
         })
       }
@@ -166,9 +182,23 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
     await supabase.from('activity_logs').insert({
       product_id: product.id,
       user_id: profile.id,
-      action: `uploaded ${selectedFiles.length} sample image(s)`,
+      action: `uploaded ${selectedFiles.length} sample image(s)${tag ? ` for ${tag}` : ''}`,
       department: 'sampling',
     })
+
+    // Notify the designer that sample photos have been uploaded
+    fetch('/api/notify-sample-uploaded', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        product_id: product.id,
+        variant_color: tag,
+        variant_idx: activeVariantIdx,
+        sampler_name: samplerName || profile.full_name,
+        image_count: selectedFiles.length,
+      }),
+    }).catch(() => {})
+
     setUploading(false)
     setUploadProgress(null)
     setUploadSuccess(selectedFiles.length)
@@ -551,6 +581,34 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
           )}
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Variant tabs — shown when multiple variants exist */}
+          {variants.length > 1 && (
+            <div className="flex flex-wrap gap-2 pb-2 border-b border-gray-100">
+              {variants.map((v: any, i: number) => {
+                const tag = variantTag(i)
+                const count = allSampleImages.filter(f => f.colour_tag === tag).length
+                return (
+                  <button
+                    key={i}
+                    onClick={() => setActiveVariantIdx(i)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                      i === activeVariantIdx
+                        ? 'bg-violet-600 text-white border-violet-600 shadow-sm'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-violet-300 hover:bg-violet-50'
+                    }`}
+                  >
+                    Variant {i + 1}{v.sample_color ? ` — ${v.sample_color}` : ''}
+                    {count > 0 && (
+                      <span className={`ml-0.5 rounded-full px-1.5 py-0 text-[10px] font-bold ${i === activeVariantIdx ? 'bg-violet-400 text-white' : 'bg-gray-200 text-gray-600'}`}>
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
           {/* Assignment — only merchandising_head / admin can assign */}
           {isMerchHead && (
             <div className="flex items-center gap-3 pb-3 border-b border-gray-100">

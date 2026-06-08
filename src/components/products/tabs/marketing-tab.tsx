@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { createClient } from '@/lib/supabase/client'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import type { Product, Profile, MarketingData, ProductFile } from '@/lib/types'
+import type { Product, Profile, MarketingData, ProductFile, SocialLink } from '@/lib/types'
 
 interface MarketingTabProps {
   product: Product
@@ -31,9 +31,12 @@ export function MarketingTab({ product, profile, data, files }: MarketingTabProp
     hero_product: data?.hero_product || false,
     catalogs: data?.catalogs || [] as string[],
     launch_creatives: data?.launch_creatives || '',
+    social_links: data?.social_links || [] as SocialLink[],
   })
   const [newFeature, setNewFeature] = useState('')
   const [newCatalog, setNewCatalog] = useState('')
+  const [newLinkPlatform, setNewLinkPlatform] = useState('')
+  const [newLinkUrl, setNewLinkUrl] = useState('')
   const [saving, setSaving] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -232,6 +235,71 @@ export function MarketingTab({ product, profile, data, files }: MarketingTabProp
                   onKeyDown={(e) => { if (e.key === 'Enter') { addToList('catalogs', newCatalog); setNewCatalog('') } }}
                 />
                 <Button type="button" variant="outline" size="icon" onClick={() => { addToList('catalogs', newCatalog); setNewCatalog('') }}>
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Social Media Links */}
+          <div className="space-y-1.5">
+            <Label>Social Media Links</Label>
+            <div className="space-y-2 mb-2">
+              {form.social_links.map((link, i) => (
+                <div key={i} className="flex items-center gap-2 bg-gray-50 rounded-md px-3 py-2">
+                  <span className="text-xs font-semibold text-gray-500 w-24 shrink-0 truncate">{link.platform || '—'}</span>
+                  <a
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue-600 hover:underline flex-1 truncate flex items-center gap-1"
+                  >
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                    {link.url}
+                  </a>
+                  {canEditFields && (
+                    <button onClick={() => setForm(f => ({ ...f, social_links: f.social_links.filter((_, j) => j !== i) }))}>
+                      <X className="h-3.5 w-3.5 text-gray-400 hover:text-red-500" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              {form.social_links.length === 0 && !canEditFields && (
+                <p className="text-xs text-gray-400 italic">No social media links added.</p>
+              )}
+            </div>
+            {canEditFields && (
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Platform (e.g. Instagram)"
+                  value={newLinkPlatform}
+                  onChange={e => setNewLinkPlatform(e.target.value)}
+                  className="w-36 shrink-0"
+                />
+                <Input
+                  placeholder="https://..."
+                  value={newLinkUrl}
+                  onChange={e => setNewLinkUrl(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && newLinkUrl.trim()) {
+                      setForm(f => ({ ...f, social_links: [...f.social_links, { platform: newLinkPlatform.trim(), url: newLinkUrl.trim() }] }))
+                      setNewLinkPlatform('')
+                      setNewLinkUrl('')
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  disabled={!newLinkUrl.trim()}
+                  onClick={() => {
+                    if (!newLinkUrl.trim()) return
+                    setForm(f => ({ ...f, social_links: [...f.social_links, { platform: newLinkPlatform.trim(), url: newLinkUrl.trim() }] }))
+                    setNewLinkPlatform('')
+                    setNewLinkUrl('')
+                  }}
+                >
                   <Plus className="h-4 w-4" />
                 </Button>
               </div>

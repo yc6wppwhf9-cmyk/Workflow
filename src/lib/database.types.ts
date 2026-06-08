@@ -348,6 +348,7 @@ export type Database = {
           photoshoots: string | null
           product_features: string[] | null
           product_id: string
+          social_links: { platform: string; url: string }[] | null
           updated_at: string
           updated_by: string | null
         }
@@ -361,6 +362,7 @@ export type Database = {
           photoshoots?: string | null
           product_features?: string[] | null
           product_id: string
+          social_links?: { platform: string; url: string }[] | null
           updated_at?: string
           updated_by?: string | null
         }
@@ -374,6 +376,7 @@ export type Database = {
           photoshoots?: string | null
           product_features?: string[] | null
           product_id?: string
+          social_links?: { platform: string; url: string }[] | null
           updated_at?: string
           updated_by?: string | null
         }

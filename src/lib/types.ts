@@ -228,6 +228,11 @@ export interface BomData {
   updated_at: string
 }
 
+export interface SocialLink {
+  platform: string
+  url: string
+}
+
 export interface MarketingData {
   id: string
   product_id: string
@@ -236,6 +241,7 @@ export interface MarketingData {
   hero_product: boolean
   catalogs: string[] | null
   launch_creatives: string | null
+  social_links: SocialLink[] | null
   is_completed: boolean
   is_locked: boolean
   updated_by: string | null

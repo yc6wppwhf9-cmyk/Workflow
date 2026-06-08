@@ -169,6 +169,10 @@ export function Sidebar({ profile }: SidebarProps) {
 
         {profile.role === 'admin' && (
           <>
+            <p className="px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-5 mb-2">New Development</p>
+            {navLink('/new-development', 'Design Upload', Lightbulb)}
+            {navLink('/merch-new-development', 'Merch View', Lightbulb)}
+            {navLink('/purchase-new-development', 'Purchase View', Lightbulb)}
             <p className="px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-5 mb-2">Admin</p>
             {adminItems.map(({ href, label, icon }) => navLink(href, label, icon))}
           </>

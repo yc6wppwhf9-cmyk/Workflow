@@ -771,7 +771,7 @@ export type Database = {
           product_id: string
           reviewed_at: string | null
           reviewed_by: string | null
-          sample_review_status: string
+          sample_review_status: string | null
           sampler_name: string | null
           sampler_remarks: string | null
           updated_at: string
@@ -785,7 +785,7 @@ export type Database = {
           product_id: string
           reviewed_at?: string | null
           reviewed_by?: string | null
-          sample_review_status?: string
+          sample_review_status?: string | null
           sampler_name?: string | null
           sampler_remarks?: string | null
           updated_at?: string
@@ -799,7 +799,7 @@ export type Database = {
           product_id?: string
           reviewed_at?: string | null
           reviewed_by?: string | null
-          sample_review_status?: string
+          sample_review_status?: string | null
           sampler_name?: string | null
           sampler_remarks?: string | null
           updated_at?: string

@@ -183,7 +183,7 @@ export function NewProductForm({ profile }: NewProductFormProps) {
             </div>
             )}
             <div className="space-y-1.5">
-              <Label>Family / Range Name</Label>
+              <Label>New Construction</Label>
               <Input
                 placeholder="e.g. Rock, Alpine, Summer 2026…"
                 value={familyName}

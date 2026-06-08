@@ -91,11 +91,18 @@ export async function sendEmail(
     console.log('[email] RESEND_API_KEY not set — skipping:', subject)
     return false
   }
+
+  const override = process.env.TEST_EMAIL_OVERRIDE
+  const recipients = override ? [override] : (Array.isArray(to) ? to : [to])
+  if (override) {
+    console.log(`[email] TEST_EMAIL_OVERRIDE active — redirecting "${subject}" to ${override}`)
+  }
+
   try {
     const body: Record<string, unknown> = {
       from: FROM,
-      to: Array.isArray(to) ? to : [to],
-      subject,
+      to: recipients,
+      subject: override ? `[TEST → ${Array.isArray(to) ? to.join(', ') : to}] ${subject}` : subject,
       html,
     }
     if (attachments?.length) body.attachments = attachments

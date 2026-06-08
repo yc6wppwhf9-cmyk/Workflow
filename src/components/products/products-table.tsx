@@ -134,9 +134,10 @@ export function ProductsTable({ products, profile }: ProductsTableProps) {
                       </div>
                       <div>
                         <p className="font-medium text-gray-900 group-hover:text-blue-600">{p.name}</p>
-                        {design?.designer_name && (
-                          <p className="text-xs text-gray-400 mt-0.5">{design.designer_name}</p>
-                        )}
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          {p.sku && <span className="font-mono text-[10px] text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">{p.sku}</span>}
+                          {design?.designer_name && <p className="text-xs text-gray-400">{design.designer_name}</p>}
+                        </div>
                       </div>
                     </Link>
                   </td>

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import {
   LayoutDashboard,
   Package,
@@ -19,6 +19,9 @@ import {
   FlaskConical,
   LineChart,
   Eye,
+  Lightbulb,
+  Megaphone,
+  Pencil,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -47,7 +50,9 @@ interface SidebarProps {
 }
 
 export function Sidebar({ profile }: SidebarProps) {
-  const pathname = usePathname()
+  const pathname     = usePathname()
+  const searchParams = useSearchParams()
+  const isMyDesigns  = pathname === '/dashboard' && searchParams.get('f') === 'mywork'
   const [open, setOpen] = useState(false)
 
   // Close mobile drawer on route change
@@ -58,7 +63,10 @@ export function Sidebar({ profile }: SidebarProps) {
   }
 
   const navLink = (href: string, label: string, Icon: React.ElementType) => {
-    const active = pathname === href || pathname.startsWith(href + '/')
+    // Dashboard link should not appear active when "My Designs" filter is active
+    const active = href === '/dashboard'
+      ? pathname === href && !isMyDesigns
+      : pathname === href || pathname.startsWith(href + '/')
     return (
       <Link
         key={href}
@@ -98,6 +106,7 @@ export function Sidebar({ profile }: SidebarProps) {
           <>
             <p className="px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-5 mb-2">My Work</p>
             {navLink('/sampling-review', 'Sampling Review', FlaskConical)}
+            {navLink('/merch-new-development', 'New Development', Lightbulb)}
           </>
         )}
 
@@ -105,6 +114,45 @@ export function Sidebar({ profile }: SidebarProps) {
           <>
             <p className="px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-5 mb-2">My Work</p>
             {navLink('/illustration-review', 'Review Queue', Eye)}
+            <Link
+              href="/dashboard?f=mywork"
+              className={cn(
+                'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors group',
+                isMyDesigns ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+              )}
+            >
+              <Pencil className="h-4 w-4 shrink-0" />
+              My Designs
+            </Link>
+            {navLink('/new-development', 'New Development', Lightbulb)}
+          </>
+        )}
+
+        {profile.role === 'sampling' && (
+          <>
+            <p className="px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-5 mb-2">My Work</p>
+            {navLink('/sampling-queue', 'Sampling Queue', FlaskConical)}
+          </>
+        )}
+
+        {profile.role === 'design' && (
+          <>
+            <p className="px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-5 mb-2">My Work</p>
+            {navLink('/new-development', 'New Development', Lightbulb)}
+          </>
+        )}
+
+        {profile.role === 'purchase_head' && (
+          <>
+            <p className="px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-5 mb-2">My Work</p>
+            {navLink('/purchase-new-development', 'New Development', Lightbulb)}
+          </>
+        )}
+
+        {['marketing', 'marketing_head'].includes(profile.role) && (
+          <>
+            <p className="px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-5 mb-2">My Work</p>
+            {navLink('/marketing', 'Marketing Queue', Megaphone)}
           </>
         )}
 

@@ -151,6 +151,8 @@ export type Database = {
           sample_color: string | null
           screen_print: string | null
           season_year: string | null
+          style_name: string | null
+          techpack_pdf_url: string | null
           unique_feature: string | null
           updated_at: string
           updated_by: string | null
@@ -187,6 +189,8 @@ export type Database = {
           sample_color?: string | null
           screen_print?: string | null
           season_year?: string | null
+          style_name?: string | null
+          techpack_pdf_url?: string | null
           unique_feature?: string | null
           updated_at?: string
           updated_by?: string | null
@@ -223,6 +227,8 @@ export type Database = {
           sample_color?: string | null
           screen_print?: string | null
           season_year?: string | null
+          style_name?: string | null
+          techpack_pdf_url?: string | null
           unique_feature?: string | null
           updated_at?: string
           updated_by?: string | null
@@ -939,12 +945,14 @@ export type Database = {
         | "merchandising"
         | "bom"
         | "marketing"
+        | "marketing_head"
         | "sales"
         | "viewer"
         | "design_head"
         | "management"
         | "sampling"
         | "merchandising_head"
+        | "purchase_head"
       workflow_stage:
         | "draft"
         | "design_completed"
@@ -1095,6 +1103,7 @@ export const Constants = {
         "merchandising",
         "bom",
         "marketing",
+        "marketing_head",
         "sales",
         "viewer",
         "design_head",

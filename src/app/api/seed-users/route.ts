@@ -8,7 +8,7 @@ const TEAM_MEMBERS = [
   { email: 'darshita.dubey@hscvpl.com',       full_name: 'Dharshita Dubey',      role: 'design' },
   { email: 'sayantani.rauth@hscvpl.com',      full_name: 'Sayantani Raut',       role: 'design' },
   { email: 'shriya.kulkarni@hscvpl.com',      full_name: 'Shriya Kulkarni',      role: 'design' },
-  { email: 'anuja.mulik@hscvpl.com',          full_name: 'Anuja Mulik',          role: 'marketing' },
+  { email: 'anuja.mulik@hscvpl.com',          full_name: 'Anuja Mulik',          role: 'marketing_head' },
   { email: 'krishnendu.br@hscvpl.com',        full_name: 'Krishnendu BR',        role: 'marketing' },
   { email: 'shivam.patil@hscvpl.com',         full_name: 'Shivam Patil',         role: 'marketing' },
   { email: 'suresh.swanti@hscvpl.com',        full_name: 'Suresh Swenti',        role: 'marketing' },

@@ -23,18 +23,20 @@ export async function POST(req: NextRequest) {
 
   if (!product_id || !product_name) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
 
-  const productUrl = `${APP_URL}/products/${product_id}?tab=sampling`
+  const productUrl  = `${APP_URL}/products/${product_id}?tab=sampling`
+  const techPackUrl = `${APP_URL}/api/export-sampling-techpack?product_id=${product_id}`
   const message    = `${approved_count} illustration(s) for "${product_name}" are approved and ready for physical sampling.`
 
-  // Notify all active sampling team members
-  const { data: samplingUsers } = await adminSupabase
+  // Notify sampling team + merchandising_head when product is sent for sampling
+  const { data: notifyUsers } = await adminSupabase
     .from('profiles')
-    .select('id, email, full_name')
-    .eq('role', 'sampling')
+    .select('id, email, full_name, role')
+    .in('role', ['sampling', 'merchandising_head'])
     .eq('is_active', true)
 
-  if (!samplingUsers || samplingUsers.length === 0) {
-    return NextResponse.json({ ok: true, skipped: 'no sampling users' })
+  const samplingUsers = notifyUsers ?? []
+  if (samplingUsers.length === 0) {
+    return NextResponse.json({ ok: true, skipped: 'no sampling/merch users' })
   }
 
   // In-app notifications
@@ -70,11 +72,14 @@ export async function POST(req: NextRequest) {
           infoRow('Illustrations ready', `${approved_count}`)
         )}
         ${divider()}
-        <p style="margin:0;color:#475569;font-size:14px;line-height:1.7;">
+        <p style="margin:0 0 12px;color:#475569;font-size:14px;line-height:1.7;">
           Open the product's <strong>Sampling tab</strong> to view the approved illustrations
           and the design tech pack, then upload photos of your physical sample for review.
         </p>
         ${btn('Open Sampling Tab', productUrl)}
+        <p style="margin:12px 0 0;text-align:center;">
+          <a href="${techPackUrl}" style="color:#6b21a8;font-size:13px;">⬇ Download Tech Pack Excel</a>
+        </p>
       `)
 
       await sendEmail(

@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { Suspense } from 'react'
 import { getCurrentProfile } from '@/lib/supabase/server'
 import { Sidebar } from '@/components/layout/sidebar'
 import { Toaster } from 'sonner'
@@ -13,7 +14,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      <Sidebar profile={profile} />
+      <Suspense fallback={null}>
+        <Sidebar profile={profile} />
+      </Suspense>
       <main className="flex-1 overflow-auto min-w-0 pt-14 lg:pt-0">
         {children}
       </main>

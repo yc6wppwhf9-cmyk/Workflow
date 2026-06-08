@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { sendEmail, emailLayout, greeting, btn, badge, infoTable, infoRow, divider, APP_URL } from '@/lib/email'
-import { sendPushToUser } from '@/lib/push'
+import { sendPushToUser, sendPushToRole } from '@/lib/push'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -71,41 +71,79 @@ export async function POST(req: NextRequest) {
       if (!recipients.find(r => r.id === head.id)) recipients.push(head as { id: string; full_name: string; email: string })
     }
 
-    await Promise.allSettled(recipients.map(async (r) => {
-      // In-app notification
-      await adminSupabase.from('notifications').insert({
-        user_id: r.id, product_id, product_name: productName, message: isApprovedMsg,
-      })
+    // Fetch marketing head to notify them
+    const { data: marketingUsers } = await adminSupabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .eq('role', 'marketing_head')
+      .eq('is_active', true)
 
-      // Push
-      await sendPushToUser(r.id, {
-        title: '✅ Sample Approved',
-        body:  isApprovedMsg,
-        url:   productUrl,
-        tag:   `sample-approved-${product_id}`,
-      })
+    const marketingUrl = `${APP_URL}/marketing`
+    const marketingMsg = `The sample for "${productName}" has been approved. Please review the sample images and assign an official product name.`
 
-      // Email
-      const html = emailLayout(`
-        ${greeting(r.full_name)}
-        <p style="margin:0 0 16px;color:#334155;font-size:15px;line-height:1.6;">
-          Management has reviewed the sample for this product.
-        </p>
-        ${badge('Sample Approved', '#dcfce7', '#15803d')}
-        ${infoTable(
-          infoRow('Product',     productName) +
-          infoRow('Reviewed by', reviewerName) +
-          infoRow('Next Stage',  'Merchandising')
-        )}
-        ${divider()}
-        <p style="margin:0;color:#475569;font-size:14px;line-height:1.7;">
-          The sample has been approved. The product will now move to the <strong>Merchandising</strong> stage.
-        </p>
-        ${btn('View Product', productUrl)}
-      `)
+    await Promise.allSettled([
+      // Notify design team
+      ...recipients.map(async (r) => {
+        await adminSupabase.from('notifications').insert({
+          user_id: r.id, product_id, product_name: productName, message: isApprovedMsg,
+        })
+        await sendPushToUser(r.id, {
+          title: '✅ Sample Approved',
+          body:  isApprovedMsg,
+          url:   productUrl,
+          tag:   `sample-approved-${product_id}`,
+        })
+        const html = emailLayout(`
+          ${greeting(r.full_name)}
+          <p style="margin:0 0 16px;color:#334155;font-size:15px;line-height:1.6;">
+            Management has reviewed the sample for this product.
+          </p>
+          ${badge('Sample Approved', '#dcfce7', '#15803d')}
+          ${infoTable(
+            infoRow('Product',     productName) +
+            infoRow('Reviewed by', reviewerName) +
+            infoRow('Next Stage',  'Merchandising')
+          )}
+          ${divider()}
+          <p style="margin:0;color:#475569;font-size:14px;line-height:1.7;">
+            The sample has been approved. The product will now move to the <strong>Merchandising</strong> stage.
+          </p>
+          ${btn('View Product', productUrl)}
+        `)
+        await sendEmail(r.email, `Sample Approved: "${productName}"`, html)
+      }),
 
-      await sendEmail(r.email, `Sample Approved: "${productName}"`, html)
-    }))
+      // Notify marketing team
+      ...(marketingUsers ?? []).map(async (m) => {
+        await adminSupabase.from('notifications').insert({
+          user_id: m.id, product_id, product_name: productName, message: marketingMsg,
+        })
+        const html = emailLayout(`
+          ${greeting(m.full_name)}
+          <p style="margin:0 0 16px;color:#334155;font-size:15px;line-height:1.6;">
+            A physical sample has been approved and is ready for your review.
+          </p>
+          ${badge('Sample Approved — Name Required', '#fef3c7', '#92400e')}
+          ${infoTable(
+            infoRow('Product',     productName) +
+            infoRow('Approved by', reviewerName)
+          )}
+          ${divider()}
+          <p style="margin:0;color:#475569;font-size:14px;line-height:1.7;">
+            Please review the sample photos and variant images, then assign an official product name in the Marketing Queue.
+          </p>
+          ${btn('Open Marketing Queue', marketingUrl)}
+        `)
+        await sendEmail(m.email, `Sample Approved — Name Needed: "${productName}"`, html)
+      }),
+
+      sendPushToRole('marketing_head', {
+        title: 'Sample Approved — Name Required',
+        body:  marketingMsg,
+        url:   marketingUrl,
+        tag:   `marketing-name-${product_id}`,
+      }),
+    ])
   }
 
   return NextResponse.json({ success: true })

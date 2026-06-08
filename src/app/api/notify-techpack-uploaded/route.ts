@@ -25,9 +25,8 @@ export async function POST(req: NextRequest) {
 
   const [uploaderRes, designHeadsRes] = await Promise.all([
     adminSupabase.from('profiles').select('full_name').eq('id', user.id).single(),
-    // Tech pack is relevant to design_head (review), merchandising_head (sample oversight), and sampling (make the sample).
-    // Regular merchandising members (e.g. Prasanna, Sagar) are notified when the product formally reaches their stage.
-    adminSupabase.from('profiles').select('id, email, full_name, role').in('role', ['design_head', 'merchandising_head', 'sampling']).eq('is_active', true),
+    // Only notify design_head on upload. Sampling & merchandising_head are notified when "Send for Sampling" is pressed.
+    adminSupabase.from('profiles').select('id, email, full_name, role').eq('role', 'design_head').eq('is_active', true),
   ])
 
   const uploaderName = uploaderRes.data?.full_name ?? 'A designer'
@@ -69,7 +68,7 @@ export async function POST(req: NextRequest) {
         message:      `${uploaderName} uploaded a tech pack for "${productName}". The Excel is attached to this email.`,
       }))
     ),
-    sendPushToRole(['design_head', 'merchandising_head', 'sampling'], {
+    sendPushToRole(['design_head'], {
       title: 'Tech Pack Uploaded',
       body:  `${uploaderName} uploaded a tech pack for "${productName}"`,
       url:   productUrl,

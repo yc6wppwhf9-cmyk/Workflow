@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdmin } from '@supabase/supabase-js'
-import { sendPushToRole } from '@/lib/push'
 import { sendEmail, emailLayout, greeting, btn, badge, infoTable, infoRow, APP_URL } from '@/lib/email'
+import { sendPushToRole } from '@/lib/push'
 
 const adminSupabase = createAdmin(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -23,45 +23,44 @@ export async function POST(request: NextRequest) {
 
   if (!product_id) return NextResponse.json({ ok: true, skipped: true })
 
-  const message = `${uploader_name} uploaded ${file_count} illustration${file_count !== 1 ? 's' : ''} for "${product_name}" — your approval is required.`
+  const message = `${uploader_name} uploaded ${file_count} illustration${file_count !== 1 ? 's' : ''} for "${product_name}" — ready for your review.`
   const productUrl = `${APP_URL}/products/${product_id}?tab=design`
 
-  const { data: managers } = await adminSupabase
+  const { data: designHeads } = await adminSupabase
     .from('profiles')
     .select('id, email, full_name')
-    .eq('role', 'management')
+    .eq('role', 'design_head')
     .eq('is_active', true)
 
-  if (!managers || managers.length === 0) return NextResponse.json({ ok: true, skipped: 'no managers' })
+  if (!designHeads || designHeads.length === 0) return NextResponse.json({ ok: true, skipped: 'no design heads' })
 
   await Promise.all([
     adminSupabase.from('notifications').insert(
-      managers.map(m => ({ user_id: m.id, product_id, product_name, message }))
+      designHeads.map(dh => ({ user_id: dh.id, product_id, product_name, message }))
     ),
-    sendPushToRole('management', {
-      title: 'Illustrations Need Your Approval',
+    sendPushToRole('design_head', {
+      title: 'Illustrations Uploaded for Review',
       body:  message,
       url:   productUrl,
-      tag:   `mgmt-review-${product_id}`,
+      tag:   `illo-uploaded-${product_id}`,
     }),
-    ...managers.map(m => {
+    ...designHeads.map(dh => {
       const html = emailLayout(`
-        ${greeting(m.full_name)}
+        ${greeting(dh.full_name)}
         <p style="margin:0 0 16px;color:#334155;font-size:15px;line-height:1.6;">
-          The design head has uploaded illustrations for the product below
-          and they require your approval.
+          A designer has uploaded illustrations that need your review and approval.
         </p>
-        ${badge('Approval Required', '#fef3c7', '#92400e')}
+        ${badge('Illustrations Awaiting Review', '#fef3c7', '#92400e')}
         ${infoTable(
           infoRow('Product',     product_name) +
           infoRow('Uploaded by', uploader_name) +
           infoRow('Files',       `${file_count} illustration${file_count !== 1 ? 's' : ''}`)
         )}
-        ${btn('Review & Approve', productUrl)}
+        ${btn('Review Illustrations', productUrl)}
       `)
       return sendEmail(
-        m.email,
-        `Approval Required: Illustrations for "${product_name}"`,
+        dh.email,
+        `Illustrations for Review: "${product_name}" by ${uploader_name}`,
         html,
       )
     }),

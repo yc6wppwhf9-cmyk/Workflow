@@ -36,6 +36,7 @@ export function NewProductForm({ profile }: NewProductFormProps) {
   const [priceRange, setPriceRange]   = useState('')
   const [deadlineDate, setDeadlineDate] = useState('')
   const [productSpec, setProductSpec] = useState('')
+  const [familyName, setFamilyName] = useState('')
   const [images, setImages]       = useState<File[]>([])
   const [previews, setPreviews]   = useState<string[]>([])
   const [saving, setSaving]       = useState(false)
@@ -77,11 +78,12 @@ export function NewProductForm({ profile }: NewProductFormProps) {
         ...(category && { category }),
         ...(subCategory && { sub_category: subCategory }),
         ...(brand && { brand }),
+        ...(familyName.trim() && { family_name: familyName.trim() }),
         created_by: profile.id,
         updated_by: profile.id,
         // Design-initiated products skip the sales/draft stage
         ...(isDesignHead && { workflow_stage: 'design_completed' }),
-      })
+      } as any)
       .select()
       .single()
 
@@ -91,20 +93,13 @@ export function NewProductForm({ profile }: NewProductFormProps) {
       return
     }
 
-    if (!isDesignHead) {
-      await supabase.from('sales_data').update({
-        channel:               channel               || null,
-        price_range:           priceRange            || null,
-        deadline_date:         deadlineDate          || null,
-        product_specification: productSpec           || null,
-        updated_by: profile.id,
-      }).eq('product_id', product.id)
-    } else if (deadlineDate) {
-      await supabase.from('sales_data').update({
-        deadline_date: deadlineDate,
-        updated_by: profile.id,
-      }).eq('product_id', product.id)
-    }
+    await supabase.from('sales_data').update({
+      channel:               channel               || null,
+      price_range:           priceRange            || null,
+      deadline_date:         deadlineDate          || null,
+      product_specification: productSpec           || null,
+      updated_by: profile.id,
+    }).eq('product_id', product.id)
 
     // Upload reference images
     if (images.length > 0) {
@@ -152,10 +147,10 @@ export function NewProductForm({ profile }: NewProductFormProps) {
     <div className="max-w-2xl space-y-4">
       {isDesignHead && (
         <div className="rounded-lg bg-violet-50 border border-violet-200 px-4 py-2.5 text-sm text-violet-700">
-          This product will go directly to the <strong>Design</strong> stage. Sales details (channel, deadline, pricing) can be filled in by the sales team later.
+          This product will go directly to the <strong>Design</strong> stage.
         </div>
       )}
-      <div className={`grid gap-4 ${isDesignHead ? 'grid-cols-1 max-w-sm' : 'grid-cols-2'}`}>
+      <div className="grid gap-4 grid-cols-2">
 
         {/* LEFT — Product identity */}
         <Card>
@@ -188,6 +183,18 @@ export function NewProductForm({ profile }: NewProductFormProps) {
             </div>
             )}
             <div className="space-y-1.5">
+              <Label>Family / Range Name</Label>
+              <Input
+                placeholder="e.g. Rock, Alpine, Summer 2026…"
+                value={familyName}
+                onChange={e => setFamilyName(e.target.value)}
+              />
+              <p className="text-xs text-gray-400">
+                Products with the same family name will be grouped as a batch in the design and sampling workflow.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
               <Label>Brand</Label>
               <Select value={brand} onValueChange={v => setBrand(v as Brand)}>
                 <SelectTrigger><SelectValue placeholder="Select brand" /></SelectTrigger>
@@ -196,7 +203,6 @@ export function NewProductForm({ profile }: NewProductFormProps) {
                 </SelectContent>
               </Select>
             </div>
-            {!isDesignHead && (
             <div className="space-y-1.5">
               <Label>Channel</Label>
               <Select value={channel} onValueChange={setChannel}>
@@ -206,14 +212,6 @@ export function NewProductForm({ profile }: NewProductFormProps) {
                 </SelectContent>
               </Select>
             </div>
-            )}
-
-            {isDesignHead && (
-            <div className="space-y-1.5">
-              <Label>Deadline Date</Label>
-              <DateInput value={deadlineDate} onChange={setDeadlineDate} />
-            </div>
-            )}
 
             {/* Reference images upload */}
             <div className="space-y-1.5">
@@ -255,8 +253,7 @@ export function NewProductForm({ profile }: NewProductFormProps) {
           </CardContent>
         </Card>
 
-        {/* RIGHT — Sales requirement (hidden for design head) */}
-        {!isDesignHead && (
+        {/* RIGHT — Sales requirement */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Sales Requirement</CardTitle>
@@ -286,7 +283,6 @@ export function NewProductForm({ profile }: NewProductFormProps) {
             </div>
           </CardContent>
         </Card>
-        )}
 
       </div>
 

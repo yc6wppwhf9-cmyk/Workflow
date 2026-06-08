@@ -74,10 +74,13 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
     f.colour_tag !== 'print'
   )
 
-  // Colour SKUs: prefer top-level field, fall back to union across variants
-  const allSkus: string[] = designData?.color_skus?.length
-    ? designData.color_skus
-    : (designData?.variants ?? []).flatMap((v: any) => v.color_skus ?? [])
+  // Colour SKUs for the active variant only
+  const allSkus: string[] = (() => {
+    const v = activeVariant as any
+    if (v?.color_skus?.length) return v.color_skus
+    if (designData?.color_skus?.length) return designData.color_skus
+    return []
+  })()
 
   // Group illustrations by colour_tag so sampling team sees each colour separately
   const colorGroups: Record<string, typeof approvedDesignIllos> = {}
@@ -278,98 +281,159 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
   return (
     <div className="space-y-4">
 
-      {/* ── Approved illustrations — grouped by colour ───────────────────── */}
-      {approvedDesignIllos.length > 0 && (
+      {/* ── Design Reference Image / Approved illustrations ────────────── */}
+      {(variants.length > 0 || approvedDesignIllos.length > 0) && (
         <Card className={`border-purple-200 ${product.workflow_stage === 'design_completed' ? 'border-2' : ''}`}>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2 text-purple-800">
               <Layers className="h-4 w-4" />
-              Approved Illustrations for Sampling ({approvedDesignIllos.length})
+              Design Reference
               {product.workflow_stage === 'design_completed' && (
                 <span className="ml-auto text-xs font-medium bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
-                  Design still in progress — early sampling
+                  Design still in progress
                 </span>
               )}
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-5">
-            <p className="text-xs text-gray-500">
-              Approved by the Design Head. Each colour section shows which illustrations belong to that variant.
-              {product.workflow_stage === 'design_completed' && ' More colours may be added as remaining illustrations get approved.'}
-            </p>
+          <CardContent className="space-y-4">
 
-            {/* Colour-SKU reference strip (if SKUs exist) */}
+            {variants.length > 1 ? (
+              <>
+                {/* Variant tabs */}
+                <div className="flex flex-wrap gap-2">
+                  {variants.map((v: any, i: number) => (
+                    <button
+                      key={i}
+                      onClick={() => setActiveVariantIdx(i)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                        i === activeVariantIdx
+                          ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300 hover:bg-purple-50'
+                      }`}
+                    >
+                      Variant {i + 1}{v.sample_color ? ` — ${v.sample_color}` : ''}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Image for active variant */}
+                {(() => {
+                  const v = variants[activeVariantIdx] as any
+
+                  // Show variant reference image if uploaded
+                  if (v?.variant_image_url) {
+                    return (
+                      <a href={v.variant_image_url} target="_blank" rel="noopener noreferrer" className="block">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={v.variant_image_url}
+                          alt={`Variant ${activeVariantIdx + 1} reference`}
+                          className="max-h-80 w-auto rounded-lg border border-gray-200 object-contain hover:opacity-90 transition-opacity"
+                        />
+                      </a>
+                    )
+                  }
+
+                  // Fall back to approved illustrations
+                  const colourToken = v?.sample_color
+                    ? (v.sample_color.includes(' — ') ? v.sample_color.split(' — ').pop()?.trim() : v.sample_color)
+                    : null
+                  const variantIllos = colourToken
+                    ? approvedDesignIllos.filter(f =>
+                        f.colour_tag && f.colour_tag.toUpperCase() === colourToken.toUpperCase()
+                      )
+                    : approvedDesignIllos.filter(f => !f.colour_tag)
+                  const fallback = variantIllos.length === 0 ? approvedDesignIllos.filter(f => !f.colour_tag) : []
+                  const toShow = variantIllos.length > 0 ? variantIllos : fallback
+
+                  return toShow.length > 0 ? (
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+                      {toShow.map(f => (
+                        <a
+                          key={f.id}
+                          href={f.file_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="group relative aspect-square rounded-lg overflow-hidden border-2 border-green-300 bg-gray-50 hover:opacity-90 transition-opacity"
+                          title={f.name}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={f.file_url} alt={f.name} className="w-full h-full object-cover" />
+                          <div className="absolute top-1 left-1 flex items-center gap-0.5 px-1 py-0.5 rounded-full bg-green-500 text-white text-[9px] font-medium pointer-events-none">
+                            <CheckCircle2 className="h-2.5 w-2.5" />
+                          </div>
+                          <div className="absolute bottom-0 left-0 right-0 bg-purple-700/80 text-white text-[9px] text-center py-0.5 px-1 truncate pointer-events-none font-semibold">
+                            {f.colour_tag || f.name}
+                          </div>
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                            <ExternalLink className="h-5 w-5 text-white" />
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-400 py-4 text-center">
+                      No reference image or illustrations for this variant yet.
+                    </p>
+                  )
+                })()}
+              </>
+            ) : (
+              /* Single variant or no variants */
+              (() => {
+                const v = variants[0] as any
+                if (v?.variant_image_url) {
+                  return (
+                    <a href={v.variant_image_url} target="_blank" rel="noopener noreferrer" className="block">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={v.variant_image_url}
+                        alt="Variant 1 reference"
+                        className="max-h-80 w-auto rounded-lg border border-gray-200 object-contain hover:opacity-90 transition-opacity"
+                      />
+                    </a>
+                  )
+                }
+                if (approvedDesignIllos.length === 0) return null
+                return (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+                    {approvedDesignIllos.map(f => (
+                      <a
+                        key={f.id}
+                        href={f.file_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group relative aspect-square rounded-lg overflow-hidden border-2 border-green-300 bg-gray-50 hover:opacity-90 transition-opacity"
+                        title={f.name}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={f.file_url} alt={f.name} className="w-full h-full object-cover" />
+                        <div className="absolute top-1 left-1 flex items-center gap-0.5 px-1 py-0.5 rounded-full bg-green-500 text-white text-[9px] font-medium pointer-events-none">
+                          <CheckCircle2 className="h-2.5 w-2.5" />
+                        </div>
+                        <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[9px] text-center py-0.5 px-1 truncate pointer-events-none">
+                          {f.name}
+                        </div>
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                          <ExternalLink className="h-5 w-5 text-white" />
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                )
+              })()
+            )}
+
+            {/* Colour SKUs */}
             {allSkus.length > 0 && (
               <div className="flex flex-wrap gap-1.5 p-2.5 bg-gray-50 rounded-lg border border-gray-200">
                 <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide self-center mr-1">Colour SKUs:</span>
                 {allSkus.map(sku => (
                   <span key={sku} className="text-xs font-mono bg-violet-100 text-violet-800 px-2 py-0.5 rounded-full">{sku}</span>
                 ))}
-                {designData?.sample_color && (
-                  <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">
-                    Sample colour: {designData.sample_color}
-                  </span>
-                )}
               </div>
             )}
 
-            {/* Colour-specific remarks hint */}
-            {designData?.remarks && (
-              <div className="text-xs bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-blue-800">
-                <span className="font-semibold">Designer Remarks (colour notes):</span> {designData.remarks}
-              </div>
-            )}
-
-            {/* Grouped by colour */}
-            {colorGroupEntries.map(([colourKey, illos]) => (
-              <div key={colourKey}>
-                {/* Colour header */}
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="h-px flex-1 bg-gray-200" />
-                  {colourKey === '__none__' ? (
-                    <span className="text-xs font-medium text-gray-400 bg-gray-100 px-2.5 py-0.5 rounded-full whitespace-nowrap">
-                      General / All colours ({illos.length})
-                    </span>
-                  ) : (
-                    <span className="text-xs font-semibold text-violet-800 bg-violet-100 px-2.5 py-0.5 rounded-full whitespace-nowrap font-mono">
-                      {colourKey} — {illos.length} illustration{illos.length !== 1 ? 's' : ''}
-                    </span>
-                  )}
-                  <div className="h-px flex-1 bg-gray-200" />
-                </div>
-
-                {/* Illustrations for this colour */}
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
-                  {illos.map(f => (
-                    <a
-                      key={f.id}
-                      href={f.file_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="group relative aspect-square rounded-lg overflow-hidden border-2 border-green-300 bg-gray-50 hover:opacity-90 transition-opacity"
-                      title={f.name}
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={f.file_url} alt={f.name} className="w-full h-full object-cover" />
-                      <div className="absolute top-1 left-1 flex items-center gap-0.5 px-1 py-0.5 rounded-full bg-green-500 text-white text-[9px] font-medium pointer-events-none">
-                        <CheckCircle2 className="h-2.5 w-2.5" />
-                      </div>
-                      <div
-                        className={`absolute bottom-0 left-0 right-0 text-white text-[9px] text-center py-0.5 px-1 truncate pointer-events-none ${
-                          colourKey !== '__none__' ? 'bg-violet-700/80 font-semibold' : 'bg-black/60'
-                        }`}
-                        title={f.name}
-                      >
-                        {colourKey !== '__none__' ? `${colourKey} — ${f.name}` : f.name}
-                      </div>
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                        <ExternalLink className="h-5 w-5 text-white" />
-                      </div>
-                    </a>
-                  ))}
-                </div>
-              </div>
-            ))}
           </CardContent>
         </Card>
       )}
@@ -418,6 +482,7 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
                 </div>
               )}
               <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3">
+                <TechPackValue label="Style Name" value={activeVariant.style_name} />
                 <TechPackValue label="Designer" value={activeVariant.designer_name} />
                 <TechPackValue label="Sample Color" value={activeVariant.sample_color} />
                 <TechPackValue label="Farma" value={activeVariant.farma} />
@@ -436,6 +501,10 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
                 <TechPackValue label="Digital Print" value={activeVariant.digital_print} />
                 <TechPackValue label="Bartech" value={activeVariant.bartech} />
                 <TechPackValue label="Re-sampling By" value={activeVariant.re_sampling_by} />
+                <TechPackValue label="Add On 1" value={activeVariant.add_on_1} />
+                <TechPackValue label="Add On 2" value={activeVariant.add_on_2} />
+                <TechPackValue label="Add On 3" value={activeVariant.add_on_3} />
+                <TechPackValue label="Designer Sign" value={activeVariant.designer_sign} />
               </div>
 
               {activeVariant.color_skus && activeVariant.color_skus.length > 0 && (
@@ -596,10 +665,12 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 Save Remarks
               </Button>
-              <Button onClick={submitSampleForReview} disabled={saving || sampleImages.length === 0 || isPending}>
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                Send for Approval
-              </Button>
+              {!isPending && (
+                <Button onClick={submitSampleForReview} disabled={saving || sampleImages.length === 0}>
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  Send for Approval
+                </Button>
+              )}
             </div>
           )}
         </CardContent>

@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'management' | 'design' | 'design_head' | 'sampling' | 'merchandising' | 'merchandising_head' | 'bom' | 'marketing' | 'sales' | 'viewer'
+export type UserRole = 'admin' | 'management' | 'design' | 'design_head' | 'sampling' | 'merchandising' | 'merchandising_head' | 'bom' | 'marketing' | 'marketing_head' | 'sales' | 'viewer' | 'purchase_head'
 
 export type WorkflowStage =
   | 'draft'
@@ -77,6 +77,7 @@ export interface Product {
   sub_category: string | null
   brand: Brand | null
   description: string | null
+  family_name: string | null
   workflow_stage: WorkflowStage
   is_locked: boolean
   created_by: string | null
@@ -109,6 +110,7 @@ export interface DesignData {
   sample_color: string | null
   color_skus: string[] | null
   unique_feature: string | null
+  style_name: string | null
   // Tech pack fields (exact mapping from design Excel)
   farma: string | null
   season_year: string | null
@@ -134,6 +136,7 @@ export interface DesignData {
   is_completed: boolean
   is_locked: boolean
   variants: any[] | null
+  techpack_pdf_url: string | null
   updated_by: string | null
   updated_at: string
 }
@@ -334,8 +337,10 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   merchandising_head: 'Merchandising Head',
   bom: 'BOM',
   marketing: 'Marketing',
+  marketing_head: 'Marketing Head',
   sales: 'Sales',
   viewer: 'Viewer',
+  purchase_head: 'Purchase Head',
 }
 
 export const ROLE_COLORS: Record<UserRole, string> = {
@@ -348,8 +353,10 @@ export const ROLE_COLORS: Record<UserRole, string> = {
   merchandising_head: 'bg-teal-200 text-teal-800',
   bom: 'bg-orange-100 text-orange-700',
   marketing: 'bg-yellow-100 text-yellow-700',
+  marketing_head: 'bg-amber-200 text-amber-800',
   sales: 'bg-green-100 text-green-700',
   viewer: 'bg-gray-100 text-gray-700',
+  purchase_head: 'bg-rose-100 text-rose-700',
 }
 
 // Which department owns each stage (does the work while the product is in that stage)

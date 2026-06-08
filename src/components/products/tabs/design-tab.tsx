@@ -117,6 +117,13 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
   const [activeVariantIdx, setActiveVariantIdx] = useState(0)
   const activeVariant = forms[activeVariantIdx] || defaultForm
 
+  function deleteVariant(idx: number) {
+    if (forms.length <= 1) return
+    const next = forms.filter((_: any, i: number) => i !== idx)
+    setForms(next)
+    setActiveVariantIdx(prev => (prev >= next.length ? next.length - 1 : prev === idx ? Math.max(0, idx - 1) : prev > idx ? prev - 1 : prev))
+  }
+
   const [category, setCategory]   = useState<ProductCategory | ''>(product.category || '')
   const [subCategory, setSubCategory] = useState<string>(product.sub_category || '')
 
@@ -145,7 +152,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
 
   const samplingStatus = samplingData?.sample_review_status ?? 'not_started'
   const samplingApproved  = samplingStatus === 'approved'
-  const samplingSent      = samplingStatus === 'pending_review'
+  const samplingSent      = ['sampling_requested', 'pending_review'].includes(samplingStatus)
   const samplingRejected  = samplingStatus === 'rejected'
 
   const [sendingSampling, setSendingSampling] = useState(false)
@@ -153,10 +160,8 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
   async function sendForSampling() {
     setSendingSampling(true)
     const approvedCount = designFiles.filter(f => f.review_status === 'approved').length
-    // Don't set sample_review_status here — the sampler sets it to 'pending_review'
-    // when they click "Send for Approval" after creating the physical sample.
     await supabase.from('sampling_data')
-      .update({ sample_review_status: null, updated_by: profile.id })
+      .update({ sample_review_status: 'sampling_requested', updated_by: profile.id })
       .eq('product_id', product.id)
     await supabase.from('activity_logs').insert({
       product_id: product.id, user_id: profile.id,
@@ -241,6 +246,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
   const [printUploading, setPrintUploading]     = useState(false)
   const [printProgress, setPrintProgress]       = useState<{ done: number; total: number } | null>(null)
   const [variantImgUploading, setVariantImgUploading] = useState<number | null>(null)
+  const [variantSampleUploading, setVariantSampleUploading] = useState<number | null>(null)
   const [printLightboxIdx, setPrintLightboxIdx] = useState<number | null>(null)
   const printImageFiles = printFiles.filter(f => f.file_type?.startsWith('image/'))
   const printLightboxImages: LightboxImage[] = printImageFiles.map(f => ({ url: f.file_url, name: f.name }))
@@ -697,7 +703,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
       return
     }
 
-    // ── Excel branch: parse and auto-fill form fields ─────────────────
+    // ── Excel branch: parse fields + extract embedded images ─────────
     try {
       const { read, utils } = await import('xlsx')
       const buffer = await file.arrayBuffer()
@@ -712,13 +718,76 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
       fd.append('product_name', product.name)
       fetch('/api/notify-techpack-uploaded', { method: 'POST', body: fd }).catch(() => {})
 
+      // ── Extract embedded images from the xlsx zip ─────────────────
+      const variantImageUrls: (string | null)[] = []
+      try {
+        const JSZip = (await import('jszip')).default
+        const zip = await JSZip.loadAsync(buffer)
+
+        // Build rId → image file path from drawing relationships
+        const rIdToFile: Record<string, string> = {}
+        const relsFile = zip.file('xl/drawings/_rels/drawing1.xml.rels')
+        if (relsFile) {
+          const relsXml = await relsFile.async('text')
+          for (const [, rId, target] of [...relsXml.matchAll(/Id="(rId\d+)"[^>]+Target="([^"]+)"/g)]) {
+            rIdToFile[rId] = 'xl/' + target.replace('../', '')
+          }
+        }
+
+        // Parse drawing XML to get anchor row for each image, then sort by row
+        const anchored: Array<{ row: number; filePath: string }> = []
+        const drawingFile = zip.file('xl/drawings/drawing1.xml')
+        if (drawingFile && Object.keys(rIdToFile).length > 0) {
+          const xml = await drawingFile.async('text')
+          const blockRe = /<xdr:(?:twoCellAnchor|oneCellAnchor)[^>]*>([\s\S]*?)<\/xdr:(?:twoCellAnchor|oneCellAnchor)>/g
+          for (const [, block] of [...xml.matchAll(blockRe)]) {
+            const rowM = block.match(/<xdr:from>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/)
+            const ridM = block.match(/r:embed="(rId\d+)"/)
+            if (rowM && ridM && rIdToFile[ridM[1]]) {
+              anchored.push({ row: parseInt(rowM[1]), filePath: rIdToFile[ridM[1]] })
+            }
+          }
+          anchored.sort((a, b) => a.row - b.row)
+        } else {
+          // No drawing XML — fall back to alphabetical media file order
+          Object.keys(zip.files)
+            .filter(p => p.startsWith('xl/media/'))
+            .sort()
+            .forEach((p, i) => anchored.push({ row: i, filePath: p }))
+        }
+
+        // Upload each image mapped to its variant index
+        for (let i = 0; i < variants.length; i++) {
+          const anchor = anchored[i]
+          if (!anchor) { variantImageUrls.push(null); continue }
+          const imgZipFile = zip.file(anchor.filePath)
+          if (!imgZipFile) { variantImageUrls.push(null); continue }
+          const blob = await imgZipFile.async('blob')
+          const ext = anchor.filePath.split('.').pop()?.toLowerCase() || 'png'
+          const mime = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`
+          const imgFile = new File([blob], `variant_${i + 1}.${ext}`, { type: mime })
+          const imgFd = new FormData()
+          imgFd.append('file', imgFile)
+          imgFd.append('folder', `products/${product.id}/variant-refs`)
+          const res = await fetch('/api/upload-file', { method: 'POST', body: imgFd })
+          variantImageUrls.push(res.ok ? (await res.json()).url : null)
+        }
+      } catch {
+        // Image extraction is optional — never block the form fill
+      }
+
       if (variants.length > 0) {
-        const newVariantForms = variants.map(v => {
+        const newVariantForms = variants.map((v, i) => {
           const { updates } = variantToFormUpdates(v)
           const newColorSkus = v.colorSkusStr
             ? v.colorSkusStr.split(/[\n,/]/).map(s => s.trim()).filter(Boolean)
             : []
-          return { ...defaultForm, ...updates, sample_color: v.colourName || '', color_skus: newColorSkus }
+          return {
+            ...defaultForm, ...updates,
+            sample_color: v.colourName || '',
+            color_skus: newColorSkus,
+            ...(variantImageUrls[i] ? { variant_image_url: variantImageUrls[i] } : {}),
+          }
         })
         const existingReal = forms.filter(f => f.sample_color || f.farma || f.season_year || (f.color_skus && f.color_skus.length > 0))
         const mergedForms = existingReal.length > 0 ? [...existingReal, ...newVariantForms] : newVariantForms
@@ -729,10 +798,11 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
             ? supabase.from('products').update({ name: variants[0].styleName, updated_by: profile.id }).eq('id', product.id)
             : Promise.resolve(),
         ])
-        const msg = existingReal.length > 0
+        const imgCount = variantImageUrls.filter(Boolean).length
+        const base = existingReal.length > 0
           ? `Added ${newVariantForms.length} variant(s). Total: ${mergedForms.length} variants.`
           : `Loaded ${mergedForms.length} variant(s).`
-        setTechPackResult({ filled: [msg] })
+        setTechPackResult({ filled: [base + (imgCount > 0 ? ` ${imgCount} variant image(s) extracted.` : '')] })
       }
     } catch {
       setTechPackResult({ filled: [] })
@@ -1002,7 +1072,6 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
     { label: 'Approval',       done: imageApproved,    active: hasAnyApproved && !imageApproved },
     { label: 'Tech Pack',      done: hasTechPack,      active: imageApproved && !hasTechPack },
     { label: 'Variant Images', done: hasVariantImages, active: hasTechPack && !hasVariantImages },
-    { label: 'Send for Sampling', done: samplingSent || samplingApproved, active: hasVariantImages && !samplingSent && !samplingApproved },
   ] : null
 
   return (
@@ -1033,6 +1102,111 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
             ))}
           </div>
         </div>
+      )}
+
+      {/* ── Sampling Gate ─────────────────────────────────────────────────── */}
+      {(isAssignedToMe || isHead) && !data?.is_locked && !data?.is_completed && (
+        <Card className={cn(
+          'border-2',
+          samplingApproved  ? 'border-green-300 bg-green-50'  :
+          samplingRejected  ? 'border-red-300 bg-red-50'      :
+          samplingSent      ? 'border-yellow-200 bg-yellow-50' :
+          hasAnyApproved    ? 'border-violet-200 bg-violet-50' :
+          'border-gray-200 bg-gray-50',
+        )}>
+          <CardContent className="pt-4 pb-4">
+            {/* Not sent yet */}
+            {samplingStatus === 'not_started' && (
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">Send for Sampling</p>
+                  {!hasAnyApproved ? (
+                    <p className="text-xs text-gray-400 mt-0.5">Illustrations must be approved by the design head first.</p>
+                  ) : !hasTechPack ? (
+                    <p className="text-xs text-orange-600 mt-0.5">Upload the tech pack above before sending for sampling.</p>
+                  ) : !hasVariantImages ? (
+                    <p className="text-xs text-orange-600 mt-0.5">Upload a reference image for every variant (in the Design Details form above) before sending.</p>
+                  ) : (
+                    <p className="text-xs text-violet-700 mt-0.5">
+                      {designFiles.filter(f => f.review_status === 'approved').length} illustration(s) approved, tech pack &amp; variant images ready — click to send.
+                    </p>
+                  )}
+                </div>
+                {hasAnyApproved && hasTechPack && hasVariantImages && (
+                  <Button
+                    size="sm"
+                    onClick={sendForSampling}
+                    disabled={sendingSampling}
+                    className="bg-violet-600 hover:bg-violet-700 shrink-0"
+                  >
+                    {sendingSampling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    Send for Sampling
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {/* Sent — waiting for sampling team */}
+            {samplingSent && (
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <Clock className="h-5 w-5 text-yellow-600 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-yellow-900">Sent to Sampling Team</p>
+                    <p className="text-xs text-yellow-700 mt-0.5">
+                      The sampling team is creating physical samples. If you have uploaded a new variant, you can send it too.
+                    </p>
+                  </div>
+                </div>
+                {hasAnyApproved && hasTechPack && hasVariantImages && (isAssignedToMe || isHead) && (
+                  <Button
+                    size="sm"
+                    onClick={sendForSampling}
+                    disabled={sendingSampling}
+                    variant="outline"
+                    className="border-yellow-400 text-yellow-800 hover:bg-yellow-50 shrink-0"
+                  >
+                    {sendingSampling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    Send Another Variant
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {/* Approved — design can be marked complete */}
+            {samplingApproved && (
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-green-800">Sample Approved</p>
+                  <p className="text-xs text-green-700 mt-0.5">
+                    Physical sample passed. You can now mark design as complete — product will advance directly to Merchandising.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Rejected — needs revision */}
+            {samplingRejected && (
+              <div className="flex items-start gap-3">
+                <XCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-red-800">Sample Rejected</p>
+                  {samplingData?.designer_feedback && (
+                    <p className="text-xs text-red-700 mt-0.5 italic">&ldquo;{samplingData.designer_feedback}&rdquo;</p>
+                  )}
+                  <p className="text-xs text-red-600 mt-1">Review the feedback, update the design if needed, and send for sampling again.</p>
+                  {(isAssignedToMe || isHead) && (
+                    <Button size="sm" onClick={sendForSampling} disabled={sendingSampling} className="mt-2 bg-red-600 hover:bg-red-700 h-7 text-xs">
+                      {sendingSampling ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                      Resend for Sampling
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* ── Design Head: Assignment + Review Queue (reviewer mode only) ── */}
@@ -1791,7 +1965,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-purple-900">Upload Tech Pack</p>
-                  <p className="text-xs text-purple-700">Excel auto-fills all fields · PDF is stored as reference</p>
+                  <p className="text-xs text-purple-700">Excel auto-fills fields &amp; extracts variant images · PDF stored as reference</p>
                 </div>
               </div>
               <Button size="sm" onClick={() => techPackRef.current?.click()} disabled={parsingTechPack} className="bg-purple-600 hover:bg-purple-700 shrink-0">
@@ -2031,17 +2205,31 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
           {forms.length > 1 && (
             <div className="flex flex-wrap gap-2 mb-6">
               {forms.map((f: any, i: number) => (
-                <button
-                  key={i}
-                  onClick={() => setActiveVariantIdx(i)}
-                  className={`px-4 py-2 rounded-full text-xs font-semibold border transition-all ${
-                    i === activeVariantIdx
-                      ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                      : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                  }`}
-                >
-                  Variant {i + 1} {f.sample_color ? `(${f.sample_color})` : ''}
-                </button>
+                <div key={i} className="relative group">
+                  <button
+                    onClick={() => setActiveVariantIdx(i)}
+                    className={`pl-4 pr-7 py-2 rounded-full text-xs font-semibold border transition-all ${
+                      i === activeVariantIdx
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    Variant {i + 1} {f.sample_color ? `(${f.sample_color})` : ''}
+                  </button>
+                  {canEditFields && (
+                    <button
+                      onClick={e => { e.stopPropagation(); deleteVariant(i) }}
+                      title="Delete this variant"
+                      className={`absolute right-1.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 transition-colors ${
+                        i === activeVariantIdx
+                          ? 'text-blue-200 hover:text-white hover:bg-blue-500'
+                          : 'text-gray-300 hover:text-red-500 hover:bg-red-50'
+                      }`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
           )}
@@ -2223,6 +2411,92 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
             )}
           </div>
 
+          {/* Sample Images (multiple per variant) */}
+          <div className="space-y-2 border-t pt-4 mt-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label className="text-xs text-gray-500">Sample Images</Label>
+                <p className="text-xs text-gray-400 mt-0.5">Upload photos of the physical sample for this colour variant.</p>
+              </div>
+              {canEditFields && (
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    disabled={variantSampleUploading !== null}
+                    onChange={async (e) => {
+                      const files = Array.from(e.target.files || [])
+                      if (!files.length) return
+                      setVariantSampleUploading(formIdx)
+                      const uploaded: string[] = []
+                      for (const f of files) {
+                        const fd = new FormData()
+                        fd.append('file', f)
+                        fd.append('folder', `products/${product.id}/variant-samples`)
+                        const res = await fetch('/api/upload-file', { method: 'POST', body: fd })
+                        if (res.ok) {
+                          const { url } = await res.json() as { url: string }
+                          uploaded.push(url)
+                        }
+                      }
+                      if (uploaded.length > 0) {
+                        const existing: string[] = (form as any).variant_sample_images || []
+                        const updatedForms = forms.map((f, i) =>
+                          i === formIdx ? { ...f, variant_sample_images: [...existing, ...uploaded] } : f
+                        )
+                        setForms(updatedForms)
+                        await supabase.from('design_data').update({ variants: updatedForms, updated_by: profile.id } as any).eq('product_id', product.id)
+                        toast.success(`${uploaded.length} sample image(s) uploaded.`)
+                      }
+                      setVariantSampleUploading(null)
+                      e.target.value = ''
+                    }}
+                  />
+                  <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border ${variantSampleUploading === formIdx ? 'bg-gray-100 text-gray-400 border-gray-200' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}>
+                    {variantSampleUploading === formIdx ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                    {variantSampleUploading === formIdx ? 'Uploading…' : 'Upload Samples'}
+                  </span>
+                </label>
+              )}
+            </div>
+            {((form as any).variant_sample_images as string[] | undefined)?.length ? (
+              <div className="flex flex-wrap gap-2 mt-1">
+                {((form as any).variant_sample_images as string[]).map((url, imgIdx) => (
+                  <div key={imgIdx} className="relative group">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={url}
+                      alt={`Sample ${imgIdx + 1}`}
+                      className="h-24 w-24 object-cover rounded-lg border border-gray-200 cursor-pointer"
+                      onClick={() => window.open(url, '_blank')}
+                    />
+                    {canEditFields && (
+                      <button
+                        type="button"
+                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                        onClick={async () => {
+                          const existing: string[] = (form as any).variant_sample_images || []
+                          const updatedForms = forms.map((f, i) =>
+                            i === formIdx ? { ...f, variant_sample_images: existing.filter((_, j) => j !== imgIdx) } : f
+                          )
+                          setForms(updatedForms)
+                          await supabase.from('design_data').update({ variants: updatedForms, updated_by: profile.id } as any).eq('product_id', product.id)
+                          toast.success('Sample image removed.')
+                        }}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400 italic">No sample images yet.</p>
+            )}
+          </div>
+
           {/* Unique Feature / USP */}
           <div className="space-y-1.5">
             <Label className="text-xs text-gray-500">Unique Feature / USP</Label>
@@ -2276,110 +2550,6 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
         </CardContent>
       </Card>}
 
-      {/* ── Sampling Gate ─────────────────────────────────────────────────── */}
-      {(isAssignedToMe || isHead) && !data?.is_locked && !data?.is_completed && (
-        <Card className={cn(
-          'border-2',
-          samplingApproved  ? 'border-green-300 bg-green-50'  :
-          samplingRejected  ? 'border-red-300 bg-red-50'      :
-          samplingSent      ? 'border-yellow-200 bg-yellow-50' :
-          hasAnyApproved    ? 'border-violet-200 bg-violet-50' :
-          'border-gray-200 bg-gray-50',
-        )}>
-          <CardContent className="pt-4 pb-4">
-            {/* Not sent yet */}
-            {samplingStatus === 'not_started' && (
-              <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div>
-                  <p className="text-sm font-semibold text-gray-800">Send for Sampling</p>
-                  {!hasAnyApproved ? (
-                    <p className="text-xs text-gray-400 mt-0.5">Illustrations must be approved by the design head first.</p>
-                  ) : !hasTechPack ? (
-                    <p className="text-xs text-orange-600 mt-0.5">Upload the tech pack above before sending for sampling.</p>
-                  ) : !hasVariantImages ? (
-                    <p className="text-xs text-orange-600 mt-0.5">Upload a reference image for every variant (in the Design Details form above) before sending.</p>
-                  ) : (
-                    <p className="text-xs text-violet-700 mt-0.5">
-                      {designFiles.filter(f => f.review_status === 'approved').length} illustration(s) approved, tech pack &amp; variant images ready — click to send.
-                    </p>
-                  )}
-                </div>
-                {hasAnyApproved && hasTechPack && hasVariantImages && (
-                  <Button
-                    size="sm"
-                    onClick={sendForSampling}
-                    disabled={sendingSampling}
-                    className="bg-violet-600 hover:bg-violet-700 shrink-0"
-                  >
-                    {sendingSampling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                    Send for Sampling
-                  </Button>
-                )}
-              </div>
-            )}
-
-            {/* Sent — waiting for sampling team */}
-            {samplingSent && (
-              <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div className="flex items-center gap-3">
-                  <Clock className="h-5 w-5 text-yellow-600 shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold text-yellow-900">Sent to Sampling Team</p>
-                    <p className="text-xs text-yellow-700 mt-0.5">
-                      The sampling team is creating physical samples. If you have uploaded a new variant, you can send it too.
-                    </p>
-                  </div>
-                </div>
-                {hasAnyApproved && hasTechPack && hasVariantImages && (isAssignedToMe || isHead) && (
-                  <Button
-                    size="sm"
-                    onClick={sendForSampling}
-                    disabled={sendingSampling}
-                    variant="outline"
-                    className="border-yellow-400 text-yellow-800 hover:bg-yellow-50 shrink-0"
-                  >
-                    {sendingSampling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                    Send Another Variant
-                  </Button>
-                )}
-              </div>
-            )}
-
-            {/* Approved — design can be marked complete */}
-            {samplingApproved && (
-              <div className="flex items-center gap-3">
-                <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold text-green-800">Sample Approved</p>
-                  <p className="text-xs text-green-700 mt-0.5">
-                    Physical sample passed. You can now mark design as complete — product will advance directly to Merchandising.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Rejected — needs revision */}
-            {samplingRejected && (
-              <div className="flex items-start gap-3">
-                <XCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-semibold text-red-800">Sample Rejected</p>
-                  {samplingData?.designer_feedback && (
-                    <p className="text-xs text-red-700 mt-0.5 italic">&ldquo;{samplingData.designer_feedback}&rdquo;</p>
-                  )}
-                  <p className="text-xs text-red-600 mt-1">Review the feedback, update the design if needed, and send for sampling again.</p>
-                  {(isAssignedToMe || isHead) && (
-                    <Button size="sm" onClick={sendForSampling} disabled={sendingSampling} className="mt-2 bg-red-600 hover:bg-red-700 h-7 text-xs">
-                      {sendingSampling ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
-                      Resend for Sampling
-                    </Button>
-                  )}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
       <ConfirmDialog
         open={confirmOpen}

@@ -199,7 +199,7 @@ export interface SamplingData {
   assigned_to: string | null
   sampler_name: string | null
   sampler_remarks: string | null
-  sample_review_status: 'not_started' | 'pending_review' | 'approved' | 'rejected'
+  sample_review_status: 'not_started' | 'pending_review' | 'approved' | 'rejected' | 'sampling_requested'
   designer_feedback: string | null
   reviewed_by: string | null
   reviewed_at: string | null

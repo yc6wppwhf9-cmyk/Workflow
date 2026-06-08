@@ -2,7 +2,7 @@
 
 import { useRef, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCircle2, Clock, Download, ExternalLink, FileText, Layers, Loader2, Printer, Send, Trash2, Upload, XCircle } from 'lucide-react'
+import { CheckCircle2, Clock, Download, ExternalLink, FileText, FlaskConical, Layers, Loader2, Printer, Send, Trash2, Upload, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -99,6 +99,7 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
   const isApproved = status === 'approved'
   const isPending = status === 'pending_review'
   const isRejected = status === 'rejected'
+  const isSamplingRequested = status === 'sampling_requested'
 
   async function saveAssignment() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -639,6 +640,12 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
               placeholder="Construction notes, deviations, material observations, fit issues..."
             />
           </div>
+
+          {isSamplingRequested && (
+            <div className="flex items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-700">
+              <FlaskConical className="h-4 w-4 shrink-0" /> Design team has sent this for sampling — upload sample photos and press &quot;Send for Approval&quot; when ready.
+            </div>
+          )}
 
           {isRejected && (
             <div className="rounded-lg border border-red-200 bg-red-50 p-3">

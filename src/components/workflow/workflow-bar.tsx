@@ -43,8 +43,7 @@ export function WorkflowBar({
   const DISPLAY_STAGES = [
     { label: 'Sales',         doneAfter: 0, tab: 'sales'         },
     { label: 'Design',        doneAfter: 1, tab: 'design'        },
-    { label: 'Sampling',      doneAfter: 2, tab: 'sampling'      },
-    { label: 'Merchandising', doneAfter: 3, tab: 'merchandising' },
+    { label: 'Merchandising', doneAfter: 2, tab: 'merchandising' },
     { label: 'BOM',           doneAfter: 4, tab: 'bom'           },
     { label: 'Marketing',     doneAfter: 5, tab: 'marketing'     },
     { label: 'Sales Priced',  doneAfter: 6, tab: 'sales'         },

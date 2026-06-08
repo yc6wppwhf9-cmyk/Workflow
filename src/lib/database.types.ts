@@ -764,6 +764,7 @@ export type Database = {
       }
       sampling_data: {
         Row: {
+          assigned_to: string | null
           designer_feedback: string | null
           id: string
           is_completed: boolean
@@ -778,6 +779,7 @@ export type Database = {
           updated_by: string | null
         }
         Insert: {
+          assigned_to?: string | null
           designer_feedback?: string | null
           id?: string
           is_completed?: boolean
@@ -792,6 +794,7 @@ export type Database = {
           updated_by?: string | null
         }
         Update: {
+          assigned_to?: string | null
           designer_feedback?: string | null
           id?: string
           is_completed?: boolean

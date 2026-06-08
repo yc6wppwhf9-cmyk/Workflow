@@ -9,7 +9,7 @@ import type { Profile } from '@/lib/types'
 import { KpiCard } from './_shared'
 
 const DEPT_CONFIG: Record<string, { stage: WorkflowStage; dataTable: string; label: string; tab: string; color: string }> = {
-  sampling:           { stage: 'sampling_completed',      dataTable: 'sampling_data',      label: 'Sampling',      tab: 'sampling',      color: 'bg-cyan-50 [&>svg]:text-cyan-600' },
+  sampling:           { stage: 'design_completed',        dataTable: 'sampling_data',      label: 'Sampling',      tab: 'sampling',      color: 'bg-cyan-50 [&>svg]:text-cyan-600' },
   merchandising:      { stage: 'merchandising_completed', dataTable: 'merchandising_data', label: 'Merchandising', tab: 'merchandising', color: 'bg-blue-50 [&>svg]:text-blue-600' },
   merchandising_head: { stage: 'sampling_completed',      dataTable: 'merchandising_data', label: 'Merchandising', tab: 'merchandising', color: 'bg-teal-50 [&>svg]:text-teal-600' },
   bom:                { stage: 'bom_finalized',           dataTable: 'bom_data',           label: 'BOM',           tab: 'bom',           color: 'bg-orange-50 [&>svg]:text-orange-600' },

@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { createClient, getCurrentProfile } from '@/lib/supabase/server'
+import { createServiceClient, getCurrentProfile } from '@/lib/supabase/server'
 import { Header } from '@/components/layout/header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ArrowRight, CheckCircle2, Clock, FlaskConical, XCircle } from 'lucide-react'
@@ -12,40 +12,33 @@ export default async function SamplingQueuePage() {
     redirect('/dashboard')
   }
 
-  const supabase = await createClient()
+  const supabase = createServiceClient()
 
-  const { data: rows } = await supabase
+  // Fetch all products at design_completed stage (same filter as sampling dashboard)
+  const { data: productRows } = await supabase
     .from('products')
-    .select(`
-      id, name, category, created_at,
-      sampling_data(sample_review_status, sampler_name, assigned_to, reviewed_at),
-      sales_data(deadline_date),
-      design_data(assigned_to, variants)
-    `)
-    .in('sampling_data.sample_review_status', ['pending_review', 'approved', 'rejected'])
-    .not('sampling_data', 'is', null)
+    .select('id, name, category, created_at, sales_data(deadline_date), design_data(assigned_to, variants), sampling_data(sample_review_status, sampler_name, assigned_to, reviewed_at)')
+    .eq('workflow_stage', 'design_completed')
     .order('created_at', { ascending: false })
 
-  // Show only products where Send for Sampling was pressed (sample_review_status is set)
-  const products = (rows || [])
-    .map(p => ({
-      ...p,
-      sampling: one(p.sampling_data) as {
-        sample_review_status: string
-        sampler_name: string | null
-        assigned_to: string | null
-        reviewed_at: string | null
-      } | null,
-      deadline: (one(p.sales_data) as { deadline_date?: string | null } | null)?.deadline_date ?? null,
-      variantCount: (() => {
-        const dd = one(p.design_data) as { variants?: unknown[] } | null
-        return dd?.variants?.length ?? 1
-      })(),
-    }))
-    .filter(p => p.sampling !== null)
+  const products = (productRows || []).map(p => ({
+    ...p,
+    sampling: one(p.sampling_data) as {
+      sample_review_status: string | null
+      sampler_name: string | null
+      assigned_to: string | null
+      reviewed_at: string | null
+    } | null,
+    deadline: (one(p.sales_data) as { deadline_date?: string | null } | null)?.deadline_date ?? null,
+    variantCount: (() => {
+      const dd = one(p.design_data) as { variants?: unknown[] } | null
+      return dd?.variants?.length ?? 1
+    })(),
+  }))
 
-  const pending  = products.filter(p => p.sampling?.sample_review_status === 'pending_review')
-  const done     = products.filter(p => ['approved', 'rejected'].includes(p.sampling?.sample_review_status ?? ''))
+  // Done = sampling approved or rejected; everything else is pending
+  const pending = products.filter(p => !['approved', 'rejected'].includes(p.sampling?.sample_review_status ?? ''))
+  const done    = products.filter(p => ['approved', 'rejected'].includes(p.sampling?.sample_review_status ?? ''))
 
   return (
     <div>
@@ -115,6 +108,7 @@ export default async function SamplingQueuePage() {
                     <th className="text-left px-6 py-2 text-xs font-semibold text-gray-400 uppercase">Product</th>
                     <th className="text-left px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Category</th>
                     <th className="text-left px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Variants</th>
+                    <th className="text-left px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Status</th>
                     <th className="text-left px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Deadline</th>
                     <th className="text-left px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Waiting</th>
                     <th className="px-4 py-2" />
@@ -126,6 +120,14 @@ export default async function SamplingQueuePage() {
                       <td className="px-6 py-3 font-medium text-gray-900">{p.name}</td>
                       <td className="px-4 py-3 text-xs text-gray-500 capitalize">{p.category?.replace('_', ' ')}</td>
                       <td className="px-4 py-3 text-xs text-gray-500">{p.variantCount} colour{p.variantCount !== 1 ? 's' : ''}</td>
+                      <td className="px-4 py-3">
+                        {p.sampling?.sample_review_status === 'pending_review'
+                          ? <span className="inline-flex items-center gap-1 text-xs text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">Awaiting Review</span>
+                          : p.sampling?.sample_review_status === 'sampling_requested'
+                          ? <span className="inline-flex items-center gap-1 text-xs text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full">Create Sample</span>
+                          : <span className="inline-flex items-center gap-1 text-xs text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full">Design Ready</span>
+                        }
+                      </td>
                       <td className="px-4 py-3 text-xs text-gray-500">{p.deadline ? formatShortDate(p.deadline) : '—'}</td>
                       <td className="px-4 py-3 text-xs text-violet-600 font-medium">{daysSince(p.created_at)}d</td>
                       <td className="px-4 py-3 text-right">

@@ -182,7 +182,7 @@ export function ProductDetail({
             <SamplingTab product={product} profile={profile} designData={designData} data={samplingData} files={files} samplingUsers={samplingUsers} />
           </TabsPrimitive.Content>
           <TabsPrimitive.Content value="merchandising">
-            <MerchandisingTab product={product} profile={profile} data={merchandisingData} merchandisingUsers={merchandisingUsers} />
+            <MerchandisingTab product={product} profile={profile} data={merchandisingData} merchandisingUsers={merchandisingUsers} designData={designData} />
           </TabsPrimitive.Content>
           <TabsPrimitive.Content value="colours">
             <ColourVariantsTab

@@ -11,13 +11,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { createClient } from '@/lib/supabase/client'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { parseMerchExcel, filterSkusForProduct, aggregateMerchFields, buildColourVariants, extractProductBaseName } from '@/lib/parse-merch-excel'
-import type { Product, Profile, MerchandisingData } from '@/lib/types'
+import type { Product, Profile, MerchandisingData, DesignData } from '@/lib/types'
 
 interface MerchandisingTabProps {
   product: Product
   profile: Profile
   data: MerchandisingData | null
   merchandisingUsers: Pick<Profile, 'id' | 'full_name'>[]
+  designData?: DesignData | null
 }
 
 type FormState = {
@@ -66,7 +67,7 @@ function initForm(data: MerchandisingData | null): FormState {
   }
 }
 
-export function MerchandisingTab({ product, profile, data, merchandisingUsers }: MerchandisingTabProps) {
+export function MerchandisingTab({ product, profile, data, merchandisingUsers, designData }: MerchandisingTabProps) {
   const router = useRouter()
   const isTeamMember = profile.role === 'merchandising'
   const isHead = ['admin', 'merchandising_head'].includes(profile.role)
@@ -494,8 +495,37 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers }:
     </div>
   )
 
+  const designVariants: any[] = (designData?.variants || []).filter(
+    (v: any) => v && (v.sample_color || v.farma || v.style_name || (Array.isArray(v.color_skus) && v.color_skus.length > 0))
+  )
+
   return (
     <div className="max-w-3xl space-y-4">
+
+      {/* Colour variants from design tech pack — read-only reference for merch team */}
+      {designVariants.length > 0 && (
+        <Card className="border-violet-100 bg-violet-50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-violet-800">Colour Variants from Tech Pack</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="flex flex-wrap gap-2">
+              {designVariants.map((v: any, i: number) => (
+                <div key={i} className="bg-white border border-violet-200 rounded-lg px-3 py-2 text-xs space-y-0.5 min-w-[120px]">
+                  <p className="font-semibold text-violet-900">
+                    {v.sample_color || `Variant ${i + 1}`}
+                  </p>
+                  {v.farma && <p className="text-gray-500">Farma: <span className="text-gray-800">{v.farma}</span></p>}
+                  {v.style_name && <p className="text-gray-500">Style: <span className="text-gray-800">{v.style_name}</span></p>}
+                  {Array.isArray(v.color_skus) && v.color_skus.length > 0 && (
+                    <p className="text-gray-500">SKUs: <span className="font-mono text-gray-800">{v.color_skus.join(', ')}</span></p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Print Tech Pack shortcut */}
       <div className="flex justify-end">

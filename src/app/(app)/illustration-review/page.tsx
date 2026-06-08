@@ -28,7 +28,7 @@ export default async function IllustrationReviewPage() {
     .eq('department', 'design')
     .eq('review_status', 'pending')
     .like('file_type', 'image/%')
-    .is('colour_tag', null)             // exclude print files
+    .or('colour_tag.is.null,colour_tag.neq.print')  // exclude only print files
     .order('created_at', { ascending: true })
 
   // Filter by uploader role (Supabase doesn't support deep filter on joined column)

@@ -237,15 +237,9 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
   const activeIlloToken = forms.length > 1
     ? variantColorToken((forms[activeIlloVariantIdx] as any)?.sample_color || '')
     : ''
-  // When multiple variants: show only illustrations tagged for the active variant
-  const visibleDesignFiles = (forms.length > 1 && activeIlloToken)
-    ? designFiles.filter(f => {
-        const ct = (f.colour_tag || '').trim().toLowerCase()
-        if (!ct) return false
-        const ctToken = ct.includes(' — ') ? (ct.split(' — ').pop()?.trim() ?? ct) : ct
-        return ctToken === activeIlloToken.toLowerCase() || ct === activeIlloToken.toLowerCase()
-      })
-    : designFiles
+  // Always show all illustrations — variant tabs control only the upload auto-tag, not display.
+  // Hiding untagged illustrations would make existing approved images disappear unexpectedly.
+  const visibleDesignFiles = designFiles
   // The colour tag that will be applied to the next upload batch
   const effectiveIlloTag = forms.length > 1 ? activeIlloToken : illoColorTag
 
@@ -1819,9 +1813,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
               onClick={() => canUploadIllos && illustrationRef.current?.click()}
             >
               <Upload className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-              <p className="text-sm text-gray-500 font-medium">
-                {forms.length > 1 ? `No illustrations for ${activeIlloToken || `Variant ${activeIlloVariantIdx + 1}`} yet` : 'Upload design illustrations'}
-              </p>
+              <p className="text-sm text-gray-500 font-medium">Upload design illustrations</p>
               <p className="text-xs text-gray-400 mt-1">JPG, PNG, GIF, WEBP supported</p>
             </div>
           ) : (

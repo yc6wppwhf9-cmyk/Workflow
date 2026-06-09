@@ -717,6 +717,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
         fetch('/api/notify-techpack-uploaded', { method: 'POST', body: notifyFd }).catch(() => {})
         setTechPackResult({ filled: ['PDF uploaded successfully.'], isPdf: true })
         toast.success('Tech pack PDF uploaded')
+        router.refresh()
       } catch {
         toast.error('Failed to upload PDF')
         setTechPackResult({ filled: [] })
@@ -832,6 +833,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
           ? `Updated ${newVariantForms.length} variant(s). Total: ${mergedForms.length} variants.`
           : `Loaded ${mergedForms.length} variant(s).`
         setTechPackResult({ filled: [base + (imgCount > 0 ? ` ${imgCount} variant image(s) extracted.` : '')] })
+        router.refresh()
       }
     } catch {
       setTechPackResult({ filled: [] })

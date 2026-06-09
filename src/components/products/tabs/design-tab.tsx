@@ -162,31 +162,38 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
   const samplingRejected  = samplingStatus === 'rejected'
 
   const [sendingSampling, setSendingSampling] = useState(false)
+  const sendingSamplingRef = useRef(false)
 
   async function sendForSampling() {
+    if (sendingSamplingRef.current) return
+    sendingSamplingRef.current = true
     setSendingSampling(true)
-    const approvedCount = designFiles.filter(f => f.review_status === 'approved').length
-    await supabase.from('sampling_data')
-      .update({ sample_review_status: 'sampling_requested', updated_by: profile.id })
-      .eq('product_id', product.id)
-    await supabase.from('activity_logs').insert({
-      product_id: product.id, user_id: profile.id,
-      action: `sent ${approvedCount} approved illustration(s) to sampling team`,
-      department: 'design',
-    })
-    fetch('/api/notify-send-for-sampling', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        product_id:     product.id,
-        product_name:   product.name,
-        approved_count: approvedCount,
-        sender_name:    profile.full_name,
-      }),
-    }).catch(() => {})
-    toast.success(`${approvedCount} illustration(s) sent to sampling team.`)
-    setSendingSampling(false)
-    router.refresh()
+    try {
+      const approvedCount = designFiles.filter(f => f.review_status === 'approved').length
+      await supabase.from('sampling_data')
+        .update({ sample_review_status: 'sampling_requested', updated_by: profile.id })
+        .eq('product_id', product.id)
+      await supabase.from('activity_logs').insert({
+        product_id: product.id, user_id: profile.id,
+        action: `sent ${approvedCount} approved illustration(s) to sampling team`,
+        department: 'design',
+      })
+      fetch('/api/notify-send-for-sampling', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_id:     product.id,
+          product_name:   product.name,
+          approved_count: approvedCount,
+          sender_name:    profile.full_name,
+        }),
+      }).catch(() => {})
+      toast.success(`${approvedCount} illustration(s) sent to sampling team.`)
+      router.refresh()
+    } finally {
+      sendingSamplingRef.current = false
+      setSendingSampling(false)
+    }
   }
 
   // Batch hold status — populated when this product is complete but waiting for siblings

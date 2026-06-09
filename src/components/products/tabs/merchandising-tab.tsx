@@ -98,6 +98,7 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
   const [saveError, setSaveError] = useState('')
   const [assignedTo, setAssignedTo] = useState(data?.assigned_to || '')
   const [savingAssign, setSavingAssign] = useState(false)
+  const savingAssignRef = useRef(false)
 
   const excelInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
@@ -405,33 +406,38 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
   }
 
   async function handleAssign() {
-    if (!assignedTo) return
+    if (!assignedTo || savingAssignRef.current) return
+    savingAssignRef.current = true
     setSavingAssign(true)
-    const supabase = createClient()
-    await supabase.from('merchandising_data').update({ assigned_to: assignedTo, updated_by: profile.id }).eq('product_id', product.id)
-    const assignedUser = merchandisingUsers.find(u => u.id === assignedTo)
-    await supabase.from('activity_logs').insert({
-      product_id: product.id, user_id: profile.id,
-      action: `assigned merchandising task to ${assignedUser?.full_name || 'team member'}`,
-      department: 'merchandising',
-    })
-    if (assignedUser) {
-      fetch('/api/notify-assignment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          product_id:        product.id,
-          product_name:      product.name,
-          assigned_to_id:    assignedTo,
-          assigned_to_name:  assignedUser.full_name,
-          assigned_to_email: (assignedUser as { full_name: string; email?: string }).email ?? '',
-          department:        'merchandising',
-          assigned_by_name:  profile.full_name,
-        }),
-      }).catch(() => {})
+    try {
+      const supabase = createClient()
+      await supabase.from('merchandising_data').update({ assigned_to: assignedTo, updated_by: profile.id }).eq('product_id', product.id)
+      const assignedUser = merchandisingUsers.find(u => u.id === assignedTo)
+      await supabase.from('activity_logs').insert({
+        product_id: product.id, user_id: profile.id,
+        action: `assigned merchandising task to ${assignedUser?.full_name || 'team member'}`,
+        department: 'merchandising',
+      })
+      if (assignedUser) {
+        fetch('/api/notify-assignment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            product_id:        product.id,
+            product_name:      product.name,
+            assigned_to_id:    assignedTo,
+            assigned_to_name:  assignedUser.full_name,
+            assigned_to_email: (assignedUser as { full_name: string; email?: string }).email ?? '',
+            department:        'merchandising',
+            assigned_by_name:  profile.full_name,
+          }),
+        }).catch(() => {})
+      }
+      router.refresh()
+    } finally {
+      savingAssignRef.current = false
+      setSavingAssign(false)
     }
-    setSavingAssign(false)
-    router.refresh()
   }
 
   async function submitForReview() {

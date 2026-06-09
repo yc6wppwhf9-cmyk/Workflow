@@ -519,7 +519,7 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
               {designVariants.map((v: any, i: number) => (
                 <div key={i} className="bg-white border border-violet-200 rounded-lg px-3 py-2 text-xs space-y-0.5 min-w-[120px]">
                   <p className="font-semibold text-violet-900">
-                    {v.sample_color || `Variant ${i + 1}`}
+                    Design {i + 1}
                   </p>
                   {v.farma && <p className="text-gray-500">Farma: <span className="text-gray-800">{v.farma}</span></p>}
                   {v.style_name && <p className="text-gray-500">Style: <span className="text-gray-800">{v.style_name}</span></p>}

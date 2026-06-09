@@ -2336,7 +2336,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
                         : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                     }`}
                   >
-                    Variant {i + 1} {f.sample_color ? `(${f.sample_color})` : ''}
+                    Design {i + 1}
                   </button>
                   {canEditFields && (
                     <button
@@ -2357,7 +2357,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
           )}
           {forms.map((form, formIdx) => (
   <div key={formIdx} className={`mb-8 border-t pt-6 first:border-0 first:pt-0 ${formIdx !== activeVariantIdx ? 'hidden' : ''}`}>
-    <h3 className="text-sm font-bold text-gray-700 mb-4">Design Variant {formIdx + 1} {form.sample_color && `(${form.sample_color})`}</h3>
+    <h3 className="text-sm font-bold text-gray-700 mb-4">Design {formIdx + 1}</h3>
     {/* Tech Pack fields */}
           <div>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Tech Pack</p>

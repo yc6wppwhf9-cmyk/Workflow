@@ -598,7 +598,7 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
                         : 'bg-white text-gray-600 border-gray-200 hover:border-violet-300 hover:bg-violet-50'
                     }`}
                   >
-                    Variant {i + 1}{v.sample_color ? ` — ${v.sample_color}` : ''}
+                    Design {i + 1}
                     {count > 0 && (
                       <span className={`ml-0.5 rounded-full px-1.5 py-0 text-[10px] font-bold ${i === activeVariantIdx ? 'bg-violet-400 text-white' : 'bg-gray-200 text-gray-600'}`}>
                         {count}

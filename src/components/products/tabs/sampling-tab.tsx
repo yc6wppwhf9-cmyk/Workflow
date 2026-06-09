@@ -373,9 +373,10 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
                     ? approvedDesignIllos.filter(f =>
                         f.colour_tag && f.colour_tag.toUpperCase() === colourToken.toUpperCase()
                       )
-                    : approvedDesignIllos.filter(f => !f.colour_tag)
-                  const fallback = variantIllos.length === 0 ? approvedDesignIllos.filter(f => !f.colour_tag) : []
-                  const toShow = variantIllos.length > 0 ? variantIllos : fallback
+                    : []
+                  // For multi-variant products: never show untagged illustrations as fallback
+                  // — untagged images could belong to any design and would show for all, which is misleading.
+                  const toShow = variantIllos
 
                   return toShow.length > 0 ? (
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">

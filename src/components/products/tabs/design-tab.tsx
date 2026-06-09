@@ -838,7 +838,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
           const imgFile = new File([blob], `variant_${i + 1}.${ext}`, { type: mime })
           const imgFd = new FormData()
           imgFd.append('file', imgFile)
-          imgFd.append('folder', `products/${product.id}/variant-refs`)
+          imgFd.append('folder', `variant-refs`)
           const res = await fetch('/api/upload-file', { method: 'POST', body: imgFd })
           variantImageUrls.push(res.ok ? (await res.json()).url : null)
         }

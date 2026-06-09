@@ -140,7 +140,7 @@ export default async function PrintTechPackPage({
                   : 'bg-white text-gray-700 border-gray-300 hover:border-gray-600'
               }`}
             >
-              {vt.sample_color || `Variant ${i + 1}`}
+              Design {i + 1}
             </a>
           ))}
           <a

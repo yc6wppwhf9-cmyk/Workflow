@@ -762,31 +762,73 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
           }
         }
 
-        // Parse drawing XML to get anchor row for each image, then sort by row
-        const anchored: Array<{ row: number; filePath: string }> = []
+        // Parse drawing XML to get anchor row+col for each image
+        const anchored: Array<{ row: number; col: number; filePath: string }> = []
         const drawingFile = zip.file('xl/drawings/drawing1.xml')
         if (drawingFile && Object.keys(rIdToFile).length > 0) {
           const xml = await drawingFile.async('text')
           const blockRe = /<xdr:(?:twoCellAnchor|oneCellAnchor)[^>]*>([\s\S]*?)<\/xdr:(?:twoCellAnchor|oneCellAnchor)>/g
           for (const [, block] of [...xml.matchAll(blockRe)]) {
             const rowM = block.match(/<xdr:from>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/)
+            const colM = block.match(/<xdr:from>[\s\S]*?<xdr:col>(\d+)<\/xdr:col>/)
             const ridM = block.match(/r:embed="(rId\d+)"/)
             if (rowM && ridM && rIdToFile[ridM[1]]) {
-              anchored.push({ row: parseInt(rowM[1]), filePath: rIdToFile[ridM[1]] })
+              anchored.push({ row: parseInt(rowM[1]), col: colM ? parseInt(colM[1]) : 0, filePath: rIdToFile[ridM[1]] })
             }
           }
-          anchored.sort((a, b) => a.row - b.row)
         } else {
           // No drawing XML — fall back to alphabetical media file order
           Object.keys(zip.files)
             .filter(p => p.startsWith('xl/media/'))
             .sort()
-            .forEach((p, i) => anchored.push({ row: i, filePath: p }))
+            .forEach((p, i) => anchored.push({ row: i, col: i, filePath: p }))
         }
 
-        // Upload each image mapped to its variant index
+        // Detect band start rows and column bases from the spreadsheet data
+        // (same structure as parseTechPackAllVariants: bands of 4 designs stacked vertically)
+        const normCell = (s: string) => String(s).toUpperCase().replace(/[-:.\s"'""'']/g, '')
+        const bandInfo: Array<{ startRow: number; endRow: number; bases: number[] }> = []
+        for (let r = 0; r < rows.length; r++) {
+          const basesInRow: number[] = []
+          for (let c = 0; c < rows[r].length; c++) {
+            if (normCell(rows[r][c]).startsWith('DESIGNNO')) basesInRow.push(c)
+          }
+          if (basesInRow.length > 0) {
+            if (bandInfo.length > 0) bandInfo[bandInfo.length - 1].endRow = r
+            bandInfo.push({ startRow: r, endRow: rows.length, bases: basesInRow })
+          }
+        }
+
+        // For each image, determine which (band, block) it belongs to using row+col.
+        // Multiple images in the same block: keep the one with the smallest col offset
+        // (leftmost = primary illustration).
+        const variantImageAnchors = new Map<number, { row: number; col: number; filePath: string }>()
+        if (bandInfo.length > 0) {
+          for (const anchor of anchored) {
+            let bandIdx = -1
+            for (let b = 0; b < bandInfo.length; b++) {
+              if (anchor.row >= bandInfo[b].startRow && anchor.row < bandInfo[b].endRow) { bandIdx = b; break }
+            }
+            if (bandIdx === -1) continue
+            const bases = bandInfo[bandIdx].bases
+            let blockIdx = -1
+            for (let b = bases.length - 1; b >= 0; b--) {
+              if (anchor.col >= bases[b]) { blockIdx = b; break }
+            }
+            if (blockIdx === -1) continue
+            const globalIdx = bandIdx * bases.length + blockIdx
+            const existing = variantImageAnchors.get(globalIdx)
+            if (!existing || anchor.col < existing.col) variantImageAnchors.set(globalIdx, anchor)
+          }
+        } else {
+          // Fallback for single-band files: assign by position
+          anchored.sort((a, b) => a.row - b.row || a.col - b.col)
+          anchored.forEach((a, i) => { if (!variantImageAnchors.has(i)) variantImageAnchors.set(i, a) })
+        }
+
+        // Upload one image per variant
         for (let i = 0; i < variants.length; i++) {
-          const anchor = anchored[i]
+          const anchor = variantImageAnchors.get(i) ?? null
           if (!anchor) { variantImageUrls.push(null); continue }
           const imgZipFile = zip.file(anchor.filePath)
           if (!imgZipFile) { variantImageUrls.push(null); continue }
@@ -1040,7 +1082,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
                           : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                       }`}
                     >
-                      Variant {i + 1} {f.sample_color ? `(${f.sample_color})` : ''}
+                      Design {i + 1}
                     </button>
                   ))}
                 </div>
@@ -1764,7 +1806,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
                         : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300 hover:bg-purple-50'
                     }`}
                   >
-                    {token || `Variant ${i + 1}`}
+                    Design {i + 1}
                     {count > 0 && (
                       <span className={`rounded-full px-1.5 text-[10px] font-bold ${i === activeIlloVariantIdx ? 'bg-purple-400 text-white' : 'bg-gray-200 text-gray-600'}`}>
                         {count}
@@ -1775,7 +1817,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
               })}
               {canUploadIllos && (
                 <span className="text-[10px] text-gray-400 self-center ml-1">
-                  Uploading goes to <strong>{activeIlloToken || `Variant ${activeIlloVariantIdx + 1}`}</strong>
+                  Uploading goes to <strong>Design {activeIlloVariantIdx + 1}</strong>
                 </span>
               )}
             </div>

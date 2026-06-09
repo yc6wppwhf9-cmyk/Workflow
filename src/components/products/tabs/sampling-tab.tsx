@@ -342,7 +342,7 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
                           : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300 hover:bg-purple-50'
                       }`}
                     >
-                      Variant {i + 1}{v.sample_color ? ` — ${v.sample_color}` : ''}
+                      Design {i + 1}
                     </button>
                   ))}
                 </div>
@@ -507,7 +507,7 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
                           : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                       }`}
                     >
-                      Variant {i + 1} {v.sample_color ? `(${v.sample_color})` : ''}
+                      Design {i + 1}
                     </button>
                   ))}
                 </div>

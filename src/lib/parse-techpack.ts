@@ -121,28 +121,19 @@ function parseAtOffset(rows: string[][], offset: number, shared: Partial<TechPac
 // Falls back to a single unnamed variant when no multi-colour structure is detected.
 export function parseTechPackAllVariants(rows: string[][]): TechPackVariant[] {
   // 1. Try to detect "DESIGN NO." block bases (ROCK TECKPACK format)
-  const bases: number[] = []
-  for (const row of rows) {
-    for (let c = 0; c < row.length; c++) {
-      if (norm(row[c]).startsWith('DESIGNNO')) bases.push(c)
+  // Some files stack multiple bands of 4 designs vertically — find ALL band-start rows.
+  const bandRowIdxs: number[] = []
+  for (let r = 0; r < rows.length; r++) {
+    for (let c = 0; c < rows[r].length; c++) {
+      if (norm(rows[r][c]).startsWith('DESIGNNO')) {
+        bandRowIdxs.push(r)
+        break
+      }
     }
-    if (bases.length) break
   }
 
-  if (bases.length > 0) {
+  if (bandRowIdxs.length > 0) {
     const variants: TechPackVariant[] = []
-    
-    // Global season year fallback
-    let seasonYear = ''
-    for (const row of rows.slice(0, 5)) {
-      for (const cell of row) {
-        if (/^\d{4}-\d{4}$/.test(String(cell).trim())) {
-          seasonYear = String(cell).trim()
-          break
-        }
-      }
-      if (seasonYear) break
-    }
 
     const map: Record<string, keyof TechPackFields> = {
       DESIGNERNAME: 'designerName', STYLENAME: 'styleName', FARMA: 'farma',
@@ -155,73 +146,100 @@ export function parseTechPackAllVariants(rows: string[][]): TechPackVariant[] {
       ADDON3: 'addOn3', DESIGNERSIGN: 'designerSign',
     }
 
-    bases.forEach((B, idx) => {
-      const next = bases[idx + 1] ?? B + 7
-      const width = next - B
+    let globalDesignIdx = 0
 
-      const f: Partial<TechPackFields> = {}
-      let colourSkuRaw = ''
-      let channelRaw = ''
-      let fabric2 = ''
+    for (let b = 0; b < bandRowIdxs.length; b++) {
+      const bandStart = bandRowIdxs[b]
+      const bandEnd   = b + 1 < bandRowIdxs.length ? bandRowIdxs[b + 1] : rows.length
+      const bandRows  = rows.slice(bandStart, bandEnd)
 
-      for (const row of rows) {
-        for (let off = 0; off + 1 < width; off += 2) {
-          const label = norm(row[B + off])
-          const value = String(row[B + off + 1] ?? '').trim()
-
-          if (label === 'COLORSKU' || label === 'COLOURSKU') {
-            if (value) colourSkuRaw = value
-          } else if (label === 'CHANNEL') {
-            if (value) channelRaw = value
-          } else if (label === 'FABRIC2') {
-            if (value) fabric2 = value
-          } else if (label && map[label] && value && !f[map[label]]) {
-            f[map[label]] = value
+      // Season year: look in the rows just before this band's header (or in the header row itself)
+      let seasonYear = ''
+      const lookRows = b === 0 ? rows.slice(0, bandStart + 3) : rows.slice(bandStart - 2, bandStart + 3)
+      for (const row of lookRows) {
+        for (const cell of row) {
+          if (/^\d{4}-\d{4}$/.test(String(cell).trim())) {
+            seasonYear = String(cell).trim()
+            break
           }
         }
-      }
-      // Combine the two fabric rows into the single fabric field
-      if (fabric2) f.fabric = f.fabric ? `${f.fabric} / ${fabric2}` : fabric2
-
-      const baseVariant: TechPackFields = {
-        designerName: f.designerName ?? '',
-        styleName: f.styleName ?? '',
-        farma: f.farma ?? '',
-        seasonYear: seasonYear,
-        fabric: f.fabric ?? '',
-        lining: f.lining ?? '',
-        airMesh: f.airMesh ?? '',
-        zipper: f.zipper ?? '',
-        puller: f.puller ?? '',
-        patta9mm: f.patta9mm ?? '',
-        patta1: f.patta1 ?? '',
-        patta2: f.patta2 ?? '',
-        laderLock: f.laderLock ?? '',
-        branding: f.branding ?? '',
-        screenPrint: f.screenPrint ?? '',
-        digitalPrint: f.digitalPrint ?? '',
-        bartech: f.bartech ?? '',
-        reSamplingBy: f.reSamplingBy ?? '',
-        remarks: f.remarks ?? '',
-        addOn1: f.addOn1 ?? '',
-        addOn2: f.addOn2 ?? '',
-        addOn3: f.addOn3 ?? '',
-        designerSign: f.designerSign ?? '',
+        if (seasonYear) break
       }
 
-      // Derive a recognisable colour token (e.g. BLK / NBL / DGR) so the user
-      // can tell the designs apart — zipper colour is the cleanest single token.
-      const colourToken = (baseVariant.zipper || baseVariant.airMesh.split(/\s+/).pop() || '').trim()
-      const skus = colourSkuRaw.split(/[\n,]/).map(s => s.trim()).filter(Boolean)
+      // Find column bases in this band's header row
+      const bases: number[] = []
+      for (let c = 0; c < rows[bandStart].length; c++) {
+        if (norm(rows[bandStart][c]).startsWith('DESIGNNO')) bases.push(c)
+      }
 
-      variants.push({
-        ...baseVariant,
-        colourName:   colourToken ? `Design ${idx + 1} — ${colourToken}` : `Design ${idx + 1}`,
-        colorSkusStr: colourSkuRaw,
-        colourSkus:   skus,
-        channel:      channelRaw,
+      bases.forEach((B, idx) => {
+        const next = bases[idx + 1] ?? B + 7
+        const width = next - B
+
+        const f: Partial<TechPackFields> = {}
+        let colourSkuRaw = ''
+        let channelRaw = ''
+        let fabric2 = ''
+
+        for (const row of bandRows) {
+          for (let off = 0; off + 1 < width; off += 2) {
+            const label = norm(row[B + off])
+            const value = String(row[B + off + 1] ?? '').trim()
+
+            if (label === 'COLORSKU' || label === 'COLOURSKU') {
+              if (value) colourSkuRaw = value
+            } else if (label === 'CHANNEL') {
+              if (value) channelRaw = value
+            } else if (label === 'FABRIC2') {
+              if (value) fabric2 = value
+            } else if (label && map[label] && value && !f[map[label]]) {
+              f[map[label]] = value
+            }
+          }
+        }
+        if (fabric2) f.fabric = f.fabric ? `${f.fabric} / ${fabric2}` : fabric2
+
+        const baseVariant: TechPackFields = {
+          designerName: f.designerName ?? '',
+          styleName:    f.styleName ?? '',
+          farma:        f.farma ?? '',
+          seasonYear,
+          fabric:       f.fabric ?? '',
+          lining:       f.lining ?? '',
+          airMesh:      f.airMesh ?? '',
+          zipper:       f.zipper ?? '',
+          puller:       f.puller ?? '',
+          patta9mm:     f.patta9mm ?? '',
+          patta1:       f.patta1 ?? '',
+          patta2:       f.patta2 ?? '',
+          laderLock:    f.laderLock ?? '',
+          branding:     f.branding ?? '',
+          screenPrint:  f.screenPrint ?? '',
+          digitalPrint: f.digitalPrint ?? '',
+          bartech:      f.bartech ?? '',
+          reSamplingBy: f.reSamplingBy ?? '',
+          remarks:      f.remarks ?? '',
+          addOn1:       f.addOn1 ?? '',
+          addOn2:       f.addOn2 ?? '',
+          addOn3:       f.addOn3 ?? '',
+          designerSign: f.designerSign ?? '',
+        }
+
+        const colourToken = (baseVariant.zipper || baseVariant.airMesh.split(/\s+/).pop() || '').trim()
+        const skus = colourSkuRaw.split(/[\n,]/).map(s => s.trim()).filter(Boolean)
+        const designNum = globalDesignIdx + 1
+
+        variants.push({
+          ...baseVariant,
+          colourName:   colourToken ? `Design ${designNum} — ${colourToken}` : `Design ${designNum}`,
+          colorSkusStr: colourSkuRaw,
+          colourSkus:   skus,
+          channel:      channelRaw,
+        })
+
+        globalDesignIdx++
       })
-    })
+    }
 
     // Every block lists the full style colourway in COLOR SKU — union them so the
     // form gets the complete SKU set regardless of which design is loaded.

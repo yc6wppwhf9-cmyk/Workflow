@@ -170,9 +170,10 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
     setSendingSampling(true)
     try {
       const approvedCount = designFiles.filter(f => f.review_status === 'approved').length
-      await supabase.from('sampling_data')
-        .update({ sample_review_status: 'sampling_requested', updated_by: profile.id })
-        .eq('product_id', product.id)
+      await (supabase.from('sampling_data') as any).upsert(
+        { product_id: product.id, sample_review_status: 'sampling_requested', updated_by: profile.id },
+        { onConflict: 'product_id' }
+      )
       await supabase.from('activity_logs').insert({
         product_id: product.id, user_id: profile.id,
         action: `sent ${approvedCount} approved illustration(s) to sampling team`,
@@ -1169,15 +1170,13 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
                     <p className="text-xs text-gray-400 mt-0.5">Illustrations must be approved by the design head first.</p>
                   ) : !hasTechPack ? (
                     <p className="text-xs text-orange-600 mt-0.5">Upload the tech pack above before sending for sampling.</p>
-                  ) : !hasVariantImages ? (
-                    <p className="text-xs text-orange-600 mt-0.5">Upload a reference image for every variant (in the Design Details form above) before sending.</p>
                   ) : (
                     <p className="text-xs text-violet-700 mt-0.5">
-                      {designFiles.filter(f => f.review_status === 'approved').length} illustration(s) approved, tech pack &amp; variant images ready — click to send.
+                      {designFiles.filter(f => f.review_status === 'approved').length} illustration(s) approved &amp; tech pack ready — click to send.
                     </p>
                   )}
                 </div>
-                {hasAnyApproved && hasTechPack && hasVariantImages && (
+                {hasAnyApproved && hasTechPack && (
                   <Button
                     size="sm"
                     onClick={sendForSampling}
@@ -1203,7 +1202,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
                     </p>
                   </div>
                 </div>
-                {hasAnyApproved && hasTechPack && hasVariantImages && (isAssignedToMe || isHead) && (
+                {hasAnyApproved && hasTechPack && (isAssignedToMe || isHead) && (
                   <Button
                     size="sm"
                     onClick={sendForSampling}

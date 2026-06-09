@@ -35,6 +35,18 @@ export function SalesTab({ product, profile, data }: SalesTabProps) {
   const canEditFields = !data?.is_locked && !data?.is_completed && isRoleAllowed
   const showActions = !data?.is_locked && isRoleAllowed
 
+  const [form, setForm] = useState({
+    assign_to: data?.assign_to || '',
+    channel: data?.channel || '',
+    category: product.category || '',
+    price_range: data?.price_range || '',
+    deadline_date: data?.deadline_date || '',
+    product_specification: data?.product_specification || '',
+  })
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+
   // Non-sales/admin roles see a clean read-only summary
   if (!isRoleAllowed) {
     const deadlineFormatted = data?.deadline_date
@@ -64,18 +76,6 @@ export function SalesTab({ product, profile, data }: SalesTabProps) {
       </div>
     )
   }
-
-  const [form, setForm] = useState({
-    assign_to: data?.assign_to || '',
-    channel: data?.channel || '',
-    category: product.category || '',
-    price_range: data?.price_range || '',
-    deadline_date: data?.deadline_date || '',
-    product_specification: data?.product_specification || '',
-  })
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [confirmOpen, setConfirmOpen] = useState(false)
 
   function set(field: string, value: string) {
     setForm(f => ({ ...f, [field]: value }))

@@ -5,7 +5,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 // Middleware is intentionally a pure JWT/session gate — no DB queries.
 // The is_active check lives in (app)/layout.tsx where getCurrentProfile()
 // is already cached via React cache(), so it costs zero extra round trips.
-export default async function middleware(request: NextRequest) {
+export default async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient<Database>(

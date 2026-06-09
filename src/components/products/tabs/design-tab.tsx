@@ -789,7 +789,13 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
           }
         })
         const existingReal = forms.filter(f => f.sample_color || f.farma || f.season_year || (f.color_skus && f.color_skus.length > 0))
-        const mergedForms = existingReal.length > 0 ? [...existingReal, ...newVariantForms] : newVariantForms
+        // Merge: new variants from upload take priority; existing variants not in the new upload are kept
+        const newColors = new Set(newVariantForms.map((f: any) => (f.sample_color || '').toLowerCase().trim()).filter(Boolean))
+        const keptExisting = existingReal.filter((f: any) => {
+          const c = (f.sample_color || '').toLowerCase().trim()
+          return !c || !newColors.has(c)
+        })
+        const mergedForms = [...keptExisting, ...newVariantForms]
         setForms(mergedForms)
         await Promise.all([
           supabase.from('design_data').update({ variants: mergedForms, updated_by: profile.id } as any).eq('product_id', product.id),
@@ -798,8 +804,8 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
             : Promise.resolve(),
         ])
         const imgCount = variantImageUrls.filter(Boolean).length
-        const base = existingReal.length > 0
-          ? `Added ${newVariantForms.length} variant(s). Total: ${mergedForms.length} variants.`
+        const base = keptExisting.length > 0
+          ? `Updated ${newVariantForms.length} variant(s). Total: ${mergedForms.length} variants.`
           : `Loaded ${mergedForms.length} variant(s).`
         setTechPackResult({ filled: [base + (imgCount > 0 ? ` ${imgCount} variant image(s) extracted.` : '')] })
       }

@@ -518,6 +518,207 @@ export type Database = {
           },
         ]
       }
+      new_development_files: {
+        Row: {
+          category: string
+          created_at: string
+          development_id: string
+          file_size: number | null
+          file_type: string | null
+          file_url: string
+          id: string
+          name: string
+          uploaded_by: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          development_id: string
+          file_size?: number | null
+          file_type?: string | null
+          file_url: string
+          id?: string
+          name: string
+          uploaded_by: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          development_id?: string
+          file_size?: number | null
+          file_type?: string | null
+          file_url?: string
+          id?: string
+          name?: string
+          uploaded_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "new_development_files_development_id_fkey"
+            columns: ["development_id"]
+            isOneToOne: false
+            referencedRelation: "new_developments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "new_development_files_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      new_developments: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          purchase_remarks: string | null
+          purchase_sent_at: string | null
+          purchase_sent_by: string | null
+          purchase_status: string | null
+          remarks: string | null
+          sent_at: string | null
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          purchase_remarks?: string | null
+          purchase_sent_at?: string | null
+          purchase_sent_by?: string | null
+          purchase_status?: string | null
+          remarks?: string | null
+          sent_at?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          purchase_remarks?: string | null
+          purchase_sent_at?: string | null
+          purchase_sent_by?: string | null
+          purchase_status?: string | null
+          remarks?: string | null
+          sent_at?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "new_developments_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "new_developments_purchase_sent_by_fkey"
+            columns: ["purchase_sent_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          created_at: string
+          id: string
+          is_read: boolean
+          message: string
+          product_id: string | null
+          product_name: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message: string
+          product_id?: string | null
+          product_name?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message?: string
+          product_id?: string | null
+          product_name?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_comments: {
+        Row: {
+          author_name: string
+          author_role: string
+          created_at: string
+          id: string
+          message: string
+          product_id: string
+          user_id: string
+        }
+        Insert: {
+          author_name: string
+          author_role: string
+          created_at?: string
+          id?: string
+          message: string
+          product_id: string
+          user_id: string
+        }
+        Update: {
+          author_name?: string
+          author_role?: string
+          created_at?: string
+          id?: string
+          message?: string
+          product_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_comments_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_comments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_files: {
         Row: {
           colour_tag: string | null

@@ -45,7 +45,15 @@ export default async function PrintTechPackPage({ params }: { params: Promise<{ 
     )
   }
 
-  const variants = design?.variants && design.variants.length > 0 ? design.variants : design ? [design] : []
+  const rawVariants = design?.variants && design.variants.length > 0 ? design.variants : design ? [design] : []
+  // Deduplicate by sample_color — re-uploading the tech pack can produce duplicates
+  const seen = new Set<string>()
+  const variants = rawVariants.filter((v: any) => {
+    const key = (v?.sample_color || '').toLowerCase().trim() || JSON.stringify(v)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
   const hasSpecs = variants.some((v: any) => v && (v.fabric || v.lining || v.zipper || v.farma || v.season_year))
   const printDate = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
 

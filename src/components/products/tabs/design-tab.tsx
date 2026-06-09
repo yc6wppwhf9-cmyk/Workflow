@@ -700,9 +700,11 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
         const res = await fetch('/api/upload-file', { method: 'POST', body: fd })
         if (!res.ok) throw new Error('Upload failed')
         const { url } = await res.json()
-        await supabase.from('design_data')
-          .update({ techpack_pdf_url: url, updated_by: profile.id } as any)
-          .eq('product_id', product.id)
+        const { error: pdfSaveErr } = await (supabase.from('design_data') as any).upsert(
+          { product_id: product.id, techpack_pdf_url: url, updated_by: profile.id },
+          { onConflict: 'product_id' }
+        )
+        if (pdfSaveErr) throw new Error(pdfSaveErr.message)
         setTechpackPdfUrl(url)
         const notifyFd = new FormData()
         notifyFd.append('file', file)
@@ -816,20 +818,31 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
         })
         const mergedForms = [...keptExisting, ...newVariantForms]
         setForms(mergedForms)
-        await Promise.all([
-          supabase.from('design_data').update({ variants: mergedForms, updated_by: profile.id } as any).eq('product_id', product.id),
+        const [{ error: saveErr }] = await Promise.all([
+          (supabase.from('design_data') as any).upsert(
+            { product_id: product.id, variants: mergedForms, updated_by: profile.id },
+            { onConflict: 'product_id' }
+          ),
           variants[0].styleName
             ? supabase.from('products').update({ name: variants[0].styleName, updated_by: profile.id }).eq('id', product.id)
             : Promise.resolve(),
         ])
-        const imgCount = variantImageUrls.filter(Boolean).length
-        const base = keptExisting.length > 0
-          ? `Updated ${newVariantForms.length} variant(s). Total: ${mergedForms.length} variants.`
-          : `Loaded ${mergedForms.length} variant(s).`
-        setTechPackResult({ filled: [base + (imgCount > 0 ? ` ${imgCount} variant image(s) extracted.` : '')] })
-        router.refresh()
+        if (saveErr) {
+          toast.error(`Tech pack parsed but failed to save: ${saveErr.message}`)
+          setTechPackResult({ filled: [] })
+        } else {
+          const imgCount = variantImageUrls.filter(Boolean).length
+          const base = keptExisting.length > 0
+            ? `Updated ${newVariantForms.length} variant(s). Total: ${mergedForms.length} variants.`
+            : `Loaded ${mergedForms.length} variant(s).`
+          setTechPackResult({ filled: [base + (imgCount > 0 ? ` ${imgCount} variant image(s) extracted.` : '')] })
+          toast.success('Tech pack saved')
+          router.refresh()
+        }
       }
-    } catch {
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      toast.error(`Tech pack upload failed: ${msg}`)
       setTechPackResult({ filled: [] })
     }
     setParsing(false)

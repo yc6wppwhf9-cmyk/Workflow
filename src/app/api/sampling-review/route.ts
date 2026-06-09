@@ -22,22 +22,28 @@ export async function POST(req: NextRequest) {
   const { product_id, status, feedback } = await req.json()
   if (!product_id || !status) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
 
-  const { error } = await adminSupabase.from('sampling_data').update({
-    sample_review_status: status,
-    designer_feedback: status === 'rejected' ? (feedback || null) : null,
-    reviewed_by: user.id,
-    reviewed_at: new Date().toISOString(),
-    is_completed: status === 'approved',
-    updated_by: user.id,
-  }).eq('product_id', product_id)
+  const [{ error }, { error: stageErr }] = await Promise.all([
+    adminSupabase.from('sampling_data').update({
+      sample_review_status: status,
+      designer_feedback: status === 'rejected' ? (feedback || null) : null,
+      reviewed_by: user.id,
+      reviewed_at: new Date().toISOString(),
+      is_completed: status === 'approved',
+      updated_by: user.id,
+    }).eq('product_id', product_id),
+    status === 'approved'
+      ? adminSupabase.from('products').update({ workflow_stage: 'sampling_completed', updated_by: user.id }).eq('id', product_id)
+      : Promise.resolve({ error: null }),
+  ])
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (stageErr) return NextResponse.json({ error: stageErr.message }, { status: 500 })
 
   await adminSupabase.from('activity_logs').insert({
     product_id,
     user_id: user.id,
     action: status === 'approved'
-      ? 'management approved sample — awaiting merchandising head to advance stage'
+      ? 'management approved sample — product moved to merchandising stage'
       : `management rejected sample${feedback ? `: ${feedback}` : ''}`,
     department: 'sampling',
   })
@@ -71,12 +77,11 @@ export async function POST(req: NextRequest) {
       if (!recipients.find(r => r.id === head.id)) recipients.push(head as { id: string; full_name: string; email: string })
     }
 
-    // Fetch marketing head to notify them
-    const { data: marketingUsers } = await adminSupabase
-      .from('profiles')
-      .select('id, full_name, email')
-      .eq('role', 'marketing_head')
-      .eq('is_active', true)
+    // Fetch merchandising head + marketing head to notify them
+    const [{ data: merchandisingHeads }, { data: marketingUsers }] = await Promise.all([
+      adminSupabase.from('profiles').select('id, full_name, email').eq('role', 'merchandising_head').eq('is_active', true),
+      adminSupabase.from('profiles').select('id, full_name, email').eq('role', 'marketing_head').eq('is_active', true),
+    ])
 
     const marketingUrl = `${APP_URL}/marketing`
     const marketingMsg = `The sample for "${productName}" has been approved. Please review the sample images and assign an official product name.`
@@ -136,6 +141,21 @@ export async function POST(req: NextRequest) {
         `)
         await sendEmail(m.email, `Sample Approved — Name Needed: "${productName}"`, html)
       }),
+
+      // Notify merchandising head — product is now in their queue
+      ...((merchandisingHeads ?? []).map(async (mh) => {
+        const merchMsg = `Sample approved for "${productName}" — it is now in your merchandising queue.`
+        const merchUrl = `${APP_URL}/products/${product_id}?tab=merchandising`
+        await adminSupabase.from('notifications').insert({
+          user_id: mh.id, product_id, product_name: productName, message: merchMsg,
+        })
+        await sendPushToUser(mh.id, {
+          title: 'New Product for Merchandising',
+          body:  merchMsg,
+          url:   merchUrl,
+          tag:   `merch-ready-${product_id}`,
+        })
+      })),
 
       sendPushToRole('marketing_head', {
         title: 'Sample Approved — Name Required',

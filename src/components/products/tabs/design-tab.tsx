@@ -150,6 +150,12 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
   const allColorSkus = Array.from(new Set(forms.flatMap(f => f.color_skus || [])))
   const allSampleColors = Array.from(new Set(forms.map(f => f.sample_color).filter(Boolean)))
 
+  // Extract "NBL" from "Design 1 — NBL" for matching colour_tag values
+  const variantColorToken = (sc: string) => {
+    const s = (sc || '').trim()
+    return s.includes(' — ') ? (s.split(' — ').pop()?.trim() ?? s) : s
+  }
+
   const samplingStatus = samplingData?.sample_review_status ?? 'not_started'
   const samplingApproved  = samplingStatus === 'approved'
   const samplingSent      = ['sampling_requested', 'pending_review'].includes(samplingStatus)
@@ -212,6 +218,8 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
   // Submission state
   // Colour tag applied to the next batch of illustration uploads
   const [illoColorTag, setIlloColorTag] = useState<string>('')
+  // Active variant tab in the illustration section (separate from tech pack form tab)
+  const [activeIlloVariantIdx, setActiveIlloVariantIdx] = useState(0)
 
   const [submitting, setSubmitting]   = useState(false)
   const [submitDone, setSubmitDone]   = useState(false)
@@ -225,9 +233,25 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
   // Per-image colour tagging state
   const [taggingFileId, setTaggingFileId] = useState<string | null>(null)
 
+  // Illustration variant filtering
+  const activeIlloToken = forms.length > 1
+    ? variantColorToken((forms[activeIlloVariantIdx] as any)?.sample_color || '')
+    : ''
+  // When multiple variants: show only illustrations tagged for the active variant
+  const visibleDesignFiles = (forms.length > 1 && activeIlloToken)
+    ? designFiles.filter(f => {
+        const ct = (f.colour_tag || '').trim().toLowerCase()
+        if (!ct) return false
+        const ctToken = ct.includes(' — ') ? (ct.split(' — ').pop()?.trim() ?? ct) : ct
+        return ctToken === activeIlloToken.toLowerCase() || ct === activeIlloToken.toLowerCase()
+      })
+    : designFiles
+  // The colour tag that will be applied to the next upload batch
+  const effectiveIlloTag = forms.length > 1 ? activeIlloToken : illoColorTag
+
   // Lightbox
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null)
-  const lightboxImages: LightboxImage[] = designFiles.map(f => ({
+  const lightboxImages: LightboxImage[] = visibleDesignFiles.map(f => ({
     url: f.file_url, name: f.name,
     badge: f.review_status ? (
       <span className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium ${
@@ -840,7 +864,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
       if (res.ok) {
         const { url } = await res.json() as { url: string }
 
-        let finalTag = illoColorTag.trim() || null
+        let finalTag = effectiveIlloTag.trim() || null
         if (!finalTag) {
           const nameUpper = file.name.toUpperCase()
           const matchedSku = allColorSkus.find(sku => sku && nameUpper.includes(sku.toUpperCase()))
@@ -1704,8 +1728,44 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
           <input ref={illustrationRef} type="file" accept="image/*" multiple className="hidden" onChange={handleIllustrationUpload} />
         </CardHeader>
         <CardContent className="space-y-3">
-          {/* Colour tag selector — applied to every file in the next upload */}
-          {canUploadIllos && (
+          {/* Variant tabs — when multiple variants, uploading on a tab auto-tags to that variant */}
+          {forms.length > 1 ? (
+            <div className="flex flex-wrap gap-2 pb-2 border-b border-gray-100">
+              {forms.map((v: any, i: number) => {
+                const token = variantColorToken(v.sample_color || '')
+                const count = designFiles.filter(f => {
+                  const ct = (f.colour_tag || '').trim().toLowerCase()
+                  if (!ct) return false
+                  const ctToken = ct.includes(' — ') ? (ct.split(' — ').pop()?.trim() ?? ct) : ct
+                  return ctToken === token.toLowerCase() || ct === token.toLowerCase()
+                }).length
+                return (
+                  <button
+                    key={i}
+                    onClick={() => setActiveIlloVariantIdx(i)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                      i === activeIlloVariantIdx
+                        ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300 hover:bg-purple-50'
+                    }`}
+                  >
+                    {token || `Variant ${i + 1}`}
+                    {count > 0 && (
+                      <span className={`rounded-full px-1.5 text-[10px] font-bold ${i === activeIlloVariantIdx ? 'bg-purple-400 text-white' : 'bg-gray-200 text-gray-600'}`}>
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+              {canUploadIllos && (
+                <span className="text-[10px] text-gray-400 self-center ml-1">
+                  Uploading goes to <strong>{activeIlloToken || `Variant ${activeIlloVariantIdx + 1}`}</strong>
+                </span>
+              )}
+            </div>
+          ) : canUploadIllos ? (
+            /* Single variant: keep the manual colour tag input */
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs text-gray-500 shrink-0">Colour / Variant for next upload:</span>
               {allColorSkus.length > 0 ? (
@@ -1733,7 +1793,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
               )}
               <span className="text-[10px] text-gray-400">Tag tells sampling which colour each illustration is for</span>
             </div>
-          )}
+          ) : null}
           {/* Upload progress */}
           {uploadProgress && (
             <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 space-y-2">
@@ -1751,19 +1811,21 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
               <CheckCircle2 className="h-4 w-4" /> {uploadSuccess} illustration{uploadSuccess !== 1 ? 's' : ''} uploaded successfully
             </div>
           )}
-          {designFiles.length === 0 ? (
+          {visibleDesignFiles.length === 0 ? (
             <div
               className={`border-2 border-dashed rounded-xl py-10 text-center ${canUploadIllos ? 'border-gray-200 cursor-pointer hover:border-purple-300 hover:bg-purple-50 transition-colors' : 'border-gray-100'}`}
               onClick={() => canUploadIllos && illustrationRef.current?.click()}
             >
               <Upload className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-              <p className="text-sm text-gray-500 font-medium">Upload design illustrations</p>
+              <p className="text-sm text-gray-500 font-medium">
+                {forms.length > 1 ? `No illustrations for ${activeIlloToken || `Variant ${activeIlloVariantIdx + 1}`} yet` : 'Upload design illustrations'}
+              </p>
               <p className="text-xs text-gray-400 mt-1">JPG, PNG, GIF, WEBP supported</p>
             </div>
           ) : (
             <div className="space-y-2">
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                {designFiles.map((file, idx) => (
+                {visibleDesignFiles.map((file, idx) => (
                   <div key={file.id} className={`relative group rounded-lg overflow-hidden aspect-square bg-gray-50 border-2 ${
                     file.review_status === 'approved' ? 'border-green-400' :
                     file.review_status === 'rejected' ? 'border-red-400' :

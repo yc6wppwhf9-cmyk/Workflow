@@ -2,11 +2,12 @@
 
 import { useEffect } from 'react'
 
-export function PrintTrigger() {
+export function PrintTrigger({ autoprint = true }: { autoprint?: boolean }) {
   useEffect(() => {
+    if (!autoprint) return
     const timer = setTimeout(() => window.print(), 600)
     return () => clearTimeout(timer)
-  }, [])
+  }, [autoprint])
 
   return (
     <button

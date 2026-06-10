@@ -21,6 +21,7 @@ export function NewProductForm({ profile }: NewProductFormProps) {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const isDesignHead = profile.role === 'design_head'
+  const isMerchandisingHead = profile.role === 'merchandising_head'
 
   const [category, setCategory]   = useState<ProductCategory | ''>('')
   const [subCategory, setSubCategory] = useState('')
@@ -37,6 +38,7 @@ export function NewProductForm({ profile }: NewProductFormProps) {
   const [deadlineDate, setDeadlineDate] = useState('')
   const [productSpec, setProductSpec] = useState('')
   const [familyName, setFamilyName] = useState('')
+  const [notifyEmail, setNotifyEmail] = useState('')
   const [images, setImages]       = useState<File[]>([])
   const [previews, setPreviews]   = useState<string[]>([])
   const [saving, setSaving]       = useState(false)
@@ -83,6 +85,8 @@ export function NewProductForm({ profile }: NewProductFormProps) {
         updated_by: profile.id,
         // Design-initiated products skip the sales/draft stage
         ...(isDesignHead && { workflow_stage: 'design_completed' }),
+        // Merchandising-head products enter the merchandising queue directly
+        ...(isMerchandisingHead && { workflow_stage: 'sampling_completed' }),
       } as any)
       .select()
       .single()
@@ -123,15 +127,22 @@ export function NewProductForm({ profile }: NewProductFormProps) {
       await Promise.allSettled(uploadPromises)
     }
 
+    const actionText = isDesignHead
+      ? 'created product (design-initiated)'
+      : isMerchandisingHead
+      ? 'created product (merchandising-initiated)'
+      : 'created product with sales requirement'
+    const deptText = isDesignHead ? 'design' : isMerchandisingHead ? 'merchandising' : 'sales'
+
     await supabase.from('activity_logs').insert({
       product_id: product.id,
       user_id: profile.id,
-      action: isDesignHead ? 'created product (design-initiated)' : 'created product with sales requirement',
-      department: isDesignHead ? 'design' : 'sales',
+      action: actionText,
+      department: deptText,
     })
 
     // Notify design head when sales creates a new product
-    if (!isDesignHead) {
+    if (!isDesignHead && !isMerchandisingHead) {
       fetch('/api/notify-stage-advance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -139,7 +150,22 @@ export function NewProductForm({ profile }: NewProductFormProps) {
       }).catch(() => {})
     }
 
-    router.push(`/products/${product.id}?tab=design`)
+    // Send custom email notification entered by merchandising head
+    if (isMerchandisingHead && notifyEmail.trim()) {
+      fetch('/api/notify-product-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_id: product.id,
+          product_name: product.name,
+          recipient_email: notifyEmail.trim(),
+          sender_name: profile.full_name || 'Merchandising Head',
+        }),
+      }).catch(() => {})
+    }
+
+    const tab = isMerchandisingHead ? 'merchandising' : 'design'
+    router.push(`/products/${product.id}?tab=${tab}`)
     router.refresh()
   }
 
@@ -148,6 +174,11 @@ export function NewProductForm({ profile }: NewProductFormProps) {
       {isDesignHead && (
         <div className="rounded-lg bg-violet-50 border border-violet-200 px-4 py-2.5 text-sm text-violet-700">
           This product will go directly to the <strong>Design</strong> stage.
+        </div>
+      )}
+      {isMerchandisingHead && (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-2.5 text-sm text-amber-700">
+          This product will go directly to the <strong>Merchandising</strong> stage.
         </div>
       )}
       <div className="grid gap-4 grid-cols-2">
@@ -253,36 +284,58 @@ export function NewProductForm({ profile }: NewProductFormProps) {
           </CardContent>
         </Card>
 
-        {/* RIGHT — Sales requirement */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Sales Requirement</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-1.5">
-              <Label>Price Range</Label>
-              <Input
-                placeholder="e.g. ₹800 – ₹1200"
-                value={priceRange}
-                onChange={e => setPriceRange(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Deadline Date</Label>
-              <DateInput value={deadlineDate} onChange={setDeadlineDate} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Product Specification</Label>
-              <Textarea
-                placeholder="Describe the product requirements, key features, target customer..."
-                value={productSpec}
-                onChange={e => setProductSpec(e.target.value)}
-                rows={6}
-                className="text-sm"
-              />
-            </div>
-          </CardContent>
-        </Card>
+        {/* RIGHT — Sales requirement or notification email */}
+        {isMerchandisingHead ? (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Send Notification</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-1.5">
+                <Label>Notify by Email</Label>
+                <Input
+                  type="email"
+                  placeholder="e.g. vendor@example.com"
+                  value={notifyEmail}
+                  onChange={e => setNotifyEmail(e.target.value)}
+                />
+                <p className="text-xs text-gray-400">
+                  Optional — a notification with the product link will be sent to this address after creation.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Sales Requirement</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-1.5">
+                <Label>Price Range</Label>
+                <Input
+                  placeholder="e.g. ₹800 – ₹1200"
+                  value={priceRange}
+                  onChange={e => setPriceRange(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Deadline Date</Label>
+                <DateInput value={deadlineDate} onChange={setDeadlineDate} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Product Specification</Label>
+                <Textarea
+                  placeholder="Describe the product requirements, key features, target customer..."
+                  value={productSpec}
+                  onChange={e => setProductSpec(e.target.value)}
+                  rows={6}
+                  className="text-sm"
+                />
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
       </div>
 

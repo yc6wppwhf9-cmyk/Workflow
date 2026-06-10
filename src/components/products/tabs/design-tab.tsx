@@ -762,18 +762,32 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
           }
         }
 
-        // Parse drawing XML to get anchor row+col for each image
-        const anchored: Array<{ row: number; col: number; filePath: string }> = []
+        // Parse drawing XML — read both `from` and `to` anchors to get each image's bounding box.
+        // We use the CENTER point (not top-left) for band/block assignment so that images
+        // whose top-left anchor drifts into an adjacent block still map to the correct design.
+        type AnchorEntry = { row: number; col: number; centerRow: number; centerCol: number; filePath: string }
+        const anchored: AnchorEntry[] = []
         const drawingFile = zip.file('xl/drawings/drawing1.xml')
         if (drawingFile && Object.keys(rIdToFile).length > 0) {
           const xml = await drawingFile.async('text')
           const blockRe = /<xdr:(?:twoCellAnchor|oneCellAnchor)[^>]*>([\s\S]*?)<\/xdr:(?:twoCellAnchor|oneCellAnchor)>/g
           for (const [, block] of [...xml.matchAll(blockRe)]) {
-            const rowM = block.match(/<xdr:from>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/)
-            const colM = block.match(/<xdr:from>[\s\S]*?<xdr:col>(\d+)<\/xdr:col>/)
+            const fromRowM = block.match(/<xdr:from>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/)
+            const fromColM = block.match(/<xdr:from>[\s\S]*?<xdr:col>(\d+)<\/xdr:col>/)
+            const toRowM   = block.match(/<xdr:to>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/)
+            const toColM   = block.match(/<xdr:to>[\s\S]*?<xdr:col>(\d+)<\/xdr:col>/)
             const ridM = block.match(/r:embed="(rId\d+)"/)
-            if (rowM && ridM && rIdToFile[ridM[1]]) {
-              anchored.push({ row: parseInt(rowM[1]), col: colM ? parseInt(colM[1]) : 0, filePath: rIdToFile[ridM[1]] })
+            if (fromRowM && ridM && rIdToFile[ridM[1]]) {
+              const fromRow = parseInt(fromRowM[1])
+              const fromCol = fromColM ? parseInt(fromColM[1]) : 0
+              const toRow   = toRowM   ? parseInt(toRowM[1])   : fromRow
+              const toCol   = toColM   ? parseInt(toColM[1])   : fromCol
+              anchored.push({
+                row: fromRow, col: fromCol,
+                centerRow: Math.round((fromRow + toRow) / 2),
+                centerCol: Math.round((fromCol + toCol) / 2),
+                filePath: rIdToFile[ridM[1]],
+              })
             }
           }
         } else {
@@ -781,7 +795,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
           Object.keys(zip.files)
             .filter(p => p.startsWith('xl/media/'))
             .sort()
-            .forEach((p, i) => anchored.push({ row: i, col: i, filePath: p }))
+            .forEach((p, i) => anchored.push({ row: i, col: i, centerRow: i, centerCol: i, filePath: p }))
         }
 
         // Detect band start rows and column bases from the spreadsheet data
@@ -799,21 +813,22 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
           }
         }
 
-        // For each image, determine which (band, block) it belongs to using row+col.
-        // Multiple images in the same block: keep the one with the smallest col offset
-        // (leftmost = primary illustration).
-        const variantImageAnchors = new Map<number, { row: number; col: number; filePath: string }>()
+        // Assign each image to a (band, block) using its CENTER point.
+        // centerRow → band, centerCol → block within the band.
+        // When multiple images land in the same block, keep the one with the smallest
+        // fromCol (leftmost = primary/front view illustration).
+        const variantImageAnchors = new Map<number, AnchorEntry>()
         if (bandInfo.length > 0) {
           for (const anchor of anchored) {
             let bandIdx = -1
             for (let b = 0; b < bandInfo.length; b++) {
-              if (anchor.row >= bandInfo[b].startRow && anchor.row < bandInfo[b].endRow) { bandIdx = b; break }
+              if (anchor.centerRow >= bandInfo[b].startRow && anchor.centerRow < bandInfo[b].endRow) { bandIdx = b; break }
             }
             if (bandIdx === -1) continue
             const bases = bandInfo[bandIdx].bases
             let blockIdx = -1
             for (let b = bases.length - 1; b >= 0; b--) {
-              if (anchor.col >= bases[b]) { blockIdx = b; break }
+              if (anchor.centerCol >= bases[b]) { blockIdx = b; break }
             }
             if (blockIdx === -1) continue
             const globalIdx = bandIdx * bases.length + blockIdx

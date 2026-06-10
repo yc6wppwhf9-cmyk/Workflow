@@ -20,7 +20,7 @@ import { ColourVariantsTab } from '@/components/products/tabs/colour-variants-ta
 import { cn } from '@/lib/utils'
 import type {
   Product, Profile, DesignData, SamplingData, MerchandisingData,
-  BomData, MarketingData, SalesData, ProductFile, ActivityLog, DesignSubmission,
+  BomData, MarketingData, SalesData, ProductFile, ActivityLog, DesignSubmission, SamplingRound,
 } from '@/lib/types'
 
 interface ProductDetailProps {
@@ -39,6 +39,7 @@ interface ProductDetailProps {
   designerWorkloads: Record<string, number>
   merchandisingUsers: Pick<Profile, 'id' | 'full_name'>[]
   samplingUsers: Pick<Profile, 'id' | 'full_name'>[]
+  samplingRounds: SamplingRound[]
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   comments: any[]
   defaultTab?: string
@@ -62,8 +63,8 @@ const VALID_TABS = new Set(TABS.map(t => t.value))
 export function ProductDetail({
   product, profile, designData, samplingData, merchandisingData,
   bomData, marketingData, salesData, files, logs,
-  designSubmissions, designers, designerWorkloads, merchandisingUsers, samplingUsers, comments,
-  defaultTab,
+  designSubmissions, designers, designerWorkloads, merchandisingUsers, samplingUsers,
+  samplingRounds, comments, defaultTab,
 }: ProductDetailProps) {
   const initialTab = defaultTab && VALID_TABS.has(defaultTab) ? defaultTab : 'overview'
   const [activeTab, setActiveTab] = useState(initialTab)

@@ -41,30 +41,56 @@ export async function POST(req: NextRequest) {
   const updates: PromiseLike<unknown>[] = []
   const fields_updated: string[] = []
 
-  // Enrich all colour variant BOM items with INV codes from item_master
+  // Enrich BOM items from item_master.
+  // Items coming from the MAPPING sheet already have inv_code but no inv_name.
+  // Items from the INV SHEET have inv_name but may lack inv_code.
+  // Strategy: look up by inv_code first (MAPPING case), fall back to name lookup.
   let enrichedVariants = colour_variants || []
   if (enrichedVariants.length > 0) {
+    const allInvCodes: string[] = []
     const allNames: string[] = []
     for (const v of enrichedVariants) {
-      for (const item of v.bomItems || []) allNames.push(item.inv_name)
+      for (const item of v.bomItems || []) {
+        if (item.inv_code) allInvCodes.push(item.inv_code)
+        if (item.inv_name) allNames.push(item.inv_name)
+      }
     }
-    if (allNames.length > 0) {
-      const normAll = allNames.map(n => n.trim().toLowerCase().replace(/\s+/g, ' '))
-      const uniqueNorms = [...new Set(normAll)]
-      const { data: masterRows } = await supabase
-        .from('item_master').select('inv_code, item_name_norm, uom').in('item_name_norm', uniqueNorms)
-      const masterMap = new Map<string, { inv_code: string; uom: string }>()
-      for (const row of masterRows ?? []) masterMap.set(row.item_name_norm, { inv_code: row.inv_code, uom: row.uom ?? '' })
 
-      enrichedVariants = enrichedVariants.map((v: { bomItems?: { inv_name: string; inv_code: string; consumption: string; unit: string }[] }) => ({
-        ...v,
-        bomItems: (v.bomItems || []).map((item: { inv_name: string; inv_code: string; consumption: string; unit: string }) => {
+    // Fetch by inv_code (covers MAPPING sheet rows) + by name (covers INV SHEET rows)
+    const uniqueCodes = [...new Set(allInvCodes)]
+    const uniqueNorms = [...new Set(allNames.map(n => n.trim().toLowerCase().replace(/\s+/g, ' ')))]
+    const [{ data: byCode }, { data: byName }] = await Promise.all([
+      uniqueCodes.length > 0
+        ? supabase.from('item_master').select('inv_code, item_name, item_name_norm, uom').in('inv_code', uniqueCodes)
+        : Promise.resolve({ data: [] }),
+      uniqueNorms.length > 0
+        ? supabase.from('item_master').select('inv_code, item_name, item_name_norm, uom').in('item_name_norm', uniqueNorms)
+        : Promise.resolve({ data: [] }),
+    ])
+
+    // Build lookup maps
+    const codeMap = new Map<string, { inv_name: string; uom: string }>()
+    for (const row of byCode ?? []) codeMap.set(row.inv_code, { inv_name: row.item_name ?? '', uom: row.uom ?? '' })
+    const nameMap = new Map<string, { inv_code: string; uom: string }>()
+    for (const row of byName ?? []) nameMap.set(row.item_name_norm, { inv_code: row.inv_code, uom: row.uom ?? '' })
+
+    enrichedVariants = enrichedVariants.map((v: { bomItems?: { inv_name: string; inv_code: string; consumption: string; unit: string }[] }) => ({
+      ...v,
+      bomItems: (v.bomItems || []).map((item: { inv_name: string; inv_code: string; consumption: string; unit: string }) => {
+        if (item.inv_code && codeMap.has(item.inv_code)) {
+          // MAPPING sheet path: have inv_code, need name + unit from master
+          const master = codeMap.get(item.inv_code)!
+          return { ...item, inv_name: master.inv_name || item.inv_name, unit: master.uom || item.unit }
+        }
+        if (item.inv_name) {
+          // INV SHEET path: have name, need inv_code + unit from master
           const norm = item.inv_name.trim().toLowerCase().replace(/\s+/g, ' ')
-          const master = masterMap.get(norm)
+          const master = nameMap.get(norm)
           return { ...item, inv_code: master?.inv_code ?? item.inv_code, unit: master?.uom ?? item.unit }
-        }),
-      }))
-    }
+        }
+        return item
+      }),
+    }))
   }
 
   if (merch_fields) {

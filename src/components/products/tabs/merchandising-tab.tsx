@@ -74,8 +74,11 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
   const isAssigned = data?.assigned_to === profile.id
   const isSubmitted = !!data?.attribute_sheet_handed_over
   const isAtMerchStage = product.workflow_stage === 'merchandising_completed'
-  // Team member can upload before submitting; head can always upload
-  const canUploadExcel = isAtMerchStage && !data?.is_locked && !data?.is_completed && ((isTeamMember && isAssigned && !isSubmitted) || isHead)
+  // Upload is available as long as the data isn't locked/completed:
+  // head can always upload; assigned team member can re-upload at any time (even after submitting)
+  const canUploadExcel = !data?.is_locked && !data?.is_completed && (
+    isHead || (isTeamMember && isAssigned)
+  )
   // Only head can edit the form fields
   const canEditFormFields = isAtMerchStage && !data?.is_locked && !data?.is_completed && isHead
   const showActions = !data?.is_locked && isHead && isAtMerchStage
@@ -173,7 +176,7 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
         .map(s => s.styleName)
         .filter((v, i, a) => a.indexOf(v) === i)
 
-      const colourVariants = buildColourVariants(relevantSkus, product.name, parsed.bomByStyle)
+      const colourVariants = buildColourVariants(relevantSkus, product.name, parsed.bomByStyle, parsed.bomByColour)
       const colourTags = colourVariants.map(v => v.colourTag)
       const merch_fields = relevantSkus.length > 0 ? aggregateMerchFields(relevantSkus) : null
       const extracted_product_name = extractProductBaseName(relevantSkus)
@@ -238,6 +241,14 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
           const effectiveTags = colourTags.filter(t => t.toLowerCase() !== 'color' && t.toLowerCase() !== 'colour')
           const tagsToMap = effectiveTags.length > 0 ? effectiveTags : colourTags
           const tagsLower = tagsToMap.map(t => t.toLowerCase())
+          // Map colourTag → styleName so images are tagged with the full unique style name.
+          // Two different designs can share the same colourTag ("Black") but have different
+          // styleNames ("CONNECT 001 BLACK" vs "CONNECT 002 BLACK") — using styleName as the
+          // image key prevents cross-design image bleed in the Colours tab.
+          const tagToStyleName = new Map(
+            colourVariants.map(v => [v.colourTag.toLowerCase(), v.styleName])
+          )
+          const toStyleKey = (tag: string) => tagToStyleName.get(tag.toLowerCase()) ?? tag
 
           // PRIMARY: read text cells in DETAILS PICS sheet — find rows that contain colour name labels.
           // Each group of images sits directly below its colour label row.
@@ -251,7 +262,7 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
                   const cellStr = String(cell || '').trim().toLowerCase()
                   if (!cellStr || cellStr.length > 60) continue
                   const idx = tagsLower.findIndex(t => cellStr === t || cellStr.includes(t) || t.includes(cellStr))
-                  if (idx >= 0) { colourLabelRows.push({ row: r, colourTag: tagsToMap[idx] }); break }
+                  if (idx >= 0) { colourLabelRows.push({ row: r, colourTag: toStyleKey(tagsToMap[idx]) }); break }
                 }
               }
             }
@@ -273,14 +284,14 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
             if (uniqueRows.length >= uniqueCols.length) {
               for (const pos of positions) {
                 const idx = uniqueRows.indexOf(pos.row)
-                if (idx < tagsToMap.length) imageColourMap.set(pos.file, tagsToMap[idx])
+                if (idx < tagsToMap.length) imageColourMap.set(pos.file, toStyleKey(tagsToMap[idx]))
               }
             } else {
               const colsPerColour = Math.max(1, Math.round(uniqueCols.length / tagsToMap.length))
               for (const pos of positions) {
                 const colIdx = uniqueCols.indexOf(pos.col)
                 const colourIdx = Math.floor(colIdx / colsPerColour)
-                if (colourIdx < tagsToMap.length) imageColourMap.set(pos.file, tagsToMap[colourIdx])
+                if (colourIdx < tagsToMap.length) imageColourMap.set(pos.file, toStyleKey(tagsToMap[colourIdx]))
               }
             }
           }
@@ -311,16 +322,19 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
         file_size: number; department: 'merchandising'; uploaded_by: string; colour_tag: string | null
       }> = []
 
+      // Upload images via the server-side API (Cloudinary) — direct Supabase Storage
+      // client uploads are blocked by bucket RLS for the merchandising role.
       for (let i = 0; i < imagesToUpload.length; i++) {
         const img = imagesToUpload[i]
         setUploadProgress(`Uploading images (${i + 1}/${imagesToUpload.length})...`)
-        const storagePath = `${product.id}/merch_${ts}_${i}_${img.name}`
-        const { error: uploadError } = await supabase.storage
-          .from('product-files')
-          .upload(storagePath, img.bytes, { contentType: img.mimeType, upsert: true })
-        if (uploadError) { errors.push(`Image failed: ${img.name}`); continue }
+        const fd = new FormData()
+        fd.append('file', new Blob([img.bytes as BlobPart], { type: img.mimeType }), img.name)
+        fd.append('folder', product.id)
+        const res = await fetch('/api/upload-file', { method: 'POST', body: fd })
+        if (!res.ok) { errors.push(`Image failed: ${img.name}`); continue }
+        const { url } = await res.json()
         fileRecords.push({
-          product_id: product.id, name: img.name, file_url: storagePath,
+          product_id: product.id, name: img.name, file_url: url,
           file_type: img.mimeType, file_size: img.bytes.length,
           department: 'merchandising', uploaded_by: profile.id, colour_tag: img.colourTag,
         })
@@ -328,13 +342,16 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
       }
 
       setUploadProgress('Saving records...')
-      const excelPath = `${product.id}/merch_excel_${ts}_${file.name}`
-      const { error: excelErr } = await supabase.storage.from('product-files')
-        .upload(excelPath, arrayBuffer, { contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', upsert: true })
-      if (!excelErr) {
+      // Upload the raw Excel via API too (same reason — RLS blocks client-side storage writes)
+      const excelFd = new FormData()
+      excelFd.append('file', file)
+      excelFd.append('folder', product.id)
+      const excelUpRes = await fetch('/api/upload-file', { method: 'POST', body: excelFd })
+      if (excelUpRes.ok) {
+        const { url: excelUrl } = await excelUpRes.json()
         fileRecords.push({
-          product_id: product.id, name: file.name, file_url: excelPath,
-          file_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          product_id: product.id, name: file.name, file_url: excelUrl,
+          file_type: file.type,
           file_size: file.size, department: 'merchandising', uploaded_by: profile.id, colour_tag: null,
         })
       }
@@ -343,9 +360,23 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
 
       setUploadProgress('Saving colour variants...')
       if (colourVariants.length > 0) {
+        // Merge with existing variants using styleName as the unique key.
+        // Design 1 BLK ("CONNECT 001 BLACK") and Design 2 BLK ("CONNECT 002 BLACK") are
+        // different entries — same colourTag, different styleName. Merging by colourTag alone
+        // would wrongly overwrite Design 1's data when Design 2 is uploaded.
+        const { data: existingMD } = await supabase
+          .from('merchandising_data').select('colour_variants').eq('product_id', product.id).single()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const existing: any[] = (existingMD?.colour_variants as any[]) || []
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const newMap = new Map(colourVariants.map((v: any) => [String(v.styleName || '').toLowerCase().trim(), v]))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const merged = existing.map((v: any) => newMap.has(String(v.styleName || '').toLowerCase().trim()) ? newMap.get(String(v.styleName || '').toLowerCase().trim()) : v)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const [style, v] of newMap) { if (!existing.some((e: any) => String(e.styleName || '').toLowerCase().trim() === style)) merged.push(v) }
         await supabase.from('merchandising_data').update({
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          colour_variants: colourVariants as any,
+          colour_variants: merged as any,
           updated_by: profile.id,
         }).eq('product_id', product.id)
       }
@@ -507,31 +538,6 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
 
   return (
     <div className="max-w-3xl space-y-4">
-
-      {/* Colour variants from design tech pack — read-only reference for merch team */}
-      {designVariants.length > 0 && (
-        <Card className="border-violet-100 bg-violet-50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-violet-800">Colour Variants from Tech Pack</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="flex flex-wrap gap-2">
-              {designVariants.map((v: any, i: number) => (
-                <div key={i} className="bg-white border border-violet-200 rounded-lg px-3 py-2 text-xs space-y-0.5 min-w-[120px]">
-                  <p className="font-semibold text-violet-900">
-                    Design {i + 1}
-                  </p>
-                  {v.farma && <p className="text-gray-500">Farma: <span className="text-gray-800">{v.farma}</span></p>}
-                  {v.style_name && <p className="text-gray-500">Style: <span className="text-gray-800">{v.style_name}</span></p>}
-                  {Array.isArray(v.color_skus) && v.color_skus.length > 0 && (
-                    <p className="text-gray-500">SKUs: <span className="font-mono text-gray-800">{v.color_skus.join(', ')}</span></p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Print Tech Pack shortcut */}
       <div className="flex justify-end">

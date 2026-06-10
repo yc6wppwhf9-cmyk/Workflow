@@ -6,7 +6,14 @@ import { cloudinaryConfigured, uploadToSupabaseStorage } from '@/lib/storage-fal
 const ALLOWED_TYPES = [
   'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp',
   'application/pdf',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
 ]
+// Spreadsheets go directly to Supabase Storage — Cloudinary CDN is not useful for binary files
+const SUPABASE_ONLY_TYPES = new Set([
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+])
 const MAX_BYTES = 20 * 1024 * 1024 // 20 MB
 
 function safeFolder(folder: string | null): string {
@@ -33,8 +40,8 @@ export async function POST(req: NextRequest) {
 
   const buffer = Buffer.from(await file.arrayBuffer())
 
-  // Local / no-Cloudinary fallback → store in Supabase Storage
-  if (!cloudinaryConfigured()) {
+  // Spreadsheets and non-Cloudinary environments → Supabase Storage (admin client, bypasses RLS)
+  if (SUPABASE_ONLY_TYPES.has(file.type) || !cloudinaryConfigured()) {
     const { url, public_id } = await uploadToSupabaseStorage(buffer, file, safeFolder(folder))
     return NextResponse.json({ url, public_id })
   }

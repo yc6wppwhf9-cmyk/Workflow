@@ -19,32 +19,58 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Only management can review samples' }, { status: 403 })
   }
 
-  const { product_id, status, feedback } = await req.json()
+  const { product_id, round_id, status, feedback } = await req.json()
   if (!product_id || !status) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
 
-  const [{ error }, { error: stageErr }] = await Promise.all([
-    adminSupabase.from('sampling_data').update({
-      sample_review_status: status,
-      designer_feedback: status === 'rejected' ? (feedback || null) : null,
-      reviewed_by: user.id,
-      reviewed_at: new Date().toISOString(),
-      is_completed: status === 'approved',
-      updated_by: user.id,
-    }).eq('product_id', product_id),
-    status === 'approved'
-      ? adminSupabase.from('products').update({ workflow_stage: 'sampling_completed', updated_by: user.id }).eq('id', product_id)
-      : Promise.resolve({ error: null }),
-  ])
+  const now = new Date().toISOString()
 
+  // Update the specific round (source of truth)
+  if (round_id) {
+    const { error: roundErr } = await adminSupabase.from('sampling_rounds').update({
+      status,
+      feedback: status === 'rejected' ? (feedback || null) : null,
+      reviewed_by: user.id,
+      reviewed_at: now,
+    }).eq('id', round_id)
+    if (roundErr) return NextResponse.json({ error: roundErr.message }, { status: 500 })
+  }
+
+  // Keep sampling_data in sync for backward-compat dashboards/reports
+  const { error } = await adminSupabase.from('sampling_data').update({
+    sample_review_status: status,
+    designer_feedback: status === 'rejected' ? (feedback || null) : null,
+    reviewed_by: user.id,
+    reviewed_at: now,
+    is_completed: status === 'approved',
+    updated_by: user.id,
+  }).eq('product_id', product_id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  if (stageErr) return NextResponse.json({ error: stageErr.message }, { status: 500 })
+
+  // Guard: only advance workflow_stage if the product is currently at design_completed.
+  // This prevents a late review from regressing a product that has already moved past sampling.
+  if (status === 'approved') {
+    const { data: currentProduct } = await adminSupabase
+      .from('products').select('workflow_stage').eq('id', product_id).single()
+    if (currentProduct?.workflow_stage === 'design_completed') {
+      const { error: stageErr } = await adminSupabase.from('products')
+        .update({ workflow_stage: 'sampling_completed', updated_by: user.id })
+        .eq('id', product_id)
+      if (stageErr) return NextResponse.json({ error: stageErr.message }, { status: 500 })
+    }
+  }
+
+  // Fetch round number for the activity log message
+  const roundLabel = round_id
+    ? await adminSupabase.from('sampling_rounds').select('round_number').eq('id', round_id).single()
+        .then(r => r.data?.round_number ? ` (Round ${r.data.round_number})` : '')
+    : ''
 
   await adminSupabase.from('activity_logs').insert({
     product_id,
     user_id: user.id,
     action: status === 'approved'
-      ? 'management approved sample — product moved to merchandising stage'
-      : `management rejected sample${feedback ? `: ${feedback}` : ''}`,
+      ? `management approved sample${roundLabel} — product moved to merchandising stage`
+      : `management rejected sample${roundLabel}${feedback ? `: ${feedback}` : ''}`,
     department: 'sampling',
   })
 

@@ -6,6 +6,7 @@ export interface ParsedMerchData {
   skus: ParsedSKU[]
   bomItems: ParsedBOMItem[]           // aggregated for the matched product column
   bomByStyle: Record<string, ParsedBOMItem[]>  // keyed by normalised style name
+  bomByColour: Record<string, ParsedBOMItem[]> // keyed by MAPPING sheet colour column (e.g. "BLACK")
   cuttingItems: import('./parse-cutting-sheet').CuttingSheetItem[]  // from cutting sheet tab
   images: ParsedImage[]
 }
@@ -104,6 +105,7 @@ export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): Pars
     // Fuzzy field lookup: exact → then "starts with" any known key
     function resolveField(rawLabel: string): keyof ParsedSKU | undefined {
       const norm = normLabel(rawLabel)
+      if (!norm) return undefined
       if (fieldMap[norm]) return fieldMap[norm]
       // Partial: if the label starts with a known key (e.g. "WEIGHT (Gm)" hits "WEIGHT")
       for (const [key, field] of Object.entries(fieldMap)) {
@@ -114,15 +116,48 @@ export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): Pars
 
     const isKnownLabel = (s: string) => !!resolveField(s)
 
-    // Detect layout: scan first 10 rows looking for a row where col-0 is a known field label
-    // This handles sheets with a title or blank row before the data starts
+    // Detect layout by scanning up to 30 rows:
+    // Side-by-side: labels repeat every 3 cols → col 0 and col 3 are the same known label
+    // Transposed: col 0 = label only, col 1..N = one value per variant (col 3 is a value, not a label)
+    let sideBySideDataRow = -1
     let transposedStartRow = -1
-    for (let r = 0; r < Math.min(rows.length, 10); r++) {
-      if (isKnownLabel(String(rows[r]?.[0] || ''))) { transposedStartRow = r; break }
+    for (let r = 0; r < Math.min(rows.length, 30); r++) {
+      const c0 = normLabel(String(rows[r]?.[0] || ''))
+      if (!isKnownLabel(c0)) continue
+      const c3 = normLabel(String(rows[r]?.[3] || ''))
+      if (c0 === c3) { sideBySideDataRow = r; break }  // labels repeat → side-by-side
+      if (transposedStartRow < 0) transposedStartRow = r
     }
-    const isTransposed = transposedStartRow >= 0
 
-    if (isTransposed) {
+    if (sideBySideDataRow >= 0) {
+      // Side-by-side format: 3-col groups [label, value, spacer].
+      // Style name header is the last non-label, non-empty row above the data rows.
+      let headerRow = Math.max(0, sideBySideDataRow - 1)
+      for (let r = sideBySideDataRow - 1; r >= 0; r--) {
+        const c0 = String(rows[r]?.[0] || '').trim()
+        if (c0 && !isKnownLabel(c0) && !/^\d+$/.test(c0)) { headerRow = r; break }
+      }
+      const numColumns = Math.floor(((rows[headerRow]?.length || 0) + 1) / 3)
+      for (let col = 0; col < numColumns; col++) {
+        const baseCol = col * 3
+        const styleName = String(rows[headerRow]?.[baseCol] || '').trim()
+        if (!styleName || styleName === '0' || /^\d+$/.test(styleName)) continue
+        const sku: ParsedSKU = {
+          styleName, weight: '', color: '', dimensions: '', height: '',
+          numberOfZips: '', pocketCompartment: '', mainCompartment: '',
+          uniquePurpose: '', laptopCompartment: '', rainCover: '',
+          backPadded: '', seasonYear: '', bottleSlot: '', character: '',
+          theme: '', mainMaterial: '', material: '', designerName: '',
+        }
+        for (let row = sideBySideDataRow; row < rows.length; row++) {
+          const label = String(rows[row]?.[baseCol] || '')
+          const value = String(rows[row]?.[baseCol + 1] || '').trim()
+          const field = resolveField(label)
+          if (field && value && value !== '0') sku[field] = value
+        }
+        skus.push(sku)
+      }
+    } else if (transposedStartRow >= 0) {
       // Transposed format: labels in col A, one colour variant per column B, C, D…
       // numCols = max columns across all data rows (not just row 0, which may be shorter)
       let numCols = 0
@@ -144,28 +179,6 @@ export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): Pars
         // Must have at least a colour or weight to be a real variant column
         if (!sku.color && !sku.weight) continue
         sku.styleName = sku.color || `variant_${c}`
-        skus.push(sku)
-      }
-    } else {
-      // Side-by-side format: row 0 = style names, each SKU in 3 columns (label, value, empty)
-      const numColumns = Math.floor((rows[0]?.length || 0) / 3)
-      for (let col = 0; col < numColumns; col++) {
-        const baseCol = col * 3
-        const styleName = String(rows[0]?.[baseCol] || '').trim()
-        if (!styleName || styleName === '0' || /^\d+$/.test(styleName)) continue
-        const sku: ParsedSKU = {
-          styleName, weight: '', color: '', dimensions: '', height: '',
-          numberOfZips: '', pocketCompartment: '', mainCompartment: '',
-          uniquePurpose: '', laptopCompartment: '', rainCover: '',
-          backPadded: '', seasonYear: '', bottleSlot: '', character: '',
-          theme: '', mainMaterial: '', material: '', designerName: '',
-        }
-        for (let row = 1; row < rows.length; row++) {
-          const label = String(rows[row]?.[baseCol] || '')
-          const value = String(rows[row]?.[baseCol + 1] || '').trim()
-          const field = resolveField(label)
-          if (field && value && value !== '0') sku[field] = value
-        }
         skus.push(sku)
       }
     }
@@ -259,10 +272,51 @@ export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): Pars
     }
   }
 
+  // ── Parse MAPPING sheet ──────────────────────────────────────────────────
+  // Format: row 0 = ["INV BLACK", "INV NAVY BLUE", ..., "CONSMP"]
+  //         rows 1+ = [inv_code_for_blk, inv_code_for_nbl, ..., consumption]
+  // Each row is one BOM line with per-colour INV codes and a shared consumption.
+  // Item names are intentionally left blank here — they are looked up from item_master
+  // by INV code in the upload API route.
+  const bomByColour: Record<string, ParsedBOMItem[]> = {}
+  const mappingSheet = findSheet(workbook, 'MAPPING')
+  if (mappingSheet) {
+    const rows = XLSX.utils.sheet_to_json<string[]>(mappingSheet, { header: 1, defval: '' }) as string[][]
+    if (rows.length >= 2) {
+      const headerRow = rows[0]
+      // Identify colour columns (headers starting with "INV ") and the CONSMP column
+      const colourCols: Array<{ idx: number; colourKey: string }> = []
+      let consmpIdx = -1
+      for (let c = 0; c < headerRow.length; c++) {
+        const h = String(headerRow[c] || '').trim().toUpperCase().replace(/\s+/g, ' ')
+        if (h.includes('CONSMP') || h.includes('CONSUMPTION')) { consmpIdx = c }
+        else if (h.startsWith('INV ')) {
+          // "INV BLACK" → "BLACK", "INV NAVY BLUE" → "NAVY BLUE"
+          colourCols.push({ idx: c, colourKey: h.replace(/^INV\s+/, '').trim() })
+        }
+      }
+      if (colourCols.length > 0 && consmpIdx >= 0) {
+        for (const col of colourCols) bomByColour[col.colourKey] = []
+        for (let r = 1; r < rows.length; r++) {
+          const row = rows[r]
+          const rawC = row[consmpIdx]
+          const numC = parseFloat(String(rawC || ''))
+          if (isNaN(numC) || numC === 0) continue
+          const consumption = parseFloat(numC.toFixed(6)).toString()
+          for (const col of colourCols) {
+            const invCode = String(row[col.idx] || '').trim()
+            if (!invCode || invCode === '0') continue
+            bomByColour[col.colourKey].push({ inv_code: invCode, inv_name: '', consumption, unit: '' })
+          }
+        }
+      }
+    }
+  }
+
   // ── Parse cutting sheet (any sheet with CONSMP column) ───────────────────
   const cuttingItems = parseCuttingSheetFromWorkbook(workbook)
 
-  return { skus, bomItems, bomByStyle, cuttingItems, images }
+  return { skus, bomItems, bomByStyle, bomByColour, cuttingItems, images }
 }
 
 export function filterSkusForProduct(skus: ParsedSKU[], productName: string): ParsedSKU[] {
@@ -304,20 +358,33 @@ export function buildColourVariants(
   skus: ParsedSKU[],
   productName: string,
   bomByStyle?: Record<string, ParsedBOMItem[]>,
+  bomByColour?: Record<string, ParsedBOMItem[]>,
 ) {
   return skus.map(sku => {
     const rawTag = sku.color || extractColorTag(sku.styleName, productName)
     const colourTag = resolveColorName(rawTag)
 
-    // Find matching BOM: try normalised style name first, then colour name suffix match
+    // Find BOM — prefer MAPPING sheet (bomByColour) over INV SHEET (bomByStyle).
+    // MAPPING keys are uppercase colour names like "BLACK", "NAVY BLUE".
+    // Match against the variant's resolved colour name (colourTag like "Black")
+    // or the raw short code (sku.color like "BLK").
     let bomItems: ParsedBOMItem[] | undefined
-    if (bomByStyle) {
+    if (bomByColour && Object.keys(bomByColour).length > 0) {
+      const needle = colourTag.toUpperCase().replace(/\s+/g, ' ')
+      const rawNeedle = (sku.color || '').toUpperCase()
+      for (const [key, items] of Object.entries(bomByColour)) {
+        const k = key.toUpperCase().replace(/\s+/g, ' ')
+        if (k === needle || k.includes(needle) || needle.includes(k) || k === rawNeedle) {
+          bomItems = items; break
+        }
+      }
+    }
+    if (!bomItems && bomByStyle) {
       const skuKey = normaliseStyleName(sku.styleName)
       const skuCompact = skuKey.replace(/\s/g, '')
       for (const [styleKey, items] of Object.entries(bomByStyle)) {
         if (styleKey === skuKey || styleKey.replace(/\s/g, '') === skuCompact) { bomItems = items; break }
       }
-      // Fallback: match resolved colour name against end of INV SHEET style key
       if (!bomItems && colourTag) {
         const colorNorm = colourTag.toLowerCase().replace(/\s+/g, ' ')
         for (const [styleKey, items] of Object.entries(bomByStyle)) {

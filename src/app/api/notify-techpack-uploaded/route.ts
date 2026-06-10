@@ -32,16 +32,16 @@ export async function POST(req: NextRequest) {
   const uploaderName = uploaderRes.data?.full_name ?? 'A designer'
   const designHeads  = designHeadsRes.data ?? []
 
-  // Save Excel to Supabase storage and record it in product_files
+  // Save Excel to Supabase storage and record it in product_files.
+  // Each upload gets a timestamped path so versions are never overwritten.
   const buffer      = Buffer.from(await file.arrayBuffer())
-  const storagePath = `${productId}/techpack/${file.name}`
+  const storagePath = `${productId}/techpack/${Date.now()}_${file.name}`
 
-  await Promise.all([
+  const [, { data: fileRow }] = await Promise.all([
     adminSupabase.storage.from('product-files').upload(storagePath, buffer, {
       contentType: file.type,
-      upsert: true,
     }),
-    adminSupabase.from('product_files').upsert({
+    adminSupabase.from('product_files').insert({
       product_id:  productId,
       name:        file.name,
       file_url:    storagePath,
@@ -49,10 +49,12 @@ export async function POST(req: NextRequest) {
       file_size:   file.size,
       department:  'design',
       uploaded_by: user.id,
-    }, { onConflict: 'product_id,name,department' }),
+    }).select('id').single(),
   ])
 
-  if (designHeads.length === 0) return NextResponse.json({ ok: true, skipped: 'no design heads' })
+  const fileId = fileRow?.id ?? null
+
+  if (designHeads.length === 0) return NextResponse.json({ ok: true, skipped: 'no design heads', file_id: fileId })
 
   const productUrl  = `${APP_URL}/products/${productId}?tab=design`
   const base64File  = buffer.toString('base64')
@@ -102,5 +104,5 @@ export async function POST(req: NextRequest) {
     })
   )
 
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, file_id: fileId })
 }

@@ -193,6 +193,20 @@ export interface MerchandisingData {
   updated_at: string
 }
 
+export interface SamplingRound {
+  id: string
+  product_id: string
+  round_number: number
+  techpack_file_id: string | null
+  illustration_file_ids: string[]
+  status: 'sampling_requested' | 'in_progress' | 'pending_review' | 'approved' | 'rejected'
+  feedback: string | null
+  sent_by: string | null
+  reviewed_by: string | null
+  sent_at: string
+  reviewed_at: string | null
+}
+
 export interface SamplingData {
   id: string
   product_id: string

@@ -4,7 +4,7 @@ import { Header } from '@/components/layout/header'
 import { ProductDetail } from '@/components/products/product-detail'
 import type {
   Profile, Product, DesignData, SamplingData, MerchandisingData,
-  BomData, MarketingData, SalesData, ProductFile, ActivityLog, DesignSubmission,
+  BomData, MarketingData, SalesData, ProductFile, ActivityLog, DesignSubmission, SamplingRound,
 } from '@/lib/types'
 
 export default async function ProductPage({
@@ -42,6 +42,7 @@ export default async function ProductPage({
     { data: samplingUsers },
     { data: activeAssignments },
     { data: comments },
+    { data: samplingRounds },
   ] = await Promise.all([
     supabase.from('design_data').select('*').eq('product_id', id).single(),
     supabase.from('sampling_data').select('*').eq('product_id', id).single(),
@@ -58,6 +59,8 @@ export default async function ProductPage({
     supabase.from('design_data').select('assigned_to').not('assigned_to', 'is', null).neq('is_completed', true),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any).from('product_comments').select('id, message, created_at, user_id, author_name, author_role').eq('product_id', id).order('created_at', { ascending: true }).limit(200),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase as any).from('sampling_rounds').select('*').eq('product_id', id).order('round_number', { ascending: true }),
   ])
 
   const designerWorkloads: Record<string, number> = {}
@@ -119,6 +122,7 @@ export default async function ProductPage({
         designerWorkloads={designerWorkloads}
         merchandisingUsers={merchandisingUsers || []}
         samplingUsers={samplingUsers || []}
+        samplingRounds={(samplingRounds as unknown as SamplingRound[]) || []}
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         comments={(comments as any) || []}
         defaultTab={tab}

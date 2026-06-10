@@ -202,9 +202,16 @@ export function ColourVariantsTab({ variants, files }: ColourVariantsTabProps) {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {displayVariants.map((variant, i) => (
           <ColorCard
-            key={variant.styleName || i}
+            key={`${variant.styleName || variant.colourTag}-${i}`}
             variant={variant}
-            images={filesByColor.get(variant.colourTag) || []}
+            images={
+              // Match by styleName first (new uploads tag images with the full style name
+              // to avoid cross-design bleed when two designs share the same colour code).
+              // Fall back to colourTag for images uploaded before this change.
+              filesByColor.get(variant.styleName) ||
+              filesByColor.get(variant.colourTag) ||
+              []
+            }
           />
         ))}
       </div>

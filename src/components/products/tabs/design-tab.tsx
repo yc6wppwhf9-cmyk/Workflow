@@ -441,7 +441,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
       // All complete — advance this product then cascade-advance held siblings
       await supabase.rpc('advance_product_stage', {
         p_product_id: product.id,
-        p_next_stage: 'merchandising_completed',
+        p_next_stage: 'design_completed',
         p_user_id:    profile.id,
         p_action:     'marked design complete — stage advanced to Sampling',
         p_department: profile.role,
@@ -454,7 +454,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
       for (const sibling of heldSiblings) {
         await supabase.rpc('advance_product_stage', {
           p_product_id: sibling.id,
-          p_next_stage: 'merchandising_completed',
+          p_next_stage: 'design_completed',
           p_user_id:    profile.id,
           p_action:     'batch complete — advancing to Sampling',
           p_department: profile.role,
@@ -468,7 +468,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
       // No assigned designer — no batch, advance immediately
       await supabase.rpc('advance_product_stage', {
         p_product_id: product.id,
-        p_next_stage: 'merchandising_completed',
+        p_next_stage: 'design_completed',
         p_user_id:    profile.id,
         p_action:     'marked design complete — stage advanced to Sampling',
         p_department: profile.role,
@@ -478,7 +478,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
     fetch('/api/notify-stage-advance', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ product_id: product.id, product_name: product.name, next_stage: 'merchandising_completed' }),
+      body: JSON.stringify({ product_id: product.id, product_name: product.name, next_stage: 'design_completed' }),
     }).catch(() => {})
 
     setSaving(false)

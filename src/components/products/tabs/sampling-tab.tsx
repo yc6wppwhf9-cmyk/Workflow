@@ -474,14 +474,17 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="text-base">Design Tech Pack</CardTitle>
           <div className="flex items-center gap-2">
-            <a
-              href={`/api/export-sampling-techpack?product_id=${product.id}`}
-              download
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 border border-blue-200 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition-colors"
-            >
-              <Download className="h-3.5 w-3.5" />
-              Export Excel
-            </a>
+            {designData?.techpack_pdf_url && (
+              <a
+                href={designData.techpack_pdf_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-red-600 border border-red-200 bg-red-50 hover:bg-red-100 px-2.5 py-1 rounded-lg transition-colors"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                View PDF
+              </a>
+            )}
             <Button
               size="sm" variant="outline" className="gap-1.5"
               onClick={() => {

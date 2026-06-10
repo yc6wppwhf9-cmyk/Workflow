@@ -84,6 +84,11 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
     f.colour_tag !== 'print'
   )
 
+  // Print files uploaded by the design team (read-only for sampling)
+  const printFiles = files.filter(f => f.department === 'design' && f.colour_tag === 'print')
+  const printImageFiles = printFiles.filter(f => f.file_type?.startsWith('image/'))
+  const [printLightboxIdx, setPrintLightboxIdx] = useState<number | null>(null)
+
   // Colour SKUs for the active variant only
   const allSkus: string[] = (() => {
     const v = activeVariant as any
@@ -744,6 +749,74 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
           )}
         </CardContent>
       </Card>
+
+      {/* ── Print Files (read-only, uploaded by design team) ──────── */}
+      {printFiles.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <FileText className="h-4 w-4 text-gray-500" />
+              Print Files
+              <span className="ml-auto text-xs font-normal text-gray-400">uploaded by design team</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+              {printFiles.map(f => {
+                const isPdf = f.file_type === 'application/pdf'
+                return (
+                  <div key={f.id} className="group relative rounded-lg overflow-hidden border border-gray-200 bg-gray-50 aspect-square">
+                    {isPdf ? (
+                      <button
+                        onClick={() => window.open(f.file_url, '_blank')}
+                        className="w-full h-full flex flex-col items-center justify-center gap-1 hover:bg-gray-100 transition-colors"
+                      >
+                        <FileText className="h-8 w-8 text-red-400" />
+                        <p className="text-[10px] text-gray-500 px-1 truncate w-full text-center">{f.name}</p>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setPrintLightboxIdx(printImageFiles.findIndex(x => x.id === f.id))}
+                        className="w-full h-full focus:outline-none"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={f.file_url} alt={f.name} className="w-full h-full object-cover" />
+                      </button>
+                    )}
+                    {!isPdf && (
+                      <div className="absolute inset-x-0 bottom-0 bg-black/40 px-1 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <p className="text-[10px] text-white truncate">{f.name}</p>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      {printLightboxIdx !== null && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
+          onClick={() => setPrintLightboxIdx(null)}
+        >
+          <button className="absolute top-4 right-4 text-white/70 hover:text-white text-2xl leading-none" onClick={() => setPrintLightboxIdx(null)}>✕</button>
+          {printImageFiles[printLightboxIdx] && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={printImageFiles[printLightboxIdx].file_url}
+              alt={printImageFiles[printLightboxIdx].name}
+              className="max-h-[90vh] max-w-[90vw] object-contain rounded"
+              onClick={e => e.stopPropagation()}
+            />
+          )}
+          {printImageFiles.length > 1 && (
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/60 text-sm">
+              {printLightboxIdx + 1} / {printImageFiles.length}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Sampling PDF Documents ──────────────────────────────────── */}
       <Card>

@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Download, Loader2, Lock, Save, Plus, X, Upload, FileSpreadsheet, CheckCircle2, UserCheck, Send, Printer } from 'lucide-react'
+import { Download, Loader2, Lock, Save, Plus, X, Upload, FileSpreadsheet, CheckCircle2, UserCheck, Send, Printer, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { createClient } from '@/lib/supabase/client'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { parseMerchExcel, filterSkusForProduct, aggregateMerchFields, buildColourVariants, extractProductBaseName } from '@/lib/parse-merch-excel'
-import type { Product, Profile, MerchandisingData, DesignData } from '@/lib/types'
+import type { Product, Profile, MerchandisingData, DesignData, ProductFile } from '@/lib/types'
 
 interface MerchandisingTabProps {
   product: Product
@@ -19,6 +19,7 @@ interface MerchandisingTabProps {
   data: MerchandisingData | null
   merchandisingUsers: Pick<Profile, 'id' | 'full_name'>[]
   designData?: DesignData | null
+  files?: ProductFile[]
 }
 
 type FormState = {
@@ -67,10 +68,13 @@ function initForm(data: MerchandisingData | null): FormState {
   }
 }
 
-export function MerchandisingTab({ product, profile, data, merchandisingUsers, designData }: MerchandisingTabProps) {
+export function MerchandisingTab({ product, profile, data, merchandisingUsers, designData, files = [] }: MerchandisingTabProps) {
   const router = useRouter()
   const isTeamMember = profile.role === 'merchandising'
   const isHead = ['admin', 'merchandising_head'].includes(profile.role)
+  const printFiles = files.filter(f => f.department === 'design' && f.colour_tag === 'print')
+  const printImageFiles = printFiles.filter(f => f.file_type?.startsWith('image/'))
+  const [printLightboxIdx, setPrintLightboxIdx] = useState<number | null>(null)
   const isAssigned = data?.assigned_to === profile.id
   const isSubmitted = !!data?.attribute_sheet_handed_over
   const isAtMerchStage = product.workflow_stage === 'merchandising_completed'
@@ -647,6 +651,86 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
             <p className="text-sm text-gray-400">Attribute sheet will be visible here once the merchandising head marks it complete.</p>
           </CardContent>
         </Card>
+      )}
+
+      {/* Print Files — uploaded by design team, read-only */}
+      {printFiles.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Print Files <span className="text-xs font-normal text-gray-400 ml-1">(uploaded by design team)</span></CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {printImageFiles.length > 0 && (
+              <div className="grid grid-cols-4 gap-2">
+                {printImageFiles.map((img, i) => (
+                  <div
+                    key={img.id}
+                    className="aspect-square rounded-lg overflow-hidden bg-gray-100 cursor-pointer hover:opacity-90 transition-opacity"
+                    onClick={() => setPrintLightboxIdx(i)}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={img.file_url} alt={img.name} className="w-full h-full object-cover" />
+                  </div>
+                ))}
+              </div>
+            )}
+            {printFiles.filter(f => !f.file_type?.startsWith('image/')).map(f => (
+              <a
+                key={f.id}
+                href={f.file_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-xs text-blue-600 hover:underline"
+              >
+                <Download className="h-3.5 w-3.5 shrink-0" />
+                {f.name}
+              </a>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Print Files Lightbox */}
+      {printLightboxIdx !== null && printImageFiles[printLightboxIdx] && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
+          onClick={() => setPrintLightboxIdx(null)}
+        >
+          <button
+            className="absolute top-4 right-4 h-10 w-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white"
+            onClick={() => setPrintLightboxIdx(null)}
+          >
+            <X className="h-5 w-5" />
+          </button>
+          {printImageFiles.length > 1 && (
+            <>
+              <button
+                className="absolute left-4 h-10 w-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white"
+                onClick={e => { e.stopPropagation(); setPrintLightboxIdx(i => i !== null ? (i - 1 + printImageFiles.length) % printImageFiles.length : null) }}
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <button
+                className="absolute right-4 h-10 w-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white"
+                onClick={e => { e.stopPropagation(); setPrintLightboxIdx(i => i !== null ? (i + 1) % printImageFiles.length : null) }}
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            </>
+          )}
+          <div className="flex flex-col items-center gap-3 max-w-5xl max-h-screen p-16" onClick={e => e.stopPropagation()}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={printImageFiles[printLightboxIdx].file_url}
+              alt={printImageFiles[printLightboxIdx].name}
+              className="max-h-[80vh] max-w-full object-contain rounded-lg"
+            />
+            <p className="text-white/70 text-sm">{printImageFiles[printLightboxIdx].name}</p>
+            {printImageFiles.length > 1 && (
+              <p className="text-white/40 text-xs">{printLightboxIdx + 1} / {printImageFiles.length}</p>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Excel Upload Card — team member (before submit) and head */}

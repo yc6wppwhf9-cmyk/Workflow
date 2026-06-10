@@ -57,6 +57,7 @@ export function NewDevelopmentClient({ profile, initialDevelopments }: Props) {
   const [showCreate, setShowCreate] = useState(false)
   const [newTitle, setNewTitle]     = useState('')
   const [newRemarks, setNewRemarks] = useState('')
+  const [notifyEmail, setNotifyEmail] = useState('')
   const [printFiles, setPrintFiles] = useState<File[]>([])
   const [trimFiles, setTrimFiles]   = useState<File[]>([])
   const [sending, setSending]       = useState(false)
@@ -67,6 +68,7 @@ export function NewDevelopmentClient({ profile, initialDevelopments }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
   const isHead = ['design_head', 'admin'].includes(profile.role)
+  const isMerchandisingHead = profile.role === 'merchandising_head'
 
   // ── File helpers ─────────────────────────────────────────────────────────
 
@@ -105,6 +107,7 @@ export function NewDevelopmentClient({ profile, initialDevelopments }: Props) {
   function resetForm() {
     setNewTitle('')
     setNewRemarks('')
+    setNotifyEmail('')
     setPrintFiles([])
     setTrimFiles([])
     setShowCreate(false)
@@ -134,9 +137,25 @@ export function NewDevelopmentClient({ profile, initialDevelopments }: Props) {
     const uploadedTrim  = await uploadFilesToDev(development.id, trimFiles,  'trim')
     const allUploaded   = [...uploadedPrint, ...uploadedTrim]
 
-    // 3. Send to merchandising head
+    // 3. Mark as sent
     const sendRes = await fetch(`/api/new-development/${development.id}/send`, { method: 'POST' })
-    if (!sendRes.ok) { toast.error('Created but failed to notify merchandising team') }
+    if (!sendRes.ok) {
+      toast.error(isMerchandisingHead ? 'Created but failed to finalise' : 'Created but failed to notify merchandising team')
+    }
+
+    // 4. For merchandising_head: send custom email if address was entered
+    if (isMerchandisingHead && notifyEmail.trim()) {
+      fetch('/api/notify-new-development-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          development_title: newTitle.trim(),
+          recipient_email:   notifyEmail.trim(),
+          sender_name:       profile.full_name || 'Merchandising Head',
+          remarks:           newRemarks.trim() || undefined,
+        }),
+      }).catch(() => {})
+    }
 
     setDevelopments(prev => [{
       ...development,
@@ -147,7 +166,9 @@ export function NewDevelopmentClient({ profile, initialDevelopments }: Props) {
     }, ...prev])
     resetForm()
     setExpandedId(development.id)
-    toast.success('Sent to merchandising team')
+    toast.success(isMerchandisingHead
+      ? (notifyEmail.trim() ? `Development created — notification sent to ${notifyEmail.trim()}` : 'Development created')
+      : 'Sent to merchandising team')
     setSending(false)
   }
 
@@ -250,13 +271,27 @@ export function NewDevelopmentClient({ profile, initialDevelopments }: Props) {
             <div className="space-y-1">
               <Label className="text-xs text-blue-700 font-semibold uppercase tracking-wide">Remarks</Label>
               <Textarea
-                placeholder="Add notes or context for the merchandising team…"
+                placeholder={isMerchandisingHead ? 'Add notes or context…' : 'Add notes or context for the merchandising team…'}
                 value={newRemarks}
                 onChange={e => setNewRemarks(e.target.value)}
                 rows={3}
                 className="bg-white text-sm"
               />
             </div>
+
+            {isMerchandisingHead && (
+              <div className="space-y-1">
+                <Label className="text-xs text-blue-700 font-semibold uppercase tracking-wide">Notify by Email</Label>
+                <Input
+                  type="email"
+                  placeholder="e.g. vendor@example.com"
+                  value={notifyEmail}
+                  onChange={e => setNotifyEmail(e.target.value)}
+                  className="bg-white"
+                />
+                <p className="text-xs text-blue-400">Optional — a notification with a link to this development will be sent to this address.</p>
+              </div>
+            )}
 
             {/* Print upload */}
             <FileSection
@@ -292,7 +327,7 @@ export function NewDevelopmentClient({ profile, initialDevelopments }: Props) {
               >
                 {sending
                   ? <><Loader2 className="h-4 w-4 animate-spin" /> Sending…</>
-                  : <><Send className="h-4 w-4" /> Send to Merchandising</>}
+                  : <><Send className="h-4 w-4" /> {isMerchandisingHead ? 'Create & Send' : 'Send to Merchandising'}</>}
               </Button>
               <Button
                 variant="ghost"

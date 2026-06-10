@@ -22,6 +22,7 @@ import {
   Lightbulb,
   Megaphone,
   Pencil,
+  Plus,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -107,6 +108,7 @@ export function Sidebar({ profile }: SidebarProps) {
             <p className="px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-5 mb-2">My Work</p>
             {navLink('/sampling-review', 'Sampling Review', FlaskConical)}
             {navLink('/merch-new-development', 'New Development', Lightbulb)}
+            {navLink('/new-development', 'Create Development', Plus)}
           </>
         )}
 

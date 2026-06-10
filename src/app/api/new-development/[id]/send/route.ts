@@ -27,17 +27,21 @@ export async function POST(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  const { data: sender } = await supabase.from('profiles').select('full_name').eq('id', user.id).single()
+  const { data: senderProfile } = await supabase.from('profiles').select('full_name, role').eq('id', user.id).single()
 
-  fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/notify-new-development`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      development_id:   id,
-      development_title: dev.title,
-      sender_name:      sender?.full_name || 'Design Team',
-    }),
-  }).catch(() => {})
+  // Only notify all merchandising heads when the sender is from design team.
+  // Merchandising head creating their own development handles their own notification.
+  if (senderProfile?.role !== 'merchandising_head') {
+    fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/notify-new-development`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        development_id:    id,
+        development_title: dev.title,
+        sender_name:       senderProfile?.full_name || 'Design Team',
+      }),
+    }).catch(() => {})
+  }
 
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, sender_name: senderProfile?.full_name || '' })
 }

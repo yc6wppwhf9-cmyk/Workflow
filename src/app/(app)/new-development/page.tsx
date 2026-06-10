@@ -8,11 +8,11 @@ export default async function NewDevelopmentPage() {
   const supabase = await createClient()
   const profile  = await getCurrentProfile() as Profile
 
-  if (!['design_head', 'design', 'admin'].includes(profile.role)) {
+  if (!['design_head', 'design', 'admin', 'merchandising_head'].includes(profile.role)) {
     redirect('/dashboard')
   }
 
-  // Design head sees all; design team sees only their own
+  // Design head + merchandising_head see all; design team sees only their own
   let query = (supabase as any)
     .from('new_developments')
     .select(`
@@ -26,13 +26,19 @@ export default async function NewDevelopmentPage() {
     query = query.eq('created_by', profile.id)
   }
 
+  if (profile.role === 'merchandising_head') {
+    query = query.eq('created_by', profile.id)
+  }
+
   const { data: developments } = await query
 
   return (
     <div>
       <Header
         title="New Development"
-        subtitle="Upload PDFs and send new developments to the merchandising team"
+        subtitle={profile.role === 'merchandising_head'
+          ? 'Create a new development and notify a recipient by email.'
+          : 'Upload PDFs and send new developments to the merchandising team'}
       />
       <div className="p-4 sm:p-6">
         <NewDevelopmentClient

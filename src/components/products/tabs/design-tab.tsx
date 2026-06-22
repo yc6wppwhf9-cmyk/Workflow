@@ -918,8 +918,8 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
     const selectedFiles = Array.from(e.target.files || [])
     if (selectedFiles.length === 0) return
     
-    if (designFiles.length + selectedFiles.length > 15) {
-      toast.error(`You cannot upload more than 15 illustrations in total. Currently you have ${designFiles.length}.`)
+    if (designFiles.length + selectedFiles.length > 50) {
+      toast.error(`You cannot upload more than 50 illustrations in total. Currently you have ${designFiles.length}.`)
       if (illustrationRef.current) illustrationRef.current.value = ''
       return
     }

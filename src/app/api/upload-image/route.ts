@@ -3,8 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { cloudinary } from '@/lib/cloudinary'
 import { cloudinaryConfigured, uploadToSupabaseStorage } from '@/lib/storage-fallback'
 
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp']
-const MAX_BYTES = 10 * 1024 * 1024 // 10 MB
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp', 'application/pdf']
+const MAX_BYTES = 20 * 1024 * 1024 // 20 MB (PDFs can be larger)
 
 function safeFolder(folder: string | null): string {
   const f = folder ?? 'products'
@@ -22,16 +22,17 @@ export async function POST(req: NextRequest) {
 
   if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
   if (!ALLOWED_TYPES.includes(file.type)) {
-    return NextResponse.json({ error: 'Only JPEG, PNG, WebP, GIF, and BMP images are allowed' }, { status: 400 })
+    return NextResponse.json({ error: 'Only JPEG, PNG, WebP, GIF, BMP images and PDF files are allowed' }, { status: 400 })
   }
   if (file.size > MAX_BYTES) {
-    return NextResponse.json({ error: 'Image must be under 10 MB' }, { status: 400 })
+    return NextResponse.json({ error: 'File must be under 20 MB' }, { status: 400 })
   }
 
   const buffer = Buffer.from(await file.arrayBuffer())
+  const isPdf = file.type === 'application/pdf'
 
-  // Local / no-Cloudinary fallback → store in Supabase Storage
-  if (!cloudinaryConfigured()) {
+  // PDFs and fallback (no Cloudinary) → store in Supabase Storage
+  if (isPdf || !cloudinaryConfigured()) {
     const { url, public_id } = await uploadToSupabaseStorage(buffer, file, safeFolder(folder))
     return NextResponse.json({ url, public_id })
   }

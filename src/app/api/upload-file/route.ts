@@ -9,8 +9,9 @@ const ALLOWED_TYPES = [
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/vnd.ms-excel',
 ]
-// Spreadsheets go directly to Supabase Storage — Cloudinary CDN is not useful for binary files
+// PDFs and spreadsheets go to Supabase Storage — Cloudinary is image-CDN only
 const SUPABASE_ONLY_TYPES = new Set([
+  'application/pdf',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/vnd.ms-excel',
 ])

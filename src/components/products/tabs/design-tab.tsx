@@ -284,6 +284,8 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
     setPrintUploading(true)
     setPrintProgress({ done: 0, total: valid.length })
     let done = 0
+    let savedCount = 0
+    const failedFiles: string[] = []
     for (const file of valid) {
       const fd = new FormData()
       fd.append('file', file)
@@ -291,7 +293,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
       const res = await fetch('/api/upload-file', { method: 'POST', body: fd })
       if (res.ok) {
         const { url } = await res.json() as { url: string }
-        await supabase.from('product_files').insert({
+        const { error: insertErr } = await supabase.from('product_files').insert({
           product_id:  product.id,
           name:        file.name,
           file_url:    url,
@@ -301,17 +303,28 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
           colour_tag:  'print',
           uploaded_by: profile.id,
         })
+        if (insertErr) {
+          failedFiles.push(file.name)
+          toast.error(`Failed to save "${file.name}" — ${insertErr.message}`)
+        } else {
+          savedCount++
+        }
+      } else {
+        failedFiles.push(file.name)
+        const body = await res.json().catch(() => ({})) as { error?: string }
+        toast.error(`Upload failed for "${file.name}": ${body.error || res.statusText}`)
       }
       done++
       setPrintProgress({ done, total: valid.length })
     }
     await supabase.from('activity_logs').insert({
       product_id: product.id, user_id: profile.id,
-      action: `uploaded ${valid.length} print file(s)`, department: 'design',
+      action: `uploaded ${savedCount} print file(s)`, department: 'design',
     })
     setPrintUploading(false)
     setPrintProgress(null)
-    toast.success(`${valid.length} print file${valid.length !== 1 ? 's' : ''} uploaded`)
+    if (savedCount > 0) toast.success(`${savedCount} print file${savedCount !== 1 ? 's' : ''} uploaded successfully`)
+    if (failedFiles.length > 0) toast.error(`${failedFiles.length} file(s) failed — please re-upload: ${failedFiles.join(', ')}`)
     if (printFileRef.current) printFileRef.current.value = ''
     router.refresh()
   }

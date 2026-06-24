@@ -287,32 +287,35 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
     let savedCount = 0
     const failedFiles: string[] = []
     for (const file of valid) {
-      const fd = new FormData()
-      fd.append('file', file)
-      fd.append('folder', `products/${product.id}/design-print`)
-      const res = await fetch('/api/upload-file', { method: 'POST', body: fd })
-      if (res.ok) {
-        const { url } = await res.json() as { url: string }
+      try {
+        // Get a signed upload URL from the server — upload goes directly from browser
+        // to Supabase Storage, bypassing Vercel's 4.5 MB serverless body size limit.
+        const urlRes = await fetch('/api/signed-upload-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folder: `products/${product.id}/design-print`, filename: file.name }),
+        })
+        if (!urlRes.ok) throw new Error('Could not get upload URL')
+        const { token, path, publicUrl } = await urlRes.json() as { token: string; path: string; publicUrl: string }
+
+        const { error: uploadErr } = await supabase.storage.from('product-files').uploadToSignedUrl(path, token, file, { contentType: file.type })
+        if (uploadErr) throw new Error(uploadErr.message)
+
         const { error: insertErr } = await supabase.from('product_files').insert({
           product_id:  product.id,
           name:        file.name,
-          file_url:    url,
+          file_url:    publicUrl,
           file_type:   file.type,
           file_size:   file.size,
           department:  'design',
           colour_tag:  'print',
           uploaded_by: profile.id,
         })
-        if (insertErr) {
-          failedFiles.push(file.name)
-          toast.error(`Failed to save "${file.name}" — ${insertErr.message}`)
-        } else {
-          savedCount++
-        }
-      } else {
+        if (insertErr) throw new Error(insertErr.message)
+        savedCount++
+      } catch (err: unknown) {
         failedFiles.push(file.name)
-        const body = await res.json().catch(() => ({})) as { error?: string }
-        toast.error(`Upload failed for "${file.name}": ${body.error || res.statusText}`)
+        toast.error(`Failed to upload "${file.name}": ${err instanceof Error ? err.message : 'Unknown error'}`)
       }
       done++
       setPrintProgress({ done, total: valid.length })

@@ -7,7 +7,7 @@ const TEAM_MEMBERS = [
   { email: 'rahul.kumar@hscvpl.com',          full_name: 'Rahul Kumar',          role: 'design' },
   { email: 'darshita.dubey@hscvpl.com',       full_name: 'Dharshita Dubey',      role: 'design' },
   { email: 'sayantani.rauth@hscvpl.com',      full_name: 'Sayantani Raut',       role: 'design' },
-  { email: 'shriya.kulkarni@hscvpl.com',      full_name: 'Shriya Kulkarni',      role: 'design' },
+  { email: 'shriya.kulkarni@hscvpl.com',      full_name: 'Shriya Kulkarni',      role: 'sampling' },
   { email: 'anuja.mulik@hscvpl.com',          full_name: 'Anuja Mulik',          role: 'marketing_head' },
   { email: 'krishnendu.br@hscvpl.com',        full_name: 'Krishnendu BR',        role: 'marketing' },
   { email: 'shivam.patil@hscvpl.com',         full_name: 'Shivam Patil',         role: 'marketing' },
@@ -18,6 +18,9 @@ const TEAM_MEMBERS = [
   { email: 'prasanna.adsule@hscvpl.com',      full_name: 'Prasanna Adsule',      role: 'merchandising' },
   { email: 'vijay.laxmi@hscvpl.com',          full_name: 'Vijay Laxmi',          role: 'merchandising' },
   { email: 'tejashree.kalsulkar@hscvpl.com',  full_name: 'Tejashree Kalsulkar',  role: 'bom' },
+  // New sampling team members (specialties: Lokesh = Fitting, Ajeet = Digital Print).
+  { email: 'lokesh.bachhav@hscvpl.com',       full_name: 'Lokesh Bachhav',       role: 'sampling' },
+  { email: 'ajeet.jaiswar@hscvpl.com',        full_name: 'Ajeet Jaiswar',        role: 'sampling' },
 ]
 
 export async function GET() {

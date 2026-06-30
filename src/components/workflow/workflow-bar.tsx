@@ -41,12 +41,13 @@ export function WorkflowBar({
   const isAdmin = ['admin', 'management'].includes(profile.role)
 
   const DISPLAY_STAGES = [
-    { label: 'Sales',         doneAfter: 0, tab: 'sales'         },
-    { label: 'Design',        doneAfter: 1, tab: 'design'        },
-    { label: 'Merchandising', doneAfter: 2, tab: 'merchandising' },
-    { label: 'BOM',           doneAfter: 4, tab: 'bom'           },
-    { label: 'Marketing',     doneAfter: 5, tab: 'marketing'     },
-    { label: 'Sales Priced',  doneAfter: 6, tab: 'sales'         },
+    { label: 'Sales',            doneAfter: 0, tab: 'sales'         },
+    { label: 'Design',           doneAfter: 1, tab: 'design'        },
+    { label: 'Merchandising',    doneAfter: 2, tab: 'merchandising' },
+    { label: 'BOM',              doneAfter: 4, tab: 'bom'           },
+    { label: 'Costing & Naming', doneAfter: 5, tab: 'bom'           },
+    { label: 'Marketing',        doneAfter: 6, tab: 'marketing'     },
+    { label: 'Sales Priced',     doneAfter: 7, tab: 'sales'         },
   ]
 
   const isCurrentStageComplete = () => {
@@ -56,6 +57,7 @@ export function WorkflowBar({
       case 'sampling_completed':     return !!samplingData?.is_completed && samplingData.sample_review_status === 'approved'
       case 'merchandising_completed': return merchandisingData?.is_completed || false
       case 'bom_finalized':          return bomData?.is_completed || false
+      case 'costing_naming':         return !!product.md_costing_approved && !!product.product_range
       case 'marketing_ready':        return marketingData?.is_completed || false
       default:                       return true
     }

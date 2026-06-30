@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { sendEmail, emailLayout, greeting, btn, badge, infoTable, infoRow, divider, APP_URL } from '@/lib/email'
 import { sendPushToUser, sendPushToRole } from '@/lib/push'
+import { canApproveSamples, SAMPLE_APPROVER_NAME } from '@/lib/types'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,9 +15,9 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: profile } = await supabase.from('profiles').select('role, full_name').eq('id', user.id).single()
-  if (!['admin', 'management'].includes(profile?.role ?? '')) {
-    return NextResponse.json({ error: 'Only management can review samples' }, { status: 403 })
+  const { data: profile } = await supabase.from('profiles').select('role, full_name, email').eq('id', user.id).single()
+  if (!canApproveSamples({ role: profile?.role ?? '', email: profile?.email ?? user.email })) {
+    return NextResponse.json({ error: `Only ${SAMPLE_APPROVER_NAME} (or an admin) can review samples` }, { status: 403 })
   }
 
   const { product_id, round_id, status, feedback } = await req.json()
@@ -69,8 +70,8 @@ export async function POST(req: NextRequest) {
     product_id,
     user_id: user.id,
     action: status === 'approved'
-      ? `management approved sample${roundLabel} — product moved to merchandising stage`
-      : `management rejected sample${roundLabel}${feedback ? `: ${feedback}` : ''}`,
+      ? `${profile?.full_name || SAMPLE_APPROVER_NAME} approved sample${roundLabel} — product moved to merchandising stage`
+      : `${profile?.full_name || SAMPLE_APPROVER_NAME} rejected sample${roundLabel}${feedback ? `: ${feedback}` : ''}`,
     department: 'sampling',
   })
 
@@ -90,8 +91,8 @@ export async function POST(req: NextRequest) {
 
     const productName   = product?.name || 'Product'
     const productUrl    = `${APP_URL}/products/${product_id}?tab=sampling`
-    const reviewerName  = profile?.full_name || 'Management'
-    const isApprovedMsg = `The sample for "${productName}" has been approved by management. The product will now move to the Merchandising stage.`
+    const reviewerName  = profile?.full_name || SAMPLE_APPROVER_NAME
+    const isApprovedMsg = `The sample for "${productName}" has been approved. The product will now move to the Merchandising stage.`
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const designer = Array.isArray(designData?.designer) ? (designData.designer as any[])[0] : designData?.designer as any
@@ -127,7 +128,7 @@ export async function POST(req: NextRequest) {
         const html = emailLayout(`
           ${greeting(r.full_name)}
           <p style="margin:0 0 16px;color:#334155;font-size:15px;line-height:1.6;">
-            Management has reviewed the sample for this product.
+            ${reviewerName} has reviewed the sample for this product.
           </p>
           ${badge('Sample Approved', '#dcfce7', '#15803d')}
           ${infoTable(

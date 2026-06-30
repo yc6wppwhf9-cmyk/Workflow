@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Lock, Save, Download } from 'lucide-react'
+import { Loader2, Lock, Save, Download, Tag, CheckCircle2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,6 +35,62 @@ export function BomTab({ product, profile, data, merchandisingData }: BomTabProp
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [saved, setSaved] = useState(false)
   const [exporting, setExporting] = useState(false)
+
+  // ── Costing & Naming gate (after BOM) ──────────────────────────────
+  const isCostingNamingStage = product.workflow_stage === 'costing_naming'
+  const [rangeInput, setRangeInput] = useState(product.product_range || '')
+  const [productName, setProductName] = useState(product.name)
+  const [rangeSaved, setRangeSaved] = useState(!!product.product_range)
+  const [mdApproved, setMdApproved] = useState(product.md_costing_approved || false)
+  const [namingSaving, setNamingSaving] = useState(false)
+  const [gateAdvancing, setGateAdvancing] = useState(false)
+
+  async function saveRange() {
+    if (!rangeInput.trim()) return
+    setNamingSaving(true)
+    try {
+      const res = await fetch('/api/set-product-range', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: product.id, range: rangeInput.trim() }),
+      })
+      const json = await res.json() as { ok?: boolean; name?: string; error?: string }
+      if (!res.ok || !json.ok) throw new Error(json.error || 'Failed')
+      if (json.name) setProductName(json.name)
+      setRangeSaved(true)
+    } finally {
+      setNamingSaving(false)
+    }
+  }
+
+  async function toggleMdApproved() {
+    const next = !mdApproved
+    setMdApproved(next)
+    await fetch('/api/set-md-costing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_id: product.id, approved: next }),
+    })
+  }
+
+  async function completeCostingNaming() {
+    setGateAdvancing(true)
+    const supabase = createClient()
+    await supabase.rpc('advance_product_stage', {
+      p_product_id: product.id,
+      p_next_stage: 'marketing_ready',
+      p_user_id: profile.id,
+      p_action: 'completed Costing & Naming — stage advanced to Marketing',
+      p_department: 'bom',
+    })
+    fetch('/api/notify-stage-advance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_id: product.id, product_name: productName, next_stage: 'marketing_ready' }),
+    }).catch(() => {})
+    setGateAdvancing(false)
+    router.refresh()
+  }
 
   async function exportToExcel() {
     if (colourVariants.length === 0) return
@@ -117,15 +173,15 @@ export function BomTab({ product, profile, data, merchandisingData }: BomTabProp
     if (becomingComplete && product.workflow_stage === 'bom_finalized') {
       await supabase.rpc('advance_product_stage', {
         p_product_id: product.id,
-        p_next_stage: 'marketing_ready',
+        p_next_stage: 'costing_naming',
         p_user_id: profile.id,
-        p_action: 'marked BOM complete — stage advanced to Marketing',
+        p_action: 'marked BOM complete — stage advanced to Costing & Naming',
         p_department: 'bom',
       })
       fetch('/api/notify-stage-advance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product_id: product.id, product_name: product.name, next_stage: 'marketing_ready' }),
+        body: JSON.stringify({ product_id: product.id, product_name: product.name, next_stage: 'costing_naming' }),
       }).catch(() => {})
     }
 
@@ -135,6 +191,82 @@ export function BomTab({ product, profile, data, merchandisingData }: BomTabProp
 
   return (
     <div className="max-w-5xl space-y-4">
+
+      {/* ── Costing & Naming gate (Naam Karan + MD costing approval) ──── */}
+      {isCostingNamingStage && (
+        <Card className="border-pink-300 border-2">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2 text-pink-700">
+              <Tag className="h-4 w-4" /> Costing &amp; Naming
+            </CardTitle>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Give the product its rangewise name, then confirm MD costing approval before it moves to Marketing.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-5">
+
+            {/* Naam Karan — rangewise naming */}
+            <div className="space-y-2">
+              <Label className="text-xs">Range (Naam Karan)</Label>
+              <div className="flex items-end gap-3 flex-wrap">
+                <Input
+                  placeholder="e.g. Summer Trekker"
+                  value={rangeInput}
+                  onChange={e => setRangeInput(e.target.value)}
+                  disabled={!isRoleAllowed || namingSaving}
+                  className="h-8 text-sm w-64"
+                />
+                {isRoleAllowed && (
+                  <Button size="sm" onClick={saveRange} disabled={namingSaving || !rangeInput.trim()}>
+                    {namingSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Tag className="h-4 w-4" />}
+                    Generate Name
+                  </Button>
+                )}
+              </div>
+              <p className="text-xs text-gray-500">
+                Product name:{' '}
+                <span className="font-semibold text-gray-800">{productName}</span>
+                <span className="text-gray-400"> — auto-numbered within the range</span>
+              </p>
+            </div>
+
+            {/* MD costing approval checkbox */}
+            <div className="pt-3 border-t border-gray-100">
+              <label className={`flex items-center gap-2 select-none ${isRoleAllowed ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
+                <input
+                  type="checkbox"
+                  checked={mdApproved}
+                  onChange={toggleMdApproved}
+                  disabled={!isRoleAllowed}
+                  className="h-4 w-4 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+                />
+                <span className="text-sm text-gray-700">Costing approved by MD</span>
+              </label>
+            </div>
+
+            {/* Advance to Marketing */}
+            {isRoleAllowed && (
+              <div className="pt-2 border-t border-gray-100">
+                <Button
+                  onClick={completeCostingNaming}
+                  disabled={gateAdvancing || !rangeSaved || !mdApproved}
+                  className="bg-pink-600 hover:bg-pink-700"
+                  title={!rangeSaved ? 'Generate the product name first' : !mdApproved ? 'Confirm MD costing approval first' : undefined}
+                >
+                  {gateAdvancing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                  Complete &amp; Send to Marketing
+                </Button>
+                {(!rangeSaved || !mdApproved) && (
+                  <p className="text-xs text-gray-400 mt-1.5">
+                    Save the rangewise name and tick MD costing approval to continue.
+                  </p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <div>

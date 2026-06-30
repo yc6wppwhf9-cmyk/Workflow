@@ -8,12 +8,14 @@ const ALLOWED_TYPES = [
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/vnd.ms-excel',
+  'text/csv',
 ]
 // PDFs and spreadsheets go to Supabase Storage — Cloudinary is image-CDN only
 const SUPABASE_ONLY_TYPES = new Set([
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/vnd.ms-excel',
+  'text/csv',
 ])
 const MAX_BYTES = 20 * 1024 * 1024 // 20 MB
 

@@ -23,7 +23,7 @@ export default async function ProductsPage() {
     .from('products')
     .select(`
       id, name, sku, category, sub_category, workflow_stage, created_at,
-      design_data(designer_name, color_skus, channel),
+      design_data(designer_name, color_skus, channel, designer:profiles!assigned_to(full_name)),
       bom_data(fg_inv_code)
     `)
     .order('created_at', { ascending: false })
@@ -36,11 +36,16 @@ export default async function ProductsPage() {
   const { data: rawProducts } = await query
 
   // Normalize Supabase nested join arrays to scalars expected by ProductsTable
-  const products = (rawProducts || []).map(p => ({
-    ...p,
-    design_data: one(p.design_data),
-    bom_data: one(p.bom_data),
-  }))
+  const products = (rawProducts || []).map(p => {
+    const dd = one(p.design_data) as { designer_name: string | null; color_skus: string[] | null; channel: string | null; designer?: { full_name: string | null } | { full_name: string | null }[] | null } | null
+    const designer = Array.isArray(dd?.designer) ? dd?.designer[0] : dd?.designer
+    return {
+      ...p,
+      design_data: dd,
+      bom_data: one(p.bom_data),
+      assigned_designer: designer?.full_name ?? null,
+    }
+  })
 
   return (
     <div>

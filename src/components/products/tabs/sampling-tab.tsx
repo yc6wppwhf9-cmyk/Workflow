@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import type { DesignData, Product, ProductFile, Profile, SamplingData } from '@/lib/types'
+import { canApproveSamples, SAMPLE_APPROVER_NAME, type DesignData, type Product, type ProductFile, type Profile, type SamplingData } from '@/lib/types'
 import Image from 'next/image'
 
 interface SamplingTabProps {
@@ -62,9 +62,11 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
 
   const isSampler = ['admin', 'sampling', 'merchandising', 'merchandising_head'].includes(profile.role)
   const isMerchHead = ['admin', 'merchandising_head'].includes(profile.role)
-  const canReview = ['admin', 'management'].includes(profile.role)
+  const canReview = canApproveSamples(profile)
   const allSampleImages = files.filter(f => f.department === 'sampling' && f.file_type?.startsWith('image/'))
-  const samplePdfs = files.filter(f => f.department === 'sampling' && f.file_type === 'application/pdf')
+  // Documents = any non-image sampling file (PDF or Excel). Sampling teams running
+  // several samples at once can upload multiple sheets together.
+  const sampleDocs = files.filter(f => f.department === 'sampling' && !f.file_type?.startsWith('image/'))
 
   // Variant tag helpers — images are tagged with the variant's sample_color (or "variant_N" fallback)
   function variantTag(idx: number): string {
@@ -223,7 +225,14 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
   }
 
   async function handlePdfUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const selectedFiles = Array.from(e.target.files || []).filter(f => f.type === 'application/pdf')
+    const DOC_RE = /\.(pdf|xlsx|xls|csv)$/i
+    const selectedFiles = Array.from(e.target.files || []).filter(
+      f => f.type === 'application/pdf'
+        || f.type === 'application/vnd.ms-excel'
+        || f.type.includes('spreadsheet')
+        || f.type === 'text/csv'
+        || DOC_RE.test(f.name)
+    )
     if (selectedFiles.length === 0) return
     setPdfUploading(true)
     setPdfProgress({ done: 0, total: selectedFiles.length })
@@ -251,12 +260,12 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
     await supabase.from('activity_logs').insert({
       product_id: product.id,
       user_id: profile.id,
-      action: `uploaded ${selectedFiles.length} sampling PDF(s)`,
+      action: `uploaded ${selectedFiles.length} sampling document(s)`,
       department: 'sampling',
     })
     setPdfUploading(false)
     setPdfProgress(null)
-    toast.success(`${selectedFiles.length} PDF${selectedFiles.length !== 1 ? 's' : ''} uploaded`)
+    toast.success(`${selectedFiles.length} document${selectedFiles.length !== 1 ? 's' : ''} uploaded`)
     if (pdfInputRef.current) pdfInputRef.current.value = ''
     router.refresh()
   }
@@ -276,11 +285,17 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
     await supabase.from('activity_logs').insert({
       product_id: product.id,
       user_id: profile.id,
-      action: 'marked sample complete and sent to management for approval',
+      action: `marked sample complete and sent to ${SAMPLE_APPROVER_NAME} for approval`,
       department: 'sampling',
     })
+    // Notify the sample approver that a sample is awaiting review
+    fetch('/api/notify-sample-review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_id: product.id, product_name: product.name }),
+    }).catch(() => {})
     setSaving(false)
-    toast.success('Sample sent for management approval')
+    toast.success(`Sample sent to ${SAMPLE_APPROVER_NAME} for approval`)
     router.refresh()
   }
 
@@ -716,14 +731,14 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
 
           {isRejected && (
             <div className="rounded-lg border border-red-200 bg-red-50 p-3">
-              <p className="text-xs font-semibold text-red-500 uppercase tracking-wide mb-1">Sample Rejected by Management</p>
+              <p className="text-xs font-semibold text-red-500 uppercase tracking-wide mb-1">Sample Rejected</p>
               <p className="text-sm text-red-800 whitespace-pre-wrap">{data?.designer_feedback || 'No feedback provided.'}</p>
             </div>
           )}
 
           {isPending && (
             <div className="flex items-center gap-2 rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm text-yellow-700">
-              <Clock className="h-4 w-4" /> Waiting for management approval.
+              <Clock className="h-4 w-4" /> Waiting for {SAMPLE_APPROVER_NAME}&apos;s approval.
             </div>
           )}
 
@@ -823,15 +838,15 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <FileText className="h-4 w-4 text-gray-500" />
-            Sampling Documents (PDF)
+            Sampling Documents (PDF / Excel)
           </CardTitle>
           {isSampler && !isApproved && (
             <>
               <Button size="sm" variant="outline" onClick={() => pdfInputRef.current?.click()} disabled={pdfUploading}>
                 {pdfUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                {pdfProgress ? `${pdfProgress.done}/${pdfProgress.total} uploaded` : 'Upload PDF'}
+                {pdfProgress ? `${pdfProgress.done}/${pdfProgress.total} uploaded` : 'Upload Documents'}
               </Button>
-              <input ref={pdfInputRef} type="file" accept="application/pdf" multiple className="hidden" onChange={handlePdfUpload} />
+              <input ref={pdfInputRef} type="file" accept=".pdf,.xlsx,.xls,.csv,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" multiple className="hidden" onChange={handlePdfUpload} />
             </>
           )}
         </CardHeader>
@@ -847,15 +862,15 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
               </div>
             </div>
           )}
-          {samplePdfs.length === 0 ? (
+          {sampleDocs.length === 0 ? (
             <div className="border-2 border-dashed border-gray-200 rounded-lg py-8 text-center">
               <FileText className="h-7 w-7 text-gray-300 mx-auto mb-2" />
-              <p className="text-sm text-gray-500">No PDFs uploaded yet.</p>
-              {isSampler && !isApproved && <p className="text-xs text-gray-400 mt-1">Click &quot;Upload PDF&quot; to add documents</p>}
+              <p className="text-sm text-gray-500">No documents uploaded yet.</p>
+              {isSampler && !isApproved && <p className="text-xs text-gray-400 mt-1">Click &quot;Upload Documents&quot; to add PDF or Excel files</p>}
             </div>
           ) : (
             <div className="space-y-2">
-              {samplePdfs.map(file => (
+              {sampleDocs.map(file => (
                 <div key={file.id} className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors">
                   <FileText className="h-5 w-5 text-red-500 shrink-0" />
                   <span className="flex-1 text-sm text-gray-800 truncate">{file.name}</span>
@@ -887,7 +902,7 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
       {canReview && isPending && (
         <Card className="border-blue-200">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Management Sample Approval</CardTitle>
+            <CardTitle className="text-base">Sample Approval</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-gray-600">Approve the sample to allow the merchandising head to advance the stage, or reject with a remark for the sampling team.</p>

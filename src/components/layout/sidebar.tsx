@@ -23,11 +23,12 @@ import {
   Megaphone,
   Pencil,
   Plus,
+  CheckCircle2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { getInitials } from '@/lib/utils'
-import type { Profile } from '@/lib/types'
+import { SAMPLE_APPROVER_EMAIL, type Profile } from '@/lib/types'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -134,6 +135,20 @@ export function Sidebar({ profile }: SidebarProps) {
           <>
             <p className="px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-5 mb-2">My Work</p>
             {navLink('/sampling-queue', 'Sampling Queue', FlaskConical)}
+          </>
+        )}
+
+        {profile.role === 'merchandising' && (
+          <>
+            <p className="px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-5 mb-2">My Work</p>
+            {navLink('/new-development', 'New Development', Lightbulb)}
+          </>
+        )}
+
+        {profile.email === SAMPLE_APPROVER_EMAIL && (
+          <>
+            <p className="px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-5 mb-2">My Work</p>
+            {navLink('/sample-approval', 'Sample Approval', CheckCircle2)}
           </>
         )}
 

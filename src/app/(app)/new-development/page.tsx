@@ -8,7 +8,7 @@ export default async function NewDevelopmentPage() {
   const supabase = await createClient()
   const profile  = await getCurrentProfile() as Profile
 
-  if (!['design_head', 'design', 'admin', 'merchandising_head'].includes(profile.role)) {
+  if (!['design_head', 'design', 'admin', 'merchandising_head', 'merchandising'].includes(profile.role)) {
     redirect('/dashboard')
   }
 
@@ -22,11 +22,8 @@ export default async function NewDevelopmentPage() {
     `)
     .order('created_at', { ascending: false })
 
-  if (profile.role === 'design') {
-    query = query.eq('created_by', profile.id)
-  }
-
-  if (profile.role === 'merchandising_head') {
+  // Design team, merchandising, and merchandising head see only their own developments
+  if (['design', 'merchandising_head', 'merchandising'].includes(profile.role)) {
     query = query.eq('created_by', profile.id)
   }
 

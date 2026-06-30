@@ -30,6 +30,7 @@ interface ProductRow {
   created_at: string
   design_data?: { designer_name: string | null; color_skus: string[] | null; channel: string | null } | null
   bom_data?: { fg_inv_code: string | null } | null
+  assigned_designer?: string | null
 }
 
 interface ProductsTableProps {
@@ -48,6 +49,7 @@ export function ProductsTable({ products, profile }: ProductsTableProps) {
     const haystack = [
       p.name,
       p.sku,
+      p.assigned_designer,
       design?.designer_name,
       design?.channel,
       bom?.fg_inv_code,
@@ -110,6 +112,7 @@ export function ProductsTable({ products, profile }: ProductsTableProps) {
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50">
               <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Product</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Designer</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Colour SKUs</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">FG INV</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Channel</th>
@@ -136,10 +139,18 @@ export function ProductsTable({ products, profile }: ProductsTableProps) {
                         <p className="font-medium text-gray-900 group-hover:text-blue-600">{p.name}</p>
                         <div className="flex items-center gap-1.5 mt-0.5">
                           {p.sku && <span className="font-mono text-[10px] text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">{p.sku}</span>}
-                          {design?.designer_name && <p className="text-xs text-gray-400">{design.designer_name}</p>}
                         </div>
                       </div>
                     </Link>
+                  </td>
+
+                  {/* Assigned designer */}
+                  <td className="px-4 py-3.5 text-sm text-gray-700">
+                    {p.assigned_designer
+                      ? p.assigned_designer
+                      : design?.designer_name
+                        ? <span className="text-gray-500">{design.designer_name}</span>
+                        : <span className="text-gray-300 text-xs">Unassigned</span>}
                   </td>
 
                   {/* Colour SKUs */}

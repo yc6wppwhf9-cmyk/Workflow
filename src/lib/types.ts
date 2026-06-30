@@ -1,11 +1,21 @@
 export type UserRole = 'admin' | 'management' | 'design' | 'design_head' | 'sampling' | 'merchandising' | 'merchandising_head' | 'bom' | 'marketing' | 'marketing_head' | 'sales' | 'viewer' | 'purchase_head'
 
+// The single designated sample approver (replaces management sample approval).
+// Approval rights = admin OR this account.
+export const SAMPLE_APPROVER_EMAIL = 'amrita.kumari@hscvpl.com'
+export const SAMPLE_APPROVER_NAME = 'Amrita'
+
+export function canApproveSamples(profile: { role: string; email?: string | null }): boolean {
+  return profile.role === 'admin' || profile.email === SAMPLE_APPROVER_EMAIL
+}
+
 export type WorkflowStage =
   | 'draft'
   | 'design_completed'
   | 'sampling_completed'
   | 'merchandising_completed'
   | 'bom_finalized'
+  | 'costing_naming'
   | 'marketing_ready'
   | 'sales_priced'
   | 'product_live'
@@ -78,6 +88,8 @@ export interface Product {
   brand: Brand | null
   description: string | null
   family_name: string | null
+  product_range: string | null
+  md_costing_approved: boolean
   workflow_stage: WorkflowStage
   is_locked: boolean
   created_by: string | null
@@ -320,6 +332,7 @@ export const WORKFLOW_STAGES: WorkflowStage[] = [
   'sampling_completed',
   'merchandising_completed',
   'bom_finalized',
+  'costing_naming',
   'marketing_ready',
   'sales_priced',
   'product_live',
@@ -331,6 +344,7 @@ export const STAGE_LABELS: Record<WorkflowStage, string> = {
   sampling_completed: 'Sampling',
   merchandising_completed: 'Merchandising',
   bom_finalized: 'BOM',
+  costing_naming: 'Costing & Naming',
   marketing_ready: 'Marketing',
   sales_priced: 'Sales Priced',
   product_live: 'Product Live',
@@ -342,6 +356,7 @@ export const STAGE_COLORS: Record<WorkflowStage, string> = {
   sampling_completed: 'bg-cyan-100 text-cyan-700',
   merchandising_completed: 'bg-blue-100 text-blue-700',
   bom_finalized: 'bg-orange-100 text-orange-700',
+  costing_naming: 'bg-pink-100 text-pink-700',
   marketing_ready: 'bg-yellow-100 text-yellow-700',
   sales_priced: 'bg-green-100 text-green-700',
   product_live: 'bg-emerald-100 text-emerald-700',
@@ -386,5 +401,6 @@ export const STAGE_OWNER_ROLE: Partial<Record<WorkflowStage, UserRole>> = {
   sampling_completed: 'sampling',
   merchandising_completed: 'merchandising',
   bom_finalized: 'bom',
+  costing_naming: 'bom',
   marketing_ready: 'marketing',
 }

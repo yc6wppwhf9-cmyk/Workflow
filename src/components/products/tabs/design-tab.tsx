@@ -1197,13 +1197,23 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
   return (
     <div className="space-y-4">
 
-      {/* ── Merch head's design remark (read-only for the designer) ──── */}
-      {data?.merch_remark && (
-        <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3">
-          <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide mb-1 flex items-center gap-1.5">
-            <Send className="h-3.5 w-3.5" /> Remark from Merchandising Head
+      {/* ── Merch head's design-wise remarks (read-only for the designer) ──── */}
+      {data?.merch_remarks && Object.keys(data.merch_remarks).length > 0 && (
+        <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 space-y-1.5">
+          <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide flex items-center gap-1.5">
+            <Send className="h-3.5 w-3.5" /> Remarks from Merchandising Head
           </p>
-          <p className="text-sm text-indigo-900 whitespace-pre-wrap">{data.merch_remark}</p>
+          {Object.entries(data.merch_remarks).map(([idx, text]) => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const v = (data.variants?.[Number(idx)] as any) || null
+            const color = v?.sample_color ? String(v.sample_color) : ''
+            const label = `Design ${Number(idx) + 1}${color ? ` — ${color}` : ''}`
+            return (
+              <p key={idx} className="text-sm text-indigo-900 whitespace-pre-wrap">
+                <span className="font-semibold">{label}:</span> {text}
+              </p>
+            )
+          })}
         </div>
       )}
 

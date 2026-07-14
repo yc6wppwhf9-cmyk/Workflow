@@ -53,10 +53,26 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
   const [reviewing, setReviewing] = useState(false)
   const [activeVariantIdx, setActiveVariantIdx] = useState(0)
 
-  // Merch-head design remark → persisted on design_data + notifies the assigned designer
-  const [merchRemark, setMerchRemark] = useState(designData?.merch_remark || '')
+  // Merch-head design-wise remark → persisted per design on design_data.merch_remarks,
+  // notifies the assigned designer.
+  const [remarkMap, setRemarkMap] = useState<Record<string, string>>(designData?.merch_remarks || {})
+  const [remarkIdx, setRemarkIdx] = useState(0)
+  const [remarkDraft, setRemarkDraft] = useState(designData?.merch_remarks?.['0'] || '')
   const [savingMerchRemark, setSavingMerchRemark] = useState(false)
   const [merchRemarkSaved, setMerchRemarkSaved] = useState(false)
+
+  function remarkVariantLabel(idx: number): string {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const v = variants[idx] as any
+    const color = v?.sample_color ? String(v.sample_color) : ''
+    return `Design ${idx + 1}${color ? ` — ${color}` : ''}`
+  }
+
+  function selectRemarkVariant(idx: number) {
+    setRemarkIdx(idx)
+    setRemarkDraft(remarkMap[String(idx)] || '')
+    setMerchRemarkSaved(false)
+  }
 
   async function saveMerchRemark() {
     setSavingMerchRemark(true)
@@ -64,10 +80,22 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
     const res = await fetch('/api/notify-design-remark', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ product_id: product.id, product_name: product.name, remark: merchRemark.trim() }),
+      body: JSON.stringify({
+        product_id: product.id,
+        product_name: product.name,
+        remark: remarkDraft.trim(),
+        variant_index: remarkIdx,
+        variant_label: remarkVariantLabel(remarkIdx),
+      }),
     })
     setSavingMerchRemark(false)
     if (res.ok) {
+      setRemarkMap(prev => {
+        const next = { ...prev }
+        if (remarkDraft.trim()) next[String(remarkIdx)] = remarkDraft.trim()
+        else delete next[String(remarkIdx)]
+        return next
+      })
       setMerchRemarkSaved(true)
       toast.success(designData?.assigned_to ? 'Remark saved — designer notified' : 'Remark saved')
       setTimeout(() => { setMerchRemarkSaved(false); router.refresh() }, 1800)
@@ -372,23 +400,40 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
   return (
     <div className="space-y-4">
 
-      {/* ── Merch head: design-specific remark to the assigned designer ── */}
+      {/* ── Merch head: design-wise remark to the assigned designer ── */}
       {isMerchHead && (
         <Card className="border-indigo-200">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2 text-indigo-700">
               <Send className="h-4 w-4" /> Design Remark for Designer
             </CardTitle>
+            <p className="text-xs text-gray-500 mt-0.5">Pick the design and leave a remark for that specific one (e.g. colour/fabric not available).</p>
           </CardHeader>
           <CardContent className="space-y-3">
+            {variants.length > 1 && (
+              <div className="flex items-center gap-2">
+                <Label className="shrink-0 text-sm text-gray-600">Design</Label>
+                <select
+                  value={remarkIdx}
+                  onChange={e => selectRemarkVariant(Number(e.target.value))}
+                  className="flex-1 min-w-[12rem] h-8 text-sm border border-gray-200 rounded-md px-2 bg-white"
+                >
+                  {variants.map((_, i) => (
+                    <option key={i} value={i}>
+                      {remarkVariantLabel(i)}{remarkMap[String(i)] ? '  •' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <Textarea
-              value={merchRemark}
-              onChange={e => setMerchRemark(e.target.value)}
+              value={remarkDraft}
+              onChange={e => setRemarkDraft(e.target.value)}
               rows={3}
-              placeholder="Write a design-specific remark for the assigned designer…"
+              placeholder={`Remark for ${remarkVariantLabel(remarkIdx)}…`}
             />
             <div className="flex items-center gap-2 flex-wrap">
-              <Button size="sm" onClick={saveMerchRemark} disabled={savingMerchRemark || !merchRemark.trim()}>
+              <Button size="sm" onClick={saveMerchRemark} disabled={savingMerchRemark}>
                 {savingMerchRemark ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 Save &amp; Notify Designer
               </Button>
@@ -396,9 +441,20 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
                 <span className="text-xs text-green-600 flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" /> Saved</span>
               )}
               {!designData?.assigned_to && (
-                <span className="text-xs text-amber-600">No designer assigned yet — remark is saved but nobody to notify.</span>
+                <span className="text-xs text-amber-600">No designer assigned yet — remark saved but nobody to notify.</span>
               )}
             </div>
+            {/* Existing per-design remarks */}
+            {Object.keys(remarkMap).length > 0 && (
+              <div className="pt-2 border-t border-gray-100 space-y-1.5">
+                {Object.entries(remarkMap).map(([idx, text]) => (
+                  <div key={idx} className="text-xs">
+                    <span className="font-semibold text-indigo-700">{remarkVariantLabel(Number(idx))}:</span>{' '}
+                    <span className="text-gray-700 whitespace-pre-wrap">{text}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

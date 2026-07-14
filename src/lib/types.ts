@@ -117,7 +117,7 @@ export interface DesignData {
   product_id: string
   assigned_to: string | null
   head_notes: string | null
-  merch_remark: string | null
+  merch_remarks: Record<string, string> | null
   channel: string | null
   designer_name: string | null
   sample_color: string | null

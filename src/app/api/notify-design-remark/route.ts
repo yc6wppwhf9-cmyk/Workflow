@@ -21,23 +21,33 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const { product_id, product_name, remark } = await request.json() as {
-    product_id: string; product_name: string; remark: string
+  const { product_id, product_name, remark, variant_index, variant_label } = await request.json() as {
+    product_id: string; product_name: string; remark: string; variant_index?: number; variant_label?: string
   }
-  if (!product_id || !remark?.trim()) return NextResponse.json({ ok: true, skipped: true })
+  if (!product_id) return NextResponse.json({ ok: true, skipped: true })
 
-  // Persist the remark (admin client bypasses design_data RLS for the merch head)
-  await adminSupabase
-    .from('design_data')
-    .update({ merch_remark: remark.trim(), updated_by: user.id })
-    .eq('product_id', product_id)
+  const idxKey = String(variant_index ?? 0)
 
-  // Find the assigned designer for this product
+  // Find the assigned designer + current remarks map
   const { data: designData } = await adminSupabase
     .from('design_data')
-    .select('assigned_to, designer:profiles!assigned_to(id, full_name, email)')
+    .select('assigned_to, merch_remarks, designer:profiles!assigned_to(id, full_name, email)')
     .eq('product_id', product_id)
     .single()
+
+  // Merge this design's remark into the map (empty clears it)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const remarks: Record<string, string> = { ...((designData as any)?.merch_remarks ?? {}) }
+  if (remark?.trim()) remarks[idxKey] = remark.trim()
+  else delete remarks[idxKey]
+
+  // Persist (admin client bypasses design_data RLS for the merch head)
+  await adminSupabase
+    .from('design_data')
+    .update({ merch_remarks: remarks, updated_by: user.id })
+    .eq('product_id', product_id)
+
+  if (!remark?.trim()) return NextResponse.json({ ok: true, cleared: true })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const designer = Array.isArray(designData?.designer) ? (designData!.designer as any[])[0] : (designData?.designer as any)
@@ -45,7 +55,8 @@ export async function POST(request: NextRequest) {
 
   const name = product_name || 'a product'
   const fromName = profile?.full_name || 'Merchandising Head'
-  const message = `${fromName} left a design remark on "${name}": ${remark.trim()}`
+  const designLabel = variant_label?.trim() || `Design ${(variant_index ?? 0) + 1}`
+  const message = `${fromName} left a remark on "${name}" (${designLabel}): ${remark.trim()}`
   const productUrl = `${APP_URL}/products/${product_id}?tab=design`
 
   await Promise.allSettled([
@@ -68,7 +79,7 @@ export async function POST(request: NextRequest) {
               ${fromName} has left a design-specific remark for you.
             </p>
             ${badge('Design Remark', '#e0e7ff', '#3730a3')}
-            ${infoTable(infoRow('Product', name) + infoRow('From', fromName))}
+            ${infoTable(infoRow('Product', name) + infoRow('Design', designLabel) + infoRow('From', fromName))}
             ${divider()}
             <p style="margin:0;color:#475569;font-size:14px;line-height:1.7;white-space:pre-wrap;">${remark.trim()}</p>
             ${btn('Open Design', productUrl)}

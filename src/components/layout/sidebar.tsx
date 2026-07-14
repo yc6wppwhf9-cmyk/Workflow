@@ -24,6 +24,7 @@ import {
   Pencil,
   Plus,
   CheckCircle2,
+  FileSpreadsheet,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -110,6 +111,14 @@ export function Sidebar({ profile }: SidebarProps) {
             {navLink('/sampling-review', 'Sampling Review', FlaskConical)}
             {navLink('/merch-new-development', 'New Development', Lightbulb)}
             {navLink('/new-development', 'Create Development', Plus)}
+            {navLink('/addition-work', 'Addition Work', FileSpreadsheet)}
+          </>
+        )}
+
+        {profile.role === 'bom' && (
+          <>
+            <p className="px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-5 mb-2">My Work</p>
+            {navLink('/addition-work', 'Addition Work', FileSpreadsheet)}
           </>
         )}
 

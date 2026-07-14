@@ -2,7 +2,7 @@
 
 import { useRef, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCircle2, Clock, Download, ExternalLink, FileText, FlaskConical, Layers, Loader2, Printer, Send, Trash2, Upload, XCircle } from 'lucide-react'
+import { CheckCircle2, Clock, Download, ExternalLink, FileText, FlaskConical, Layers, Loader2, Printer, Send, Trash2, Upload, UserCheck, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -118,15 +118,32 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
   const isRejected = status === 'rejected'
   const isSamplingRequested = status === 'sampling_requested'
 
-  async function saveAssignment() {
+  async function saveAssignment(idOverride?: string) {
+    const target = idOverride !== undefined ? idOverride : assignedTo
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (supabase.from('sampling_data') as any).update({
-      assigned_to: assignedTo || null,
+      assigned_to: target || null,
       updated_by: profile.id,
     }).eq('product_id', product.id)
-    toast.success('Sampling assignment saved')
+    await supabase.from('activity_logs').insert({
+      product_id: product.id,
+      user_id: profile.id,
+      action: target === profile.id ? 'self-assigned sampling task' : 'updated sampling assignment',
+      department: 'sampling',
+    })
+    toast.success(target === profile.id ? 'Sampling assigned to you' : 'Sampling assignment saved')
     router.refresh()
   }
+
+  async function assignSamplingToMe() {
+    setAssignedTo(profile.id)
+    await saveAssignment(profile.id)
+  }
+
+  // Merch head may not be in the sampling-user list, so make themselves selectable too.
+  const assignmentOptions = samplingUsers.find(u => u.id === profile.id)
+    ? samplingUsers
+    : [{ id: profile.id, full_name: `${profile.full_name} (me)` }, ...samplingUsers]
 
   async function saveRemarks() {
     setSaving(true)
@@ -635,19 +652,24 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
 
           {/* Assignment — only merchandising_head / admin can assign */}
           {isMerchHead && (
-            <div className="flex items-center gap-3 pb-3 border-b border-gray-100">
+            <div className="flex flex-wrap items-center gap-3 pb-3 border-b border-gray-100">
               <Label className="shrink-0 text-sm text-gray-600">Assign To</Label>
               <select
                 value={assignedTo}
                 onChange={e => setAssignedTo(e.target.value)}
-                className="flex-1 h-8 text-sm border border-gray-200 rounded-md px-2 bg-white"
+                className="flex-1 min-w-[10rem] h-8 text-sm border border-gray-200 rounded-md px-2 bg-white"
               >
                 <option value="">— Unassigned —</option>
-                {samplingUsers.map(u => (
+                {assignmentOptions.map(u => (
                   <option key={u.id} value={u.id}>{u.full_name}</option>
                 ))}
               </select>
-              <Button size="sm" variant="outline" onClick={saveAssignment}>Save</Button>
+              <Button size="sm" variant="outline" onClick={() => saveAssignment()}>Save</Button>
+              {assignedTo !== profile.id && (
+                <Button size="sm" onClick={assignSamplingToMe} className="gap-1">
+                  <UserCheck className="h-3.5 w-3.5" /> Assign to me
+                </Button>
+              )}
             </div>
           )}
           {!isMerchHead && data?.assigned_to && (

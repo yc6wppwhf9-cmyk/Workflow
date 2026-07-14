@@ -146,29 +146,6 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
   const [savingNotes, setSavingNotes] = useState(false)
   const [notesSaved, setNotesSaved] = useState(false)
 
-  // Merch-head design remark → notifies the assigned designer
-  const isMerchHead = ['merchandising_head', 'admin'].includes(profile.role)
-  const [merchRemark, setMerchRemark] = useState(data?.merch_remark || '')
-  const [savingMerchRemark, setSavingMerchRemark] = useState(false)
-  const [merchRemarkSaved, setMerchRemarkSaved] = useState(false)
-
-  async function saveMerchRemark() {
-    setSavingMerchRemark(true)
-    // The endpoint persists the remark (admin client) and notifies the assigned designer.
-    const res = await fetch('/api/notify-design-remark', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ product_id: product.id, product_name: product.name, remark: merchRemark.trim() }),
-    })
-    setSavingMerchRemark(false)
-    if (res.ok) {
-      setMerchRemarkSaved(true)
-      toast.success(data?.assigned_to ? 'Remark saved — designer notified' : 'Remark saved')
-      setTimeout(() => { setMerchRemarkSaved(false); router.refresh() }, 1800)
-    } else {
-      toast.error('Failed to save remark')
-    }
-  }
 
   
   const allColorSkus = Array.from(new Set(forms.flatMap(f => f.color_skus || [])))
@@ -1080,37 +1057,6 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
   if (!isRoleAllowed) {
     return (
       <div className="space-y-4 max-w-3xl">
-        {/* Merch head: design-specific remark to the assigned designer */}
-        {isMerchHead && (
-          <Card className="border-indigo-200">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2 text-indigo-700">
-                <Send className="h-4 w-4" /> Design Remark for Designer
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Textarea
-                value={merchRemark}
-                onChange={e => setMerchRemark(e.target.value)}
-                rows={3}
-                placeholder="Write a design-specific remark for the assigned designer…"
-              />
-              <div className="flex items-center gap-2 flex-wrap">
-                <Button size="sm" onClick={saveMerchRemark} disabled={savingMerchRemark || !merchRemark.trim()}>
-                  {savingMerchRemark ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                  Save &amp; Notify Designer
-                </Button>
-                {merchRemarkSaved && (
-                  <span className="text-xs text-green-600 flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" /> Saved</span>
-                )}
-                {!data?.assigned_to && (
-                  <span className="text-xs text-amber-600">No designer assigned yet — remark is saved but nobody to notify.</span>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
         {/* Illustrations */}
         {designFiles.length > 0 && (
           <Card>

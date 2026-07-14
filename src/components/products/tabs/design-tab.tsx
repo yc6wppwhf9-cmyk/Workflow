@@ -255,7 +255,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
   // Lightbox
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null)
   const lightboxImages: LightboxImage[] = visibleDesignFiles.map(f => ({
-    url: f.file_url, name: f.name,
+    url: f.file_url, name: f.name, downloadUrl: `/api/download-file?id=${f.id}`,
     badge: f.review_status ? (
       <span className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium ${
         f.review_status === 'approved' ? 'bg-green-500 text-white' :
@@ -275,7 +275,9 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
   const [variantImgUploading, setVariantImgUploading] = useState<number | null>(null)
   const [printLightboxIdx, setPrintLightboxIdx] = useState<number | null>(null)
   const printImageFiles = printFiles.filter(f => f.file_type?.startsWith('image/'))
-  const printLightboxImages: LightboxImage[] = printImageFiles.map(f => ({ url: f.file_url, name: f.name }))
+  const printLightboxImages: LightboxImage[] = printImageFiles.map(f => ({
+    url: f.file_url, name: f.name, downloadUrl: `/api/download-file?id=${f.id}`,
+  }))
 
   async function handlePrintUpload(selectedFiles: File[]) {
     const valid = selectedFiles.filter(f =>
@@ -2245,14 +2247,25 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
                         </button>
                       )}
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-end justify-between p-1.5 opacity-0 group-hover:opacity-100">
-                        {!isPdf && <span className="text-[10px] text-white truncate max-w-[70%]">{f.name}</span>}
+                        {!isPdf && <span className="text-[10px] text-white truncate max-w-[55%]">{f.name}</span>}
                         <span />
-                        <button
-                          onClick={e => { e.stopPropagation(); deleteFile(f) }}
-                          className="h-5 w-5 rounded-full bg-red-500 flex items-center justify-center shrink-0"
-                        >
-                          <X className="h-3 w-3 text-white" />
-                        </button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {/* Same-origin proxy so the file keeps its original name */}
+                          <a
+                            href={`/api/download-file?id=${f.id}`}
+                            onClick={e => e.stopPropagation()}
+                            className="h-5 w-5 rounded-full bg-white flex items-center justify-center"
+                            title={`Download ${f.name}`}
+                          >
+                            <Download className="h-3 w-3 text-gray-700" />
+                          </a>
+                          <button
+                            onClick={e => { e.stopPropagation(); deleteFile(f) }}
+                            className="h-5 w-5 rounded-full bg-red-500 flex items-center justify-center"
+                          >
+                            <X className="h-3 w-3 text-white" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )

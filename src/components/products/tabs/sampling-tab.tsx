@@ -935,6 +935,15 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
                         <p className="text-[10px] text-white truncate">{f.name}</p>
                       </div>
                     )}
+                    {/* Same-origin proxy so the file keeps its original name */}
+                    <a
+                      href={`/api/download-file?id=${f.id}`}
+                      onClick={e => e.stopPropagation()}
+                      className="absolute top-1 right-1 h-6 w-6 rounded-full bg-white shadow flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      title={`Download ${f.name}`}
+                    >
+                      <Download className="h-3.5 w-3.5 text-gray-700" />
+                    </a>
                   </div>
                 )
               })}
@@ -948,6 +957,16 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
           onClick={() => setPrintLightboxIdx(null)}
         >
           <button className="absolute top-4 right-4 text-white/70 hover:text-white text-2xl leading-none" onClick={() => setPrintLightboxIdx(null)}>✕</button>
+          {printImageFiles[printLightboxIdx] && (
+            <a
+              href={`/api/download-file?id=${printImageFiles[printLightboxIdx].id}`}
+              onClick={e => e.stopPropagation()}
+              className="absolute top-4 right-14 text-white/70 hover:text-white"
+              title={`Download ${printImageFiles[printLightboxIdx].name}`}
+            >
+              <Download className="h-5 w-5" />
+            </a>
+          )}
           {printImageFiles[printLightboxIdx] && (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -1007,10 +1026,9 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
                   <FileText className="h-5 w-5 text-red-500 shrink-0" />
                   <span className="flex-1 text-sm text-gray-800 truncate">{file.name}</span>
                   <div className="flex items-center gap-1.5 shrink-0">
+                    {/* Same-origin proxy so the file keeps its original name */}
                     <a
-                      href={file.file_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      href={`/api/download-file?id=${file.id}`}
                       className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 px-2 py-1 rounded border border-blue-200 bg-white"
                     >
                       <Download className="h-3.5 w-3.5" /> Download

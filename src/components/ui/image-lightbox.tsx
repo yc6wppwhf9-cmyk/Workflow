@@ -7,6 +7,9 @@ export interface LightboxImage {
   url: string
   name?: string
   badge?: React.ReactNode
+  /** Same-origin URL that serves the file under its original filename.
+   *  Needed because `download` is ignored for cross-origin storage URLs. */
+  downloadUrl?: string
 }
 
 interface ImageLightboxProps {
@@ -57,7 +60,7 @@ export function ImageLightbox({ images, index, onClose, onNavigate }: ImageLight
             <ExternalLink className="h-4 w-4" />
           </a>
           <a
-            href={current.url}
+            href={current.downloadUrl || current.url}
             download={current.name || 'image'}
             onClick={e => e.stopPropagation()}
             className="p-2 rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-colors"

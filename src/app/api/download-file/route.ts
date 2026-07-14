@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createAdmin } from '@supabase/supabase-js'
+
+const PUBLIC_MARKER = '/storage/v1/object/public/'
 
 // Streams a stored file back under its ORIGINAL filename.
 //
 // Files are saved to storage under a generated path (see lib/storage-fallback.ts),
 // so linking straight at file_url makes the browser save the random storage name.
 // The HTML `download` attribute can't fix that because storage is a different
-// origin, and browsers ignore `download` cross-origin. Proxying through this
-// same-origin route lets us set Content-Disposition with the real name.
+// origin, and browsers ignore `download` cross-origin. This same-origin route
+// resolves the real name and hands back a URL that carries it.
 export async function GET(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -26,12 +29,33 @@ export async function GET(req: NextRequest) {
 
   const filename = file.name || 'download'
 
-  // Supabase Storage can set the filename itself via ?download= — redirect so the
-  // bytes never stream through this function (no response-size ceiling).
-  if (file.file_url.includes('/storage/v1/object/public/')) {
-    const url = new URL(file.file_url)
-    url.searchParams.set('download', filename)
-    return NextResponse.redirect(url.toString())
+  // Supabase Storage: mint a short-lived signed URL with the download filename.
+  // Signed URLs work whether or not the bucket is public (a public URL against a
+  // private bucket 404s with "Bucket not found"), and the bytes never stream
+  // through this function, so there's no response-size ceiling.
+  const markerAt = file.file_url.indexOf(PUBLIC_MARKER)
+  if (markerAt !== -1) {
+    const rest = decodeURIComponent(file.file_url.slice(markerAt + PUBLIC_MARKER.length).split('?')[0])
+    const slash = rest.indexOf('/')
+    const bucket = slash === -1 ? rest : rest.slice(0, slash)
+    const path = slash === -1 ? '' : rest.slice(slash + 1)
+
+    const admin = createAdmin(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false, autoRefreshToken: false } },
+    )
+    const { data, error } = await admin.storage
+      .from(bucket)
+      .createSignedUrl(path, 120, { download: filename })
+
+    if (error || !data?.signedUrl) {
+      return NextResponse.json(
+        { error: `Storage error for bucket "${bucket}": ${error?.message ?? 'no signed URL'}` },
+        { status: 502 },
+      )
+    }
+    return NextResponse.redirect(data.signedUrl)
   }
 
   // Other hosts (e.g. Cloudinary): proxy the bytes and set the header ourselves.

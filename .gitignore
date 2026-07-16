@@ -1,18 +1,28 @@
-.next/
+# dependencies
 node_modules/
-.env.local
-.env*.local
+
+# next.js / build output
+.next/
 out/
 build/
 *.tsbuildinfo
 next-env.d.ts
 
+# environment
+.env.local
+.env*.local
+
+# vercel
 .vercel
+
+# supabase local
 /supabase/
+
+# logs
+*.log
+
+# misc / local-only
 images/
 .claude/
 test-*.mjs
 test-*.js
-
-.vercel
-.env*.local

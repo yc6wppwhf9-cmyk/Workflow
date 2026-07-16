@@ -119,7 +119,20 @@ export default async function PrintTechPackPage({
   // Auto-print whenever a specific variant is shown (including single-variant products)
   // No auto-print only when explicitly viewing all variants via ?v=all
   const autoprint = v !== 'all'
-  const hasSpecs = variants.some((v: any) => v && (v.fabric || v.lining || v.zipper || v.farma || v.season_year))
+
+  // A variant is printable if ANY tech pack field is filled — checking only a
+  // handful (fabric/zipper/…) silently dropped variants that carry just add-ons.
+  const SPEC_FIELDS = [
+    'style_name', 'designer_name', 'sample_color', 'farma', 'season_year', 'fabric',
+    'lining', 'air_mesh', 'zipper', 'puller', 'patta_9mm', 'patta_1', 'patta_2',
+    'lader_lock', 'branding', 'screen_print', 'digital_print', 'bartech',
+    're_sampling_by', 'add_on_1', 'add_on_2', 'add_on_3', 'designer_sign',
+    'unique_feature', 'remarks',
+  ]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const hasAnySpec = (vt: any) =>
+    !!vt && (SPEC_FIELDS.some(k => vt[k]) || (Array.isArray(vt.color_skus) && vt.color_skus.length > 0))
+  const hasSpecs = variants.some(hasAnySpec)
   const printDate = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
 
   return (
@@ -206,8 +219,7 @@ export default async function PrintTechPackPage({
         {hasSpecs && (
           <div className="space-y-6">
             {variants.map((v: any, idx: number) => {
-              const hasVariantSpecs = v && (v.fabric || v.lining || v.zipper || v.farma || v.season_year);
-              if (!hasVariantSpecs) return null;
+              if (!hasAnySpec(v)) return null;
               return (
                 <section key={idx} className="mb-8 print:break-inside-avoid">
                   <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-3 pb-1 border-b border-gray-200">
@@ -215,6 +227,8 @@ export default async function PrintTechPackPage({
                     {v.designer_name && <span className="font-normal normal-case ml-2 text-gray-400">— {v.designer_name}</span>}
                   </h2>
                   <div>
+                    <SpecRow label="Style Name"     value={v.style_name} />
+                    <SpecRow label="Designer"       value={v.designer_name} />
                     <SpecRow label="Sample Color"   value={v.sample_color} />
                     <SpecRow label="Farma"          value={v.farma} />
                     <SpecRow label="Season Year"    value={v.season_year} />
@@ -232,6 +246,10 @@ export default async function PrintTechPackPage({
                     <SpecRow label="Digital Print"  value={v.digital_print} />
                     <SpecRow label="Bartech"        value={v.bartech} />
                     <SpecRow label="Re-Sampling By" value={v.re_sampling_by} />
+                    <SpecRow label="Add On 1"       value={v.add_on_1} />
+                    <SpecRow label="Add On 2"       value={v.add_on_2} />
+                    <SpecRow label="Add On 3"       value={v.add_on_3} />
+                    <SpecRow label="Designer Sign"  value={v.designer_sign} />
                     {v.color_skus && v.color_skus.length > 0 && (
                       <div className="flex gap-3 py-1.5 border-b border-gray-100 last:border-0">
                         <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide w-36 shrink-0 pt-0.5">Color SKUs</div>

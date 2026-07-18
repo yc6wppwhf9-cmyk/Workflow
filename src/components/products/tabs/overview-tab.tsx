@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { Pencil, Check, X, ZoomIn } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { createClient } from '@/lib/supabase/client'
 import { ImageLightbox } from '@/components/ui/image-lightbox'
 import { toast } from 'sonner'
 import { CATEGORY_LABELS, type ProductCategory, type Product, type Profile, type DesignData, type MerchandisingData, type BomData, type MarketingData, type SalesData, type ProductFile } from '@/lib/types'
@@ -69,12 +68,22 @@ export function OverviewTab({ product, profile, designData, bomData, salesData, 
 
   async function saveDisplayName() {
     setSavingName(true)
-    const supabase = createClient()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any).from('products').update({ display_name: displayName.trim() || null }).eq('id', product.id)
-    setSavingName(false)
-    setEditingName(false)
-    router.refresh()
+    try {
+      // Goes through the service-role API — direct browser writes to products are RLS-blocked.
+      const res = await fetch('/api/update-product-name', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: product.id, display_name: displayName }),
+      })
+      if (!res.ok) throw new Error('Failed')
+      setEditingName(false)
+      toast.success('Short name saved')
+      router.refresh()
+    } catch {
+      toast.error('Could not save short name')
+    } finally {
+      setSavingName(false)
+    }
   }
 
   // Group merch images by colour_tag

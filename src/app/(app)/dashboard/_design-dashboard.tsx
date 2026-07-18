@@ -49,7 +49,7 @@ export async function DesignDashboard({ profile, filter }: { profile: Profile; f
       }
     })
     // Only show products still actively in the design stage — exclude those that have already advanced
-    .filter(a => a.product?.workflow_stage === 'design_completed' || a.product?.workflow_stage === 'draft')
+    .filter(a => a.product?.workflow_stage === 'design_completed')
 
   const allSubs      = mySubmissions || []
   const pendingReview = assignments.filter(a => a.latestSub?.status === 'pending').length

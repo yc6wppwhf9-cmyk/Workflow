@@ -28,7 +28,7 @@ export async function DesignHeadDashboard({ profile, filter }: { profile: Profil
 
     supabase.from('products')
       .select('id, name, sku, created_at, workflow_stage')
-      .in('workflow_stage', ['draft', 'design_completed'])
+      .eq('workflow_stage', 'design_completed')
       .order('created_at', { ascending: false }),
 
     supabase.from('design_data')
@@ -97,7 +97,7 @@ export async function DesignHeadDashboard({ profile, filter }: { profile: Profil
           <KpiCard label="Unassigned"      value={unassigned.length} sub="need a designer"           icon={AlertCircle} color="bg-red-50 [&>svg]:text-red-500"      href="?f=unassigned" active={filter === 'unassigned'} />
           <KpiCard label="In Progress"     value={assigned.length}   sub="assigned & active"         icon={Clock}       color="bg-blue-50 [&>svg]:text-blue-600"    href="?f=active"     active={filter === 'active'} />
           <KpiCard label="My Work"         value={myWork.length}     sub="your own designs"          icon={Pencil}      color="bg-violet-50 [&>svg]:text-violet-600" href="?f=mywork"     active={filter === 'mywork'} />
-          <KpiCard label="Total Active"    value={(productsInDesign || []).length} sub="draft + design stage" icon={Package} color="bg-purple-50 [&>svg]:text-purple-600" href="?f=all" active={filter === 'all'} />
+          <KpiCard label="Total Active"    value={(productsInDesign || []).length} sub="design stage" icon={Package} color="bg-purple-50 [&>svg]:text-purple-600" href="?f=all" active={filter === 'all'} />
         </div>
 
         {/* ── Pending Reviews ── */}
@@ -142,8 +142,8 @@ export async function DesignHeadDashboard({ profile, filter }: { profile: Profil
                 <div key={p.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
                   <div>
                     <p className="text-sm font-medium text-gray-900">{p.name}</p>
-                    <span className={`text-xs px-1.5 py-0.5 rounded-full ${p.workflow_stage === 'draft' ? 'bg-gray-100 text-gray-500' : 'bg-blue-100 text-blue-600'}`}>
-                      {p.workflow_stage === 'draft' ? 'From Sales' : 'Design Stage'}
+                    <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-600">
+                      {'Design Stage'}
                     </span>
                   </div>
                   <Link href={`/products/${p.id}?tab=design`} className="text-xs text-blue-600 hover:underline flex items-center gap-1">

@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Download, Loader2, Lock, Save, Plus, X, Upload, FileSpreadsheet, CheckCircle2, UserCheck, Send, Printer, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Download, Loader2, Lock, Save, Plus, X, Upload, FileSpreadsheet, CheckCircle2, AlertCircle, UserCheck, Send, Printer, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -83,8 +83,12 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
   const canUploadExcel = !data?.is_locked && !data?.is_completed && (
     isHead || (isTeamMember && isAssigned)
   )
-  // Only head can edit the form fields
-  const canEditFormFields = isAtMerchStage && !data?.is_locked && !data?.is_completed && isHead
+  // Whoever may upload the Excel may also edit + save the fields it fills —
+  // the head, or the merchandising team member the product is assigned to.
+  // (Previously head-only and merch-stage-only, so uploaders had no way to save.)
+  const canEditFormFields = !data?.is_locked && !data?.is_completed && (
+    isHead || (isTeamMember && isAssigned)
+  )
   const showActions = !data?.is_locked && isHead && isAtMerchStage
   // Attribute form visible to head and assigned team member (read-only for team)
   const showAttributeForm = isHead || (isTeamMember && isAssigned) || !!data?.is_completed
@@ -758,7 +762,28 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
             </div>
             {uploadResult && (
               <div className="mt-3 pt-3 border-t border-green-200 space-y-2">
-                {uploadResult.errors.length === 0 ? (
+                {uploadResult.errors.length > 0 ? (
+                  <div className="text-xs text-red-700 space-y-1">
+                    {uploadResult.errors.map((e, i) => <p key={i}>⚠ {e}</p>)}
+                  </div>
+                ) : uploadResult.skus_matched === 0 ? (
+                  /* 0 matches means the spec fields were NOT filled or saved — say so
+                     loudly instead of showing a green success with "0 of N matched". */
+                  <div className="flex items-start gap-2 text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                    <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-amber-600" />
+                    <div className="text-xs space-y-0.5">
+                      <p className="font-semibold">No SKU matched this product — spec fields were not filled.</p>
+                      <p>
+                        The sheet has {uploadResult.skus_found} SKU(s), but none match this product&apos;s name
+                        (<span className="font-medium">{product.name}</span>).
+                      </p>
+                      {uploadResult.other_products_in_file.length > 0 && (
+                        <p>Style names in the file: {uploadResult.other_products_in_file.join(', ')}</p>
+                      )}
+                      <p>Rename the product to match a style name in the sheet, or upload this file from the matching product.</p>
+                    </div>
+                  </div>
+                ) : (
                   <div className="flex items-start gap-2 text-green-800">
                     <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0 text-green-600" />
                     <div className="text-xs space-y-0.5">
@@ -768,10 +793,6 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
                       <p>{uploadResult.skus_matched} of {uploadResult.skus_found} SKU(s) matched · Colors: {uploadResult.colors_found.join(', ')}</p>
                       <p>{uploadResult.bom_items_found} BOM items · {uploadResult.images_uploaded} images uploaded</p>
                     </div>
-                  </div>
-                ) : (
-                  <div className="text-xs text-red-700 space-y-1">
-                    {uploadResult.errors.map((e, i) => <p key={i}>⚠ {e}</p>)}
                   </div>
                 )}
                 {uploadResult.sheet_names && (

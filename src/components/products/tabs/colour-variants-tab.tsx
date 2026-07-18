@@ -1,24 +1,51 @@
 'use client'
 
 import { useState } from 'react'
-import { Palette, Weight, Ruler, Package, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
+import { Palette, Weight, Ruler, Package, ChevronLeft, ChevronRight, X, Trash2, Loader2 } from 'lucide-react'
 import { getColorHex } from '@/lib/color-maps'
-import type { ColourVariant, ProductFile } from '@/lib/types'
+import type { ColourVariant, ProductFile, Profile } from '@/lib/types'
 
 interface ColourVariantsTabProps {
   variants: ColourVariant[]
   files: ProductFile[]
+  profile: Profile
 }
 
 function ColorCard({
   variant,
   images,
+  isAdmin,
 }: {
   variant: ColourVariant
   images: ProductFile[]
+  isAdmin: boolean
 }) {
+  const router = useRouter()
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const hex = getColorHex(variant.colourTag)
+
+  async function deleteImage(img: ProductFile) {
+    if (!window.confirm(`Delete this image (${img.name})? This cannot be undone.`)) return
+    setDeletingId(img.id)
+    try {
+      const res = await fetch('/api/delete-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_url: img.file_url, file_id: img.id }),
+      })
+      if (!res.ok) throw new Error('Failed')
+      toast.success('Image deleted')
+      setLightboxIndex(null)
+      router.refresh()
+    } catch {
+      toast.error('Could not delete image')
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   const hasSpecs = variant.weight || variant.dimensions?.length || variant.materials?.length
 
@@ -82,6 +109,16 @@ function ColorCard({
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={img.file_url} alt={img.name} className="w-full h-full object-cover group-hover:opacity-90 transition-opacity" />
+                  {isAdmin && (
+                    <button
+                      onClick={e => { e.stopPropagation(); deleteImage(img) }}
+                      disabled={deletingId === img.id}
+                      title="Delete image (admin)"
+                      className="absolute top-0.5 right-0.5 h-5 w-5 rounded-full bg-red-600/90 hover:bg-red-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      {deletingId === img.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                    </button>
+                  )}
                 </div>
               ))}
               {images.length > 7 && (
@@ -116,6 +153,17 @@ function ColorCard({
           >
             <X className="h-5 w-5" />
           </button>
+          {isAdmin && (
+            <button
+              onClick={e => { e.stopPropagation(); deleteImage(images[lightboxIndex!]) }}
+              disabled={deletingId === images[lightboxIndex!]?.id}
+              title="Delete image (admin)"
+              className="absolute top-4 right-16 h-10 px-3 rounded-full bg-red-600/90 hover:bg-red-600 flex items-center gap-1.5 text-white text-sm"
+            >
+              {deletingId === images[lightboxIndex!]?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              Delete
+            </button>
+          )}
           {images.length > 1 && (
             <>
               <button
@@ -150,7 +198,8 @@ function ColorCard({
   )
 }
 
-export function ColourVariantsTab({ variants, files }: ColourVariantsTabProps) {
+export function ColourVariantsTab({ variants, files, profile }: ColourVariantsTabProps) {
+  const isAdmin = profile.role === 'admin'
   // Strip ATTRIBUTES template placeholder tags like "Color" / "Colour"
   const PLACEHOLDER = /^colou?rs?$/i
   const realVariants = variants.filter(v => !PLACEHOLDER.test((v.colourTag || '').trim()))
@@ -204,6 +253,7 @@ export function ColourVariantsTab({ variants, files }: ColourVariantsTabProps) {
           <ColorCard
             key={`${variant.styleName || variant.colourTag}-${i}`}
             variant={variant}
+            isAdmin={isAdmin}
             images={
               // Match by styleName first (new uploads tag images with the full style name
               // to avoid cross-design bleed when two designs share the same colour code).

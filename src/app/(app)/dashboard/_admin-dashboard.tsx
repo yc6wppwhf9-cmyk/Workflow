@@ -51,7 +51,7 @@ export async function AdminDashboard({ profile, filter, page }: { profile: Profi
   ] = await Promise.all([
     supabase.from('products').select('*', { count: 'exact', head: true }),
     supabase.from('products').select('*', { count: 'exact', head: true }).eq('workflow_stage', 'product_live'),
-    supabase.from('products').select('*', { count: 'exact', head: true }).not('workflow_stage', 'in', '(draft,product_live)'),
+    supabase.from('products').select('*', { count: 'exact', head: true }).neq('workflow_stage', 'product_live'),
     supabase.from('products').select('id, name, sku, workflow_stage, created_at, bom_data(fg_inv_code)').order('created_at', { ascending: false }).limit(6),
     supabase.from('activity_logs').select('*, user:profiles(full_name), product:products(name, sku)').order('created_at', { ascending: false }).limit(8),
     supabase.from('products')

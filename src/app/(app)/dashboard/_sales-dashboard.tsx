@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { Header } from '@/components/layout/header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Package, Clock, CheckCircle2, ArrowRight, AlertCircle, TrendingUp, CalendarDays } from 'lucide-react'
+import { Package, Clock, CheckCircle2, ArrowRight, TrendingUp, CalendarDays } from 'lucide-react'
 import Link from 'next/link'
 import { one, formatDateTime, formatShortDate, daysUntil } from '@/lib/utils'
 import type { Profile } from '@/lib/types'
@@ -24,8 +24,7 @@ export async function SalesDashboard({ profile, filter }: { profile: Profile; fi
   ])
 
   const allMine   = myProducts || []
-  const needsInput = allMine.filter(p => p.workflow_stage === 'draft')
-  const inPipeline = allMine.filter(p => p.workflow_stage !== 'draft' && p.workflow_stage !== 'product_live')
+  const inPipeline = allMine.filter(p => p.workflow_stage !== 'product_live')
   const live       = allMine.filter(p => p.workflow_stage === 'product_live')
 
   // Products with a deadline in the next 7 days (not yet live)
@@ -43,10 +42,9 @@ export async function SalesDashboard({ profile, filter }: { profile: Profile; fi
     <div>
       <Header title={`Welcome, ${profile.full_name.split(' ')[0]}`} subtitle="Your products and requirements" />
       <div className="p-6 space-y-6">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <KpiCard label="My Products"  value={allMine.length}    icon={Package}      color="bg-blue-50 [&>svg]:text-blue-600"    href="?f=all"          active={filter === 'all'} />
-          <KpiCard label="Needs Input"  value={needsInput.length} sub="draft stage"   icon={AlertCircle}  color="bg-amber-50 [&>svg]:text-amber-500"   href="?f=needs-input"  active={filter === 'needs-input'} />
-          <KpiCard label="In Pipeline"  value={inPipeline.length} sub="past sales stage" icon={Clock}    color="bg-purple-50 [&>svg]:text-purple-600" href="?f=in-pipeline"  active={filter === 'in-pipeline'} />
+          <KpiCard label="In Pipeline"  value={inPipeline.length} sub="in production" icon={Clock}    color="bg-purple-50 [&>svg]:text-purple-600" href="?f=in-pipeline"  active={filter === 'in-pipeline'} />
           <KpiCard label="Live"         value={live.length}       icon={CheckCircle2} color="bg-green-50 [&>svg]:text-green-600"   href="?f=live"         active={filter === 'live'} />
         </div>
 
@@ -82,45 +80,6 @@ export async function SalesDashboard({ profile, filter }: { profile: Profile; fi
                       </td>
                     </tr>
                   ))}
-                </tbody>
-              </table>
-            </CardContent>
-          </Card>
-        )}
-
-        {show('needs-input') && needsInput.length > 0 && (
-          <Card className="border-amber-200">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base text-amber-700 flex items-center gap-2">
-                <AlertCircle className="h-4 w-4" /> Needs Your Input
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50">
-                    <th className="text-left px-6 py-2 text-xs font-semibold text-gray-400 uppercase">Product</th>
-                    <th className="text-left px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Assigned To</th>
-                    <th className="text-left px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Deadline</th>
-                    <th className="px-4 py-2"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {needsInput.map(p => {
-                    const sd = one(p.sales_data) as { assign_to?: string | null; deadline_date?: string | null } | null
-                    return (
-                      <tr key={p.id} className="hover:bg-amber-50">
-                        <td className="px-6 py-3 font-medium text-gray-900">{p.name}</td>
-                        <td className="px-4 py-3 text-gray-500 text-xs">{sd?.assign_to || '—'}</td>
-                        <td className="px-4 py-3 text-gray-500 text-xs">{sd?.deadline_date ? formatShortDate(sd.deadline_date) : '—'}</td>
-                        <td className="px-4 py-3 text-right">
-                          <Link href={`/products/${p.id}?tab=sales`} className="text-xs text-blue-600 hover:underline flex items-center gap-1 justify-end">
-                            Open <ArrowRight className="h-3 w-3" />
-                          </Link>
-                        </td>
-                      </tr>
-                    )
-                  })}
                 </tbody>
               </table>
             </CardContent>
@@ -176,7 +135,7 @@ export async function SalesDashboard({ profile, filter }: { profile: Profile; fi
                 </tr></thead>
                 <tbody className="divide-y divide-gray-50">
                   {inPipeline.map(p => {
-                    const STAGE_ORDER = ['draft','design_completed','sampling_completed','merchandising_completed','bom_finalized','marketing_ready','sales_priced','product_live']
+                    const STAGE_ORDER = ['design_completed','sampling_completed','merchandising_completed','bom_finalized','costing_naming','marketing_ready','sales_priced','product_live']
                     const idx = STAGE_ORDER.indexOf(p.workflow_stage)
                     const pct = idx >= 0 ? Math.round((idx / (STAGE_ORDER.length - 1)) * 100) : 0
                     return (

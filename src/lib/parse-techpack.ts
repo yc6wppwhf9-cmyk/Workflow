@@ -183,8 +183,17 @@ export function parseTechPackAllVariants(rows: string[][]): TechPackVariant[] {
 
         for (const row of bandRows) {
           for (let off = 0; off + 1 < width; off += 2) {
-            const label = norm(row[B + off])
-            const value = String(row[B + off + 1] ?? '').trim()
+            const rawLabel = String(row[B + off] ?? '')
+            // Some sheets cram the value into the label cell, e.g.
+            // "FARMA -cupcake, 16 INCH" with an empty value cell beside it.
+            const sep = rawLabel.search(/[-–:]/)
+            const labelText   = sep >= 0 ? rawLabel.slice(0, sep) : rawLabel
+            const inlineValue = sep >= 0 ? rawLabel.slice(sep + 1).trim() : ''
+            const label = norm(labelText)
+            // Fold size/number variants like "ZIPPER 5 NO", "PULLER 5 NO" → ZIPPER / PULLER
+            // (the size digit changes per style, so an exact map key can't keep up).
+            const folded = label.replace(/\d+NO$/, '')
+            const value = String(row[B + off + 1] ?? '').trim() || inlineValue
 
             if (label === 'COLORSKU' || label === 'COLOURSKU') {
               if (value) colourSkuRaw = value
@@ -192,8 +201,9 @@ export function parseTechPackAllVariants(rows: string[][]): TechPackVariant[] {
               if (value) channelRaw = value
             } else if (label === 'FABRIC2') {
               if (value) fabric2 = value
-            } else if (label && map[label] && value && !f[map[label]]) {
-              f[map[label]] = value
+            } else {
+              const key = map[label] || map[folded]
+              if (key && value && !f[key]) f[key] = value
             }
           }
         }

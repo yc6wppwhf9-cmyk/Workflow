@@ -10,7 +10,6 @@ import { cn, formatDate } from '@/lib/utils'
 
 const QUICK_FILTERS: { label: string; value: string }[] = [
   { label: 'All',           value: 'all' },
-  { label: 'Draft',         value: 'draft' },
   { label: 'Design',        value: 'design_completed' },
   { label: 'Sampling',      value: 'sampling_completed' },
   { label: 'Merchandising', value: 'merchandising_completed' },

@@ -203,7 +203,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
 
   useEffect(() => {
     if (!data?.is_completed || !data?.assigned_to) { setBatchPending([]); return }
-    if (!['design_completed', 'draft'].includes(product.workflow_stage)) { setBatchPending([]); return }
+    if (product.workflow_stage !== 'design_completed') { setBatchPending([]); return }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let q: any = supabase
       .from('products')
@@ -411,7 +411,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
       department: profile.role,
     })
 
-    if (!becomingComplete || !['design_completed', 'draft'].includes(product.workflow_stage)) {
+    if (!becomingComplete || product.workflow_stage !== 'design_completed') {
       setSaving(false)
       router.refresh()
       return

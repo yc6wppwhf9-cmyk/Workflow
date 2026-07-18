@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useRouter } from 'next/navigation'
 import { Loader2, Lock, Save } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -12,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createClient } from '@/lib/supabase/client'
 import { DateInput } from '@/components/ui/date-input'
-import { CHANNELS, CATEGORY_LABELS, type Product, type Profile, type SalesData, type ProductCategory } from '@/lib/types'
+import { CHANNELS, CATEGORY_LABELS, type Product, type Profile, type SalesData } from '@/lib/types'
 
 interface SalesTabProps {
   product: Product
@@ -45,7 +44,6 @@ export function SalesTab({ product, profile, data }: SalesTabProps) {
   })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [confirmOpen, setConfirmOpen] = useState(false)
 
   // Non-sales/admin roles see a clean read-only summary
   if (!isRoleAllowed) {
@@ -110,39 +108,6 @@ export function SalesTab({ product, profile, data }: SalesTabProps) {
     setSaving(false)
     setSaved(true)
     setTimeout(() => { setSaved(false); router.refresh() }, 2000)
-  }
-
-  async function markComplete() {
-    const becomingComplete = !data?.is_completed
-    setSaving(true)
-    const supabase = createClient()
-    await supabase.from('sales_data').update({
-      assign_to: form.assign_to || null,
-      channel: form.channel || null,
-      price_range: form.price_range || null,
-      deadline_date: form.deadline_date || null,
-      product_specification: form.product_specification || null,
-      is_completed: becomingComplete,
-      updated_by: profile.id,
-    }).eq('product_id', product.id)
-
-    if (becomingComplete && product.workflow_stage === 'draft') {
-      await supabase.rpc('advance_product_stage', {
-        p_product_id: product.id,
-        p_next_stage: 'design_completed',
-        p_user_id: profile.id,
-        p_action: 'marked sales complete — stage advanced to Design',
-        p_department: 'sales',
-      })
-      fetch('/api/notify-stage-advance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product_id: product.id, product_name: product.name, next_stage: 'design_completed' }),
-      }).catch(() => {})
-    }
-
-    setSaving(false)
-    router.refresh()
   }
 
   return (
@@ -237,32 +202,16 @@ export function SalesTab({ product, profile, data }: SalesTabProps) {
             <p className="text-sm text-green-600 bg-green-50 border border-green-200 rounded-lg px-3 py-2">Changes saved.</p>
           )}
 
-          {showActions && (
+          {showActions && canEditFields && (
             <div className="flex items-center gap-3 pt-2">
-              {canEditFields && (
-                <Button onClick={handleSave} disabled={saving}>
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  Save Changes
-                </Button>
-              )}
-              {!data?.is_completed && (
-                <Button variant="outline" onClick={() => setConfirmOpen(true)} disabled={saving} className="text-green-600 border-green-200">
-                  Mark Sales Complete
-                </Button>
-              )}
+              <Button onClick={handleSave} disabled={saving}>
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Save Changes
+              </Button>
             </div>
           )}
         </CardContent>
       </Card>
-      <ConfirmDialog
-        open={confirmOpen}
-        title="Send Requirements to Design?"
-        description="Requirements will be locked and the design team will be notified to begin work on this product."
-        confirmLabel="Yes, Send to Design"
-        loading={saving}
-        onConfirm={() => { setConfirmOpen(false); markComplete() }}
-        onCancel={() => setConfirmOpen(false)}
-      />
     </div>
   )
 }

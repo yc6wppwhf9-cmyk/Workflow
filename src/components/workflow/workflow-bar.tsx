@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
-import { WORKFLOW_STAGES, STAGE_LABELS, STAGE_OWNER_ROLE, type WorkflowStage, type Product, type Profile, type DesignData, type SamplingData, type MerchandisingData, type BomData, type MarketingData, type SalesData } from '@/lib/types'
+import { WORKFLOW_STAGES, STAGE_LABELS, STAGE_OWNER_ROLE, type WorkflowStage, type Product, type Profile, type DesignData, type SamplingData, type MerchandisingData, type BomData, type MarketingData } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 interface WorkflowBarProps {
@@ -20,13 +20,12 @@ interface WorkflowBarProps {
   merchandisingData: MerchandisingData | null
   bomData: BomData | null
   marketingData: MarketingData | null
-  salesData: SalesData | null
   onTabChange?: (tab: string) => void
 }
 
 export function WorkflowBar({
   product, profile, designData, samplingData, merchandisingData,
-  bomData, marketingData, salesData, onTabChange,
+  bomData, marketingData, onTabChange,
 }: WorkflowBarProps) {
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
@@ -41,18 +40,16 @@ export function WorkflowBar({
   const isAdmin = ['admin', 'management'].includes(profile.role)
 
   const DISPLAY_STAGES = [
-    { label: 'Sales',            doneAfter: 0, tab: 'sales'         },
-    { label: 'Design',           doneAfter: 1, tab: 'design'        },
-    { label: 'Merchandising',    doneAfter: 2, tab: 'merchandising' },
-    { label: 'BOM',              doneAfter: 4, tab: 'bom'           },
-    { label: 'Costing & Naming', doneAfter: 5, tab: 'bom'           },
-    { label: 'Marketing',        doneAfter: 6, tab: 'marketing'     },
-    { label: 'Sales Priced',     doneAfter: 7, tab: 'sales'         },
+    { label: 'Design',           doneAfter: 0, tab: 'design'        },
+    { label: 'Merchandising',    doneAfter: 1, tab: 'merchandising' },
+    { label: 'BOM',              doneAfter: 3, tab: 'bom'           },
+    { label: 'Costing & Naming', doneAfter: 4, tab: 'bom'           },
+    { label: 'Marketing',        doneAfter: 5, tab: 'marketing'     },
+    { label: 'Sales Priced',     doneAfter: 6, tab: 'sales'         },
   ]
 
   const isCurrentStageComplete = () => {
     switch (product.workflow_stage as WorkflowStage) {
-      case 'draft':                  return salesData?.is_completed || false
       case 'design_completed':       return designData?.is_completed || false
       case 'sampling_completed':     return !!samplingData?.is_completed && samplingData.sample_review_status === 'approved'
       case 'merchandising_completed': return merchandisingData?.is_completed || false
@@ -70,7 +67,7 @@ export function WorkflowBar({
   const currentStageOwner = STAGE_OWNER_ROLE[product.workflow_stage as WorkflowStage]
   const isDesignHead = profile.role === 'design_head'
   const isOwner = profile.role === currentStageOwner
-    || (['draft', 'design_completed'].includes(product.workflow_stage) && isDesignHead)
+    || (product.workflow_stage === 'design_completed' && isDesignHead)
   const canAdvance = (isAdmin || isOwner) && (currentStageCompleted || isAdmin)
 
   const prevStage = currentIndex > 0 ? WORKFLOW_STAGES[currentIndex - 1] : null

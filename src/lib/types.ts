@@ -10,7 +10,6 @@ export function canApproveSamples(profile: { role: string; email?: string | null
 }
 
 export type WorkflowStage =
-  | 'draft'
   | 'design_completed'
   | 'sampling_completed'
   | 'merchandising_completed'
@@ -328,7 +327,6 @@ export interface ActivityLog {
 
 // Workflow stage ordering and labels
 export const WORKFLOW_STAGES: WorkflowStage[] = [
-  'draft',
   'design_completed',
   'sampling_completed',
   'merchandising_completed',
@@ -340,7 +338,6 @@ export const WORKFLOW_STAGES: WorkflowStage[] = [
 ]
 
 export const STAGE_LABELS: Record<WorkflowStage, string> = {
-  draft: 'Sales',
   design_completed: 'Design',
   sampling_completed: 'Sampling',
   merchandising_completed: 'Merchandising',
@@ -352,7 +349,6 @@ export const STAGE_LABELS: Record<WorkflowStage, string> = {
 }
 
 export const STAGE_COLORS: Record<WorkflowStage, string> = {
-  draft: 'bg-green-100 text-green-700',
   design_completed: 'bg-purple-100 text-purple-700',
   sampling_completed: 'bg-cyan-100 text-cyan-700',
   merchandising_completed: 'bg-blue-100 text-blue-700',
@@ -397,7 +393,6 @@ export const ROLE_COLORS: Record<UserRole, string> = {
 
 // Which department owns each stage (does the work while the product is in that stage)
 export const STAGE_OWNER_ROLE: Partial<Record<WorkflowStage, UserRole>> = {
-  draft: 'sales',
   design_completed: 'design',
   sampling_completed: 'sampling',
   merchandising_completed: 'merchandising',

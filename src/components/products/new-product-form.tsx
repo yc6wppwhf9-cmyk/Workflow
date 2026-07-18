@@ -83,10 +83,9 @@ export function NewProductForm({ profile }: NewProductFormProps) {
         ...(familyName.trim() && { family_name: familyName.trim() }),
         created_by: profile.id,
         updated_by: profile.id,
-        // Design-initiated products skip the sales/draft stage
-        ...(isDesignHead && { workflow_stage: 'design_completed' }),
-        // Merchandising-head products enter the merchandising queue directly
-        ...(isMerchandisingHead && { workflow_stage: 'sampling_completed' }),
+        // Merchandising-head products enter the merchandising queue directly;
+        // everyone else starts at Design (there is no sales/draft stage).
+        workflow_stage: isMerchandisingHead ? 'sampling_completed' : 'design_completed',
       } as any)
       .select()
       .single()

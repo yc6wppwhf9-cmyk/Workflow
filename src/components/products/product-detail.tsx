@@ -126,7 +126,6 @@ export function ProductDetail({
         merchandisingData={merchandisingData}
         bomData={bomData}
         marketingData={marketingData}
-        salesData={salesData}
         onTabChange={setActiveTab}
       />
 
@@ -174,7 +173,7 @@ export function ProductDetail({
 
         <div className="p-4 sm:p-6">
           <TabsPrimitive.Content value="overview">
-            <OverviewTab product={product} designData={designData} merchandisingData={merchandisingData} bomData={bomData} marketingData={marketingData} salesData={salesData} files={files} />
+            <OverviewTab product={product} profile={profile} designData={designData} merchandisingData={merchandisingData} bomData={bomData} marketingData={marketingData} salesData={salesData} files={files} />
           </TabsPrimitive.Content>
           <TabsPrimitive.Content value="design">
             <DesignTab product={product} profile={profile} data={designData} samplingData={samplingData} salesData={salesData} files={files} submissions={designSubmissions} designers={designers} designerWorkloads={designerWorkloads} />
@@ -182,13 +181,17 @@ export function ProductDetail({
           <TabsPrimitive.Content value="sampling">
             <SamplingTab product={product} profile={profile} designData={designData} data={samplingData} files={files} samplingUsers={samplingUsers} />
           </TabsPrimitive.Content>
-          <TabsPrimitive.Content value="merchandising">
+          {/* forceMount: Radix unmounts inactive tabs, which threw away the merch
+              form's state (Excel-filled values, in-progress edits) whenever the
+              user switched tabs. Staying mounted (hidden) preserves it. */}
+          <TabsPrimitive.Content value="merchandising" forceMount className="data-[state=inactive]:hidden">
             <MerchandisingTab product={product} profile={profile} data={merchandisingData} merchandisingUsers={merchandisingUsers} designData={designData} files={files} />
           </TabsPrimitive.Content>
           <TabsPrimitive.Content value="colours">
             <ColourVariantsTab
               variants={merchandisingData?.colour_variants || []}
               files={files}
+              profile={profile}
             />
           </TabsPrimitive.Content>
           <TabsPrimitive.Content value="bom">

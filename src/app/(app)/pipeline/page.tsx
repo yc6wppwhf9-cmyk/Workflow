@@ -201,7 +201,7 @@ export default async function PipelinePage() {
   }
 
   // ── Build milestone list for each product ─────────────────────────────────
-  const stageOrder = ['draft','design_completed','sampling_completed','merchandising_completed','bom_finalized','marketing_ready','sales_priced','product_live']
+  const stageOrder = ['design_completed','sampling_completed','merchandising_completed','bom_finalized','costing_naming','marketing_ready','sales_priced','product_live']
 
   const pipelineRows = (products || []).map(product => {
     const pid = product.id
@@ -243,7 +243,7 @@ export default async function PipelinePage() {
         logEntry: salesCompleteLog.get(pid),
         person: name(salesCompleteLog.get(pid)?.user_id),
         doneIf: atOrPast('design_completed'),
-        activeIf: product.workflow_stage === 'draft',
+        activeIf: false,
       }),
       // ── DESIGN ─────────────────────────────────────────────────────────────
       ms('design_assigned', 'design', 'Designer assigned', {
@@ -372,11 +372,11 @@ export default async function PipelinePage() {
   })
 
   const stageColor: Record<string, string> = {
-    draft: 'bg-gray-100 text-gray-600',
     design_completed: 'bg-blue-100 text-blue-700',
     sampling_completed: 'bg-purple-100 text-purple-700',
     merchandising_completed: 'bg-teal-100 text-teal-700',
     bom_finalized: 'bg-orange-100 text-orange-700',
+    costing_naming: 'bg-fuchsia-100 text-fuchsia-700',
     marketing_ready: 'bg-pink-100 text-pink-700',
     sales_priced: 'bg-indigo-100 text-indigo-700',
     product_live: 'bg-green-100 text-green-700',

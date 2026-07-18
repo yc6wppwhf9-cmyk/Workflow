@@ -7,10 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { createClient } from '@/lib/supabase/client'
 import { ImageLightbox } from '@/components/ui/image-lightbox'
-import { CATEGORY_LABELS, type ProductCategory, type Product, type DesignData, type MerchandisingData, type BomData, type MarketingData, type SalesData, type ProductFile } from '@/lib/types'
+import { toast } from 'sonner'
+import { CATEGORY_LABELS, type ProductCategory, type Product, type Profile, type DesignData, type MerchandisingData, type BomData, type MarketingData, type SalesData, type ProductFile } from '@/lib/types'
 
 interface OverviewTabProps {
   product: Product
+  profile: Profile
   designData: DesignData | null
   merchandisingData: MerchandisingData | null
   bomData: BomData | null
@@ -28,13 +30,40 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
   )
 }
 
-export function OverviewTab({ product, designData, bomData, salesData, files }: OverviewTabProps) {
+export function OverviewTab({ product, profile, designData, bomData, salesData, files }: OverviewTabProps) {
   const router    = useRouter()
   const colourSkus = designData?.color_skus || []
 
   const [editingName, setEditingName] = useState(false)
   const [displayName, setDisplayName] = useState(product.display_name || '')
   const [savingName, setSavingName]   = useState(false)
+
+  // Rename the actual product name — same roles the update-product-name API allows.
+  const canRename = ['admin', 'marketing', 'marketing_head', 'bom'].includes(profile.role)
+  const [editingProductName, setEditingProductName] = useState(false)
+  const [productName, setProductName] = useState(product.name || '')
+  const [savingProductName, setSavingProductName] = useState(false)
+
+  async function saveProductName() {
+    const next = productName.trim()
+    if (!next) return
+    setSavingProductName(true)
+    try {
+      const res = await fetch('/api/update-product-name', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: product.id, name: next }),
+      })
+      if (!res.ok) throw new Error('Failed')
+      setEditingProductName(false)
+      toast.success('Product renamed')
+      router.refresh()
+    } catch {
+      toast.error('Could not rename product')
+    } finally {
+      setSavingProductName(false)
+    }
+  }
 
   const [lightboxGroup, setLightboxGroup] = useState<{ imgs: ProductFile[]; idx: number } | null>(null)
 
@@ -69,7 +98,43 @@ export function OverviewTab({ product, designData, bomData, salesData, files }: 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-8 gap-y-4">
 
             <InfoRow label="Product Name">
-              <p className="text-sm font-semibold text-gray-900 break-words">{product.name}</p>
+              {editingProductName ? (
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    value={productName}
+                    onChange={e => setProductName(e.target.value)}
+                    placeholder="Product name"
+                    className="h-7 text-sm py-0"
+                    autoFocus
+                    disabled={savingProductName}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') saveProductName()
+                      if (e.key === 'Escape') { setProductName(product.name || ''); setEditingProductName(false) }
+                    }}
+                  />
+                  <button onClick={saveProductName} disabled={savingProductName || !productName.trim()}
+                    className="text-green-600 hover:text-green-700 p-1 rounded hover:bg-green-50 disabled:opacity-40">
+                    <Check className="h-4 w-4" />
+                  </button>
+                  <button onClick={() => { setProductName(product.name || ''); setEditingProductName(false) }}
+                    className="text-gray-400 hover:text-gray-600 p-1 rounded hover:bg-gray-100">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 group">
+                  <p className="text-sm font-semibold text-gray-900 break-words">{product.name}</p>
+                  {canRename && (
+                    <button
+                      onClick={() => { setProductName(product.name || ''); setEditingProductName(true) }}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-blue-600 p-0.5 rounded shrink-0"
+                      title="Rename product"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              )}
             </InfoRow>
 
             {/* Editable short display name */}

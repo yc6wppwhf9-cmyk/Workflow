@@ -60,7 +60,7 @@ export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): Pars
   const workbook = XLSX.read(buffer, { type: 'array', cellStyles: true })
 
   const skus: ParsedSKU[] = []
-  let bomItems: ParsedBOMItem[] = []
+  const bomItems: ParsedBOMItem[] = []
   const images: ParsedImage[] = []
 
   // ── Parse ATTRIBUTES sheet ────────────────────────────────────────────────

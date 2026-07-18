@@ -1161,7 +1161,6 @@ export type Database = {
         | "merchandising_head"
         | "purchase_head"
       workflow_stage:
-        | "draft"
         | "design_completed"
         | "merchandising_completed"
         | "bom_finalized"
@@ -1320,7 +1319,6 @@ export const Constants = {
         "merchandising_head",
       ],
       workflow_stage: [
-        "draft",
         "design_completed",
         "merchandising_completed",
         "bom_finalized",

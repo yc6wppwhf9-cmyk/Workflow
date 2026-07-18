@@ -33,11 +33,11 @@ function StageBadge({ stage }: { stage: string }) {
 
 function stageOwnerLabel(stage: string) {
   switch (stage) {
-    case 'draft': return 'Sales'
     case 'design_completed': return 'Design'
     case 'sampling_completed': return 'Sampling'
     case 'merchandising_completed': return 'Merchandising'
     case 'bom_finalized': return 'BOM'
+    case 'costing_naming': return 'Costing & Naming'
     case 'marketing_ready': return 'Marketing'
     case 'sales_priced': return 'Admin'
     case 'product_live': return 'Live'
@@ -147,7 +147,7 @@ export default async function ReportsPage() {
     const issues: string[] = []
     if (!p.name) issues.push('Missing name')
     if (!p.sku) issues.push('Missing SKU')
-    if (p.workflow_stage !== 'draft' && p.workflow_stage !== 'product_live' && !sales?.deadline_date) issues.push('No deadline')
+    if (p.workflow_stage !== 'product_live' && !sales?.deadline_date) issues.push('No deadline')
     if (['bom_finalized', 'marketing_ready', 'sales_priced', 'product_live'].includes(p.workflow_stage) && !bom?.fg_inv_code) issues.push('Missing FG INV')
     if (['marketing_ready', 'sales_priced', 'product_live'].includes(p.workflow_stage) && !bom?.cost_given) issues.push('Cost not given')
     return issues.length > 0 ? [{ ...p, issues }] : []

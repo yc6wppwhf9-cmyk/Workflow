@@ -35,7 +35,7 @@ function parseCuttingSheetRows(rows: string[][]): CuttingSheetItem[] {
 
   // Find header row and CONSMP column index
   let consmpCol = -1
-  let nameCol = 0
+  const nameCol = 0
   let headerRowIdx = -1
 
   for (let i = 0; i < Math.min(rows.length, 20); i++) {

@@ -55,6 +55,16 @@ function extract(rows: string[][], keyword: string, offset = 1): string {
   return extractNth(rows, keyword, 0, offset)
 }
 
+// Pull a short colour code out of a spec cell. Colour codes sit at the end of
+// values like "ZIP 5 12GM  LPNK" or "PA 9MM 400D  RBL", and a cell may list
+// two ("RBL, MDBRN") — we take the primary (first) one.
+function colourCode(s: string): string {
+  const t = String(s ?? '').trim()
+  if (!t) return ''
+  const lastToken = t.split(/\s+/).pop() ?? t
+  return lastToken.split(',')[0].trim()
+}
+
 export interface TechPackVariant extends TechPackFields {
   colourName: string
   colorSkusStr?: string
@@ -235,7 +245,14 @@ export function parseTechPackAllVariants(rows: string[][]): TechPackVariant[] {
           designerSign: f.designerSign ?? '',
         }
 
-        const colourToken = (baseVariant.zipper || baseVariant.airMesh.split(/\s+/).pop() || '').trim()
+        // Colour code lives at the tail of a spec cell — airMesh is usually the
+        // cleanest ("LPNK"); fall back to zipper / other trims. (Using zipper's
+        // whole value here previously produced "Design 1 — ZIP 5 12GM LPNK".)
+        const colourToken =
+          colourCode(baseVariant.airMesh) ||
+          colourCode(baseVariant.zipper) ||
+          colourCode(baseVariant.laderLock) ||
+          colourCode(baseVariant.patta9mm)
         const skus = colourSkuRaw.split(/[\n,]/).map(s => s.trim()).filter(Boolean)
         const designNum = globalDesignIdx + 1
 

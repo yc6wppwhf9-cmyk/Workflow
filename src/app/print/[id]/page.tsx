@@ -124,7 +124,7 @@ export default async function PrintTechPackPage({
   // handful (fabric/zipper/…) silently dropped variants that carry just add-ons.
   const SPEC_FIELDS = [
     'style_name', 'designer_name', 'sample_color', 'farma', 'season_year', 'fabric',
-    'lining', 'air_mesh', 'zipper', 'puller', 'patta_9mm', 'patta_1', 'patta_2',
+    'lining', 'air_mesh', 'zipper', 'puller', 'patta_9mm', 'patta_075', 'patta_1', 'patta_2',
     'lader_lock', 'branding', 'screen_print', 'digital_print', 'bartech',
     're_sampling_by', 'add_on_1', 'add_on_2', 'add_on_3', 'designer_sign',
     'unique_feature', 'remarks',
@@ -238,6 +238,7 @@ export default async function PrintTechPackPage({
                     <SpecRow label="Zipper"         value={v.zipper} />
                     <SpecRow label="Puller"         value={v.puller} />
                     <SpecRow label="9mm Patta"      value={v.patta_9mm} />
+                    <SpecRow label={'Patta 0.75"'}  value={v.patta_075} />
                     <SpecRow label="Patta 1"        value={v.patta_1} />
                     <SpecRow label="Patta 2"        value={v.patta_2} />
                     <SpecRow label="Lader Lock"     value={v.lader_lock} />

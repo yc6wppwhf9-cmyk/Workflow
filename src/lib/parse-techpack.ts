@@ -9,6 +9,7 @@ export interface TechPackFields {
   zipper: string
   puller: string
   patta9mm: string
+  patta075: string
   patta1: string
   patta2: string
   laderLock: string
@@ -110,6 +111,7 @@ function parseAtOffset(rows: string[][], offset: number, shared: Partial<TechPac
     zipper:        extract(rows, 'ZIPPER',        offset),
     puller:        extract(rows, 'PULLER',        offset),
     patta9mm:      extract(rows, '9MM PATTA',     offset),
+    patta075:      extract(rows, 'PATTA 0.75"',   offset),
     patta1:        extractNth(rows, 'PATTA', 0,   offset),
     patta2:        extractNth(rows, 'PATTA', 1,   offset),
     laderLock:     extract(rows, 'LADER LOCK',    offset),
@@ -150,7 +152,7 @@ export function parseTechPackAllVariants(rows: string[][]): TechPackVariant[] {
       AIRMESH: 'airMesh', FABRIC1: 'fabric', FABRIC: 'fabric', LINING: 'lining',
       '9MMPATTAHANGER': 'patta9mm', '9MMPATTA': 'patta9mm', PULLER: 'puller', LADERLOCK: 'laderLock',
       ZIPPER8NO: 'zipper', ZIPPER: 'zipper', DIGITALPRINT: 'digitalPrint',
-      PATTA1: 'patta1', PATTA: 'patta1', SCREENPRINT: 'screenPrint',
+      PATTA075: 'patta075', PATTA1: 'patta1', PATTA: 'patta1', SCREENPRINT: 'screenPrint',
       BRANDING: 'branding', PATTA15: 'patta2', REMARKS: 'remarks', BARTACK: 'bartech', BARTECH: 'bartech',
       RESAMPLINGBY: 'reSamplingBy', ADDON1: 'addOn1', ADDON2: 'addOn2',
       ADDON3: 'addOn3', DESIGNERSIGN: 'designerSign',
@@ -230,6 +232,7 @@ export function parseTechPackAllVariants(rows: string[][]): TechPackVariant[] {
           zipper:       f.zipper ?? '',
           puller:       f.puller ?? '',
           patta9mm:     f.patta9mm ?? '',
+          patta075:     f.patta075 ?? '',
           patta1:       f.patta1 ?? '',
           patta2:       f.patta2 ?? '',
           laderLock:    f.laderLock ?? '',
@@ -317,6 +320,7 @@ export function parseTechPackRows(rows: string[][]): TechPackFields {
     zipper:        extract(rows, 'ZIPPER'),
     puller:        extract(rows, 'PULLER'),
     patta9mm:      extract(rows, '9MM PATTA'),
+    patta075:      extract(rows, 'PATTA 0.75"'),
     patta1:        extractNth(rows, 'PATTA', 0),
     patta2:        extractNth(rows, 'PATTA', 1),
     laderLock:     extract(rows, 'LADER LOCK'),

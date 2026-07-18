@@ -132,6 +132,7 @@ export interface DesignData {
   zipper: string | null
   puller: string | null
   patta_9mm: string | null
+  patta_075: string | null
   patta_1: string | null
   patta_2: string | null
   lader_lock: string | null

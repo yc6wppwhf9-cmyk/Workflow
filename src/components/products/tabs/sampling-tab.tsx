@@ -675,6 +675,7 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
                 <TechPackValue label="Zipper" value={activeVariant.zipper} />
                 <TechPackValue label="Puller" value={activeVariant.puller} />
                 <TechPackValue label="9mm Patta" value={activeVariant.patta_9mm} />
+                <TechPackValue label={'Patta 0.75"'} value={activeVariant.patta_075} />
                 <TechPackValue label="Patta 1" value={activeVariant.patta_1} />
                 <TechPackValue label="Patta 2" value={activeVariant.patta_2} />
                 <TechPackValue label="Lader Lock" value={activeVariant.lader_lock} />

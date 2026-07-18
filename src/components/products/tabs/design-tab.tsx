@@ -83,6 +83,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
     zipper:         data?.zipper         || '',
     puller:         data?.puller         || '',
     patta_9mm:      data?.patta_9mm      || '',
+    patta_075:      data?.patta_075      || '',
     patta_1:        data?.patta_1        || '',
     patta_2:        data?.patta_2        || '',
     lader_lock:     data?.lader_lock     || '',
@@ -690,6 +691,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
       ['zipper',         f.zipper,        'Zipper'],
       ['puller',         f.puller,        'Puller'],
       ['patta_9mm',      f.patta9mm,      '9mm Patta'],
+      ['patta_075',      f.patta075,      'Patta 0.75"'],
       ['patta_1',        f.patta1,        'Patta 1'],
       ['patta_2',        f.patta2,        'Patta 2'],
       ['lader_lock',     f.laderLock,     'Lader Lock'],
@@ -1133,6 +1135,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
                   ['Zipper', activeVariant.zipper],
                   ['Puller', activeVariant.puller],
                   ['9mm Patta', activeVariant.patta_9mm],
+                  ['Patta 0.75"', activeVariant.patta_075],
                   ['Patta 1', activeVariant.patta_1],
                   ['Patta 2', activeVariant.patta_2],
                   ['Lader Lock', activeVariant.lader_lock],
@@ -2462,6 +2465,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
               {F({  label: "Zipper", field: "zipper", placeholder: "e.g. 8 NO.-BLK" , formIdx })}
               {F({  label: "Puller", field: "puller", placeholder: "e.g. PVC PRIO NEW-BLK" , formIdx })}
               {F({  label: "9mm Patta", field: "patta_9mm", placeholder: "e.g. BLK+HANGER" , formIdx })}
+              {F({  label: 'Patta 0.75"', field: "patta_075", placeholder: "e.g. YES-BLK" , formIdx })}
             </div>
             <div className="grid grid-cols-3 gap-3">
               {F({  label: "Patta 1", field: "patta_1", placeholder: 'e.g. 0.75"-BLK' , formIdx })}

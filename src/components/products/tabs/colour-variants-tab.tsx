@@ -16,11 +16,11 @@ interface ColourVariantsTabProps {
 function ColorCard({
   variant,
   images,
-  isAdmin,
+  deleteMode,
 }: {
   variant: ColourVariant
   images: ProductFile[]
-  isAdmin: boolean
+  deleteMode: boolean
 }) {
   const router = useRouter()
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
@@ -108,15 +108,15 @@ function ColorCard({
                   onClick={() => setLightboxIndex(i)}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={img.file_url} alt={img.name} className="w-full h-full object-cover group-hover:opacity-90 transition-opacity" />
-                  {isAdmin && (
+                  <img src={img.file_url} alt={img.name} className={`w-full h-full object-cover transition-opacity ${deleteMode ? 'opacity-70' : 'group-hover:opacity-90'}`} />
+                  {deleteMode && (
                     <button
                       onClick={e => { e.stopPropagation(); deleteImage(img) }}
                       disabled={deletingId === img.id}
-                      title="Delete image (admin)"
-                      className="absolute top-0.5 right-0.5 h-5 w-5 rounded-full bg-red-600/90 hover:bg-red-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Delete this image"
+                      className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-red-600/40 text-white"
                     >
-                      {deletingId === img.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                      {deletingId === img.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <Trash2 className="h-5 w-5" />}
                     </button>
                   )}
                 </div>
@@ -153,11 +153,11 @@ function ColorCard({
           >
             <X className="h-5 w-5" />
           </button>
-          {isAdmin && (
+          {deleteMode && (
             <button
               onClick={e => { e.stopPropagation(); deleteImage(images[lightboxIndex!]) }}
               disabled={deletingId === images[lightboxIndex!]?.id}
-              title="Delete image (admin)"
+              title="Delete image"
               className="absolute top-4 right-16 h-10 px-3 rounded-full bg-red-600/90 hover:bg-red-600 flex items-center gap-1.5 text-white text-sm"
             >
               {deletingId === images[lightboxIndex!]?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
@@ -200,6 +200,7 @@ function ColorCard({
 
 export function ColourVariantsTab({ variants, files, profile }: ColourVariantsTabProps) {
   const isAdmin = profile.role === 'admin'
+  const [deleteMode, setDeleteMode] = useState(false)
   // Strip ATTRIBUTES template placeholder tags like "Color" / "Colour"
   const PLACEHOLDER = /^colou?rs?$/i
   const realVariants = variants.filter(v => !PLACEHOLDER.test((v.colourTag || '').trim()))
@@ -245,7 +246,26 @@ export function ColourVariantsTab({ variants, files, profile }: ColourVariantsTa
             {[...filesByColor.values()].reduce((a, b) => a + b.length, 0)} images tagged across {filesByColor.size} colour{filesByColor.size !== 1 ? 's' : ''}
           </div>
         )}
+        {isAdmin && (
+          <button
+            onClick={() => setDeleteMode(d => !d)}
+            className={`ml-auto inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${
+              deleteMode
+                ? 'bg-red-600 text-white border-red-600 hover:bg-red-700'
+                : 'text-red-600 border-red-200 hover:bg-red-50'
+            }`}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            {deleteMode ? 'Done' : 'Delete Images'}
+          </button>
+        )}
       </div>
+
+      {deleteMode && (
+        <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          Delete mode on — click any image to remove it. This can&apos;t be undone. Click &quot;Done&quot; when finished.
+        </p>
+      )}
 
       {/* Variant cards grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -253,7 +273,7 @@ export function ColourVariantsTab({ variants, files, profile }: ColourVariantsTa
           <ColorCard
             key={`${variant.styleName || variant.colourTag}-${i}`}
             variant={variant}
-            isAdmin={isAdmin}
+            deleteMode={isAdmin && deleteMode}
             images={
               // Match by styleName first (new uploads tag images with the full style name
               // to avoid cross-design bleed when two designs share the same colour code).

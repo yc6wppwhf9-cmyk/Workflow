@@ -65,9 +65,9 @@ export default async function PrintTechPackPage({
   function SpecRow({ label, value }: { label: string; value?: string | null }) {
     if (!value) return null
     return (
-      <div className="flex gap-3 py-1.5 border-b border-gray-100 last:border-0">
-        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide w-36 shrink-0 pt-0.5">{label}</div>
-        <div className="text-sm text-gray-800 flex-1">{value}</div>
+      <div className="flex gap-3 py-1 border-b border-gray-100">
+        <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide w-28 shrink-0 pt-0.5">{label}</div>
+        <div className="text-[13px] text-gray-800 flex-1">{value}</div>
       </div>
     )
   }
@@ -170,7 +170,7 @@ export default async function PrintTechPackPage({
       <div className={`max-w-4xl mx-auto p-8 print:p-0 ${allVariants.length > 1 ? 'pt-20 print:pt-0' : ''}`}>
 
         {/* Header */}
-        <div className="flex items-start justify-between border-b-2 border-gray-900 pb-4 mb-6">
+        <div className="flex items-start justify-between border-b-2 border-gray-900 pb-2 mb-3">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{product.name}</h1>
             <div className="flex gap-2 mt-1.5">
@@ -187,8 +187,8 @@ export default async function PrintTechPackPage({
 
         {/* Illustration Images */}
         {printIllustrations.length > 0 && (
-          <section className="mb-8">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-3 pb-1 border-b border-gray-200">
+          <section className="mb-3">
+            <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-2 pb-1 border-b border-gray-200">
               Design Illustrations ({printIllustrations.length})
             </h2>
             {/* Single variant image (from tech pack): show full-width, no crop */}
@@ -197,7 +197,7 @@ export default async function PrintTechPackPage({
               <img
                 src={variantImageUrl}
                 alt={rawColor || 'Design'}
-                className="w-full max-h-96 object-contain border border-gray-200 rounded-lg bg-gray-50"
+                className="w-full max-h-64 print:max-h-52 object-contain border border-gray-200 rounded-lg bg-gray-50"
               />
             ) : (
               <div className={`grid gap-3 ${printIllustrations.length === 1 ? 'grid-cols-1' : printIllustrations.length === 2 ? 'grid-cols-2' : 'grid-cols-4'}`}>
@@ -207,7 +207,7 @@ export default async function PrintTechPackPage({
                     key={f.id}
                     src={f.file_url}
                     alt={f.name}
-                    className={`w-full border border-gray-200 rounded-lg ${printIllustrations.length <= 2 ? 'max-h-80 object-contain bg-gray-50' : 'aspect-square object-cover'}`}
+                    className={`w-full border border-gray-200 rounded-lg ${printIllustrations.length <= 2 ? 'max-h-56 print:max-h-44 object-contain bg-gray-50' : 'aspect-square object-cover'}`}
                   />
                 ))}
               </div>
@@ -217,16 +217,16 @@ export default async function PrintTechPackPage({
 
         {/* Design Specifications */}
         {hasSpecs && (
-          <div className="space-y-6">
+          <div className="space-y-4">
             {variants.map((v: any, idx: number) => {
               if (!hasAnySpec(v)) return null;
               return (
-                <section key={idx} className="mb-8 print:break-inside-avoid">
-                  <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-3 pb-1 border-b border-gray-200">
+                <section key={idx} className="mb-4 print:break-inside-avoid">
+                  <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-2 pb-1 border-b border-gray-200">
                     Design Specifications {variants.length > 1 ? `— Variant ${idx + 1} (${v.sample_color || 'No Color'})` : ''}
                     {v.designer_name && <span className="font-normal normal-case ml-2 text-gray-400">— {v.designer_name}</span>}
                   </h2>
-                  <div>
+                  <div className="grid grid-cols-2 gap-x-8">
                     <SpecRow label="Style Name"     value={v.style_name} />
                     <SpecRow label="Designer"       value={v.designer_name} />
                     <SpecRow label="Sample Color"   value={v.sample_color} />
@@ -251,21 +251,21 @@ export default async function PrintTechPackPage({
                     <SpecRow label="Add On 3"       value={v.add_on_3} />
                     <SpecRow label="Designer Sign"  value={v.designer_sign} />
                     {v.color_skus && v.color_skus.length > 0 && (
-                      <div className="flex gap-3 py-1.5 border-b border-gray-100 last:border-0">
+                      <div className="col-span-2 flex gap-3 py-1.5 border-b border-gray-100">
                         <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide w-36 shrink-0 pt-0.5">Color SKUs</div>
                         <div className="text-sm text-gray-800 flex-1 font-mono">{v.color_skus.join(', ')}</div>
                       </div>
                     )}
                     {v.unique_feature && (
-                      <div className="flex gap-3 py-1.5 border-b border-gray-100 last:border-0">
+                      <div className="col-span-2 flex gap-3 py-1.5 border-b border-gray-100">
                         <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide w-36 shrink-0 pt-0.5">Unique Feature / USP</div>
                         <div className="text-sm text-gray-800 flex-1">{v.unique_feature}</div>
                       </div>
                     )}
                   </div>
                   {v.remarks && (
-                    <div className="mt-4 p-3 bg-gray-50 border-l-4 border-gray-300 rounded-r-lg">
-                      <p className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-1">Designer Remarks</p>
+                    <div className="mt-2 p-2 bg-gray-50 border-l-4 border-gray-300 rounded-r-lg">
+                      <p className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-0.5">Designer Remarks</p>
                       <p className="text-sm text-gray-700 whitespace-pre-wrap">{v.remarks}</p>
                     </div>
                   )}
@@ -310,8 +310,10 @@ export default async function PrintTechPackPage({
       <style>{`
         @media print {
           .no-print { display: none !important; }
-          @page { margin: 12mm; size: A4; }
+          @page { margin: 10mm; size: A4; }
           body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+          /* Keep the whole tech pack on a single page */
+          section { break-inside: avoid; }
         }
       `}</style>
     </div>

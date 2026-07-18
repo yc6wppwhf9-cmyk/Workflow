@@ -30,6 +30,7 @@ interface ProductRow {
   design_data?: { designer_name: string | null; color_skus: string[] | null; channel: string | null } | null
   bom_data?: { fg_inv_code: string | null } | null
   assigned_designer?: string | null
+  farma?: string | null
 }
 
 interface ProductsTableProps {
@@ -49,6 +50,7 @@ export function ProductsTable({ products, profile }: ProductsTableProps) {
       p.name,
       p.sku,
       p.assigned_designer,
+      p.farma,
       design?.designer_name,
       design?.channel,
       bom?.fg_inv_code,
@@ -112,7 +114,7 @@ export function ProductsTable({ products, profile }: ProductsTableProps) {
             <tr className="border-b border-gray-100 bg-gray-50">
               <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Product</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Designer</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Colour SKUs</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Farma</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">FG INV</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Channel</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Category</th>
@@ -125,7 +127,6 @@ export function ProductsTable({ products, profile }: ProductsTableProps) {
             {filtered.map((p) => {
               const design = p.design_data
               const bom = p.bom_data
-              const colourSkus = design?.color_skus || []
               return (
                 <tr key={p.id} className="hover:bg-gray-50 transition-colors group">
                   {/* Product name + designer stacked */}
@@ -152,20 +153,9 @@ export function ProductsTable({ products, profile }: ProductsTableProps) {
                         : <span className="text-gray-300 text-xs">Unassigned</span>}
                   </td>
 
-                  {/* Colour SKUs */}
-                  <td className="px-4 py-3.5">
-                    {colourSkus.length > 0 ? (
-                      <div className="flex flex-wrap gap-1">
-                        {colourSkus.slice(0, 3).map((sku, i) => (
-                          <span key={i} className="text-xs font-mono bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{sku}</span>
-                        ))}
-                        {colourSkus.length > 3 && (
-                          <span className="text-xs text-gray-400">+{colourSkus.length - 3}</span>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-gray-300 text-xs">—</span>
-                    )}
+                  {/* Farma */}
+                  <td className="px-4 py-3.5 text-sm text-gray-700">
+                    {p.farma || <span className="text-gray-300 text-xs">—</span>}
                   </td>
 
                   {/* FG INV */}

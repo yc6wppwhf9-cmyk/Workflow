@@ -23,7 +23,7 @@ export default async function ProductsPage() {
     .from('products')
     .select(`
       id, name, sku, category, sub_category, workflow_stage, created_at,
-      design_data(designer_name, color_skus, channel, designer:profiles!assigned_to(full_name)),
+      design_data(designer_name, color_skus, channel, farma, variants, designer:profiles!assigned_to(full_name)),
       bom_data(fg_inv_code)
     `)
     .order('created_at', { ascending: false })
@@ -37,13 +37,19 @@ export default async function ProductsPage() {
 
   // Normalize Supabase nested join arrays to scalars expected by ProductsTable
   const products = (rawProducts || []).map(p => {
-    const dd = one(p.design_data) as { designer_name: string | null; color_skus: string[] | null; channel: string | null; designer?: { full_name: string | null } | { full_name: string | null }[] | null } | null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dd = one(p.design_data) as any
     const designer = Array.isArray(dd?.designer) ? dd?.designer[0] : dd?.designer
+    // Farma lives on the flat column for legacy rows, otherwise in variant 0.
+    const farma = (dd?.farma
+      || (Array.isArray(dd?.variants) && dd.variants.length ? dd.variants[0]?.farma : '')
+      || null)
     return {
       ...p,
       design_data: dd,
       bom_data: one(p.bom_data),
       assigned_designer: designer?.full_name ?? null,
+      farma,
     }
   })
 

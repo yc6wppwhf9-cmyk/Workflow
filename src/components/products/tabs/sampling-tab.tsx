@@ -165,6 +165,9 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
   })
   const status = data?.sample_review_status || 'not_started'
   const isApproved = status === 'approved'
+  // Samples are developed over time and uploaded in batches, so an earlier
+  // approval must NOT lock the tab — only a stage lock stops uploads/edits.
+  const canUpload = isSampler && !data?.is_locked
   const isPending = status === 'pending_review'
   const isRejected = status === 'rejected'
   const isSamplingRequested = status === 'sampling_requested'
@@ -722,7 +725,7 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
       <Card className={isRejected ? 'border-red-200' : isPending ? 'border-yellow-200' : isApproved ? 'border-green-200' : ''}>
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="text-base">Sample Images</CardTitle>
-          {isSampler && !isApproved && (
+          {canUpload && (
             <>
               <Button size="sm" variant="outline" onClick={() => sampleInputRef.current?.click()} disabled={uploading}>
                 {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
@@ -811,7 +814,7 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
             <div className="border-2 border-dashed border-gray-200 rounded-lg py-10 text-center">
               <Upload className="h-8 w-8 text-gray-300 mx-auto mb-2" />
               <p className="text-sm text-gray-500">No sample images uploaded yet.</p>
-              {isSampler && !isApproved && <p className="text-xs text-gray-400 mt-1">Click &quot;Upload Sample&quot; above to add images</p>}
+              {canUpload && <p className="text-xs text-gray-400 mt-1">Click &quot;Upload Sample&quot; above to add images</p>}
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -823,7 +826,7 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
                     <a href={file.file_url} target="_blank" rel="noopener noreferrer" className="h-8 w-8 rounded-full bg-white flex items-center justify-center">
                       <ExternalLink className="h-4 w-4 text-gray-700" />
                     </a>
-                    {isSampler && !isApproved && (
+                    {canUpload && (
                       <button className="h-8 w-8 rounded-full bg-white flex items-center justify-center" onClick={() => deleteFile(file)}>
                         <Trash2 className="h-4 w-4 text-red-500" />
                       </button>
@@ -839,7 +842,7 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
             <Input
               value={samplerName}
               onChange={e => setSamplerName(e.target.value)}
-              disabled={!isSampler || isApproved}
+              disabled={!canUpload}
               placeholder="Name of the person who made the sample"
               className="h-8 text-sm"
             />
@@ -850,7 +853,7 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
             <Textarea
               value={remarks}
               onChange={e => setRemarks(e.target.value)}
-              disabled={!isSampler || isApproved}
+              disabled={!canUpload}
               rows={4}
               placeholder="Construction notes, deviations, material observations, fit issues..."
             />
@@ -881,7 +884,7 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
             </div>
           )}
 
-          {isSampler && !isApproved && (
+          {canUpload && (
             <div className="flex gap-2">
               <Button variant="outline" onClick={saveRemarks} disabled={saving}>
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
@@ -992,7 +995,7 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
             <FileText className="h-4 w-4 text-gray-500" />
             Sampling Documents (PDF / Excel)
           </CardTitle>
-          {isSampler && !isApproved && (
+          {canUpload && (
             <>
               <Button size="sm" variant="outline" onClick={() => pdfInputRef.current?.click()} disabled={pdfUploading}>
                 {pdfUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
@@ -1018,7 +1021,7 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
             <div className="border-2 border-dashed border-gray-200 rounded-lg py-8 text-center">
               <FileText className="h-7 w-7 text-gray-300 mx-auto mb-2" />
               <p className="text-sm text-gray-500">No documents uploaded yet.</p>
-              {isSampler && !isApproved && <p className="text-xs text-gray-400 mt-1">Click &quot;Upload Documents&quot; to add PDF or Excel files</p>}
+              {canUpload && <p className="text-xs text-gray-400 mt-1">Click &quot;Upload Documents&quot; to add PDF or Excel files</p>}
             </div>
           ) : (
             <div className="space-y-2">
@@ -1034,7 +1037,7 @@ export function SamplingTab({ product, profile, designData, data, files, samplin
                     >
                       <Download className="h-3.5 w-3.5" /> Download
                     </a>
-                    {isSampler && !isApproved && (
+                    {canUpload && (
                       <button
                         onClick={() => deleteFile(file)}
                         className="h-7 w-7 flex items-center justify-center rounded border border-red-200 bg-white text-red-500 hover:bg-red-50"

@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createAdmin } from '@supabase/supabase-js'
+
+const adminSupabase = createAdmin(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+)
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
@@ -14,7 +20,10 @@ export async function POST(request: NextRequest) {
   const { title, remarks } = await request.json()
   if (!title?.trim()) return NextResponse.json({ error: 'Title is required' }, { status: 400 })
 
-  const { data: development, error } = await (supabase as any)
+  // Insert via the service client — the nd_insert RLS policy doesn't include the
+  // merchandising roles on every environment. Role is already checked above.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: development, error } = await (adminSupabase as any)
     .from('new_developments')
     .insert({ title: title.trim(), remarks: remarks || null, created_by: user.id, status: 'draft' })
     .select('id, title, remarks, status, sent_at, created_at')

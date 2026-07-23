@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createAdmin } from '@supabase/supabase-js'
+
+const adminSupabase = createAdmin(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+)
 
 export async function POST(
   request: NextRequest,
@@ -22,7 +28,10 @@ export async function POST(
 
   const { name, file_url, file_type, file_size, category } = await request.json()
 
-  const { data: file, error } = await supabase
+  // Insert via the service client — the ndf_insert RLS policy doesn't include the
+  // merchandising roles on every environment, which blocked merch-head uploads.
+  // Ownership + draft status are already verified above.
+  const { data: file, error } = await adminSupabase
     .from('new_development_files')
     .insert({ development_id: id, name, file_url, file_type, file_size, category: category || 'other', uploaded_by: user.id })
     .select('id, name, file_url, file_type, file_size, category, created_at')

@@ -401,3 +401,16 @@ export const STAGE_OWNER_ROLE: Partial<Record<WorkflowStage, UserRole>> = {
   costing_naming: 'bom',
   marketing_ready: 'marketing',
 }
+
+// ── Colour variant hygiene ────────────────────────────────────────────────
+// Merch ATTRIBUTES templates leave blank columns whose header is a field label
+// ("POCKET COMPARTMENT") or a bare "Colour" placeholder. Those get imported as
+// bogus colour variants, so filter them wherever variants are displayed.
+const VARIANT_PLACEHOLDER = /^colou?rs?$/i
+const VARIANT_ATTR_LABEL = /^(pocket|main|laptop)\s*compartments?$|^weight|^height|^dimen|^number of zip|^rain cover|^bottle slot|^back padded|^season|^unique purpose|^main material|^materials?$|^character$|^theme$|^designer name$/i
+
+export function isPlaceholderVariant(v: { colourTag?: string | null; styleName?: string | null }): boolean {
+  const tag = (v.colourTag || '').trim()
+  const style = (v.styleName || '').trim()
+  return VARIANT_PLACEHOLDER.test(tag) || VARIANT_ATTR_LABEL.test(tag) || VARIANT_ATTR_LABEL.test(style)
+}

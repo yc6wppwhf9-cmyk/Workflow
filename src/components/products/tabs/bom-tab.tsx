@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import type { Product, Profile, BomData, MerchandisingData, ColourVariant } from '@/lib/types'
+import { isPlaceholderVariant, type Product, type Profile, type BomData, type MerchandisingData, type ColourVariant } from '@/lib/types'
 
 interface BomTabProps {
   product: Product
@@ -23,9 +23,9 @@ export function BomTab({ product, profile, data, merchandisingData }: BomTabProp
   const isRoleAllowed = ['admin', 'bom'].includes(profile.role)
   const canEdit = !data?.is_locked && !data?.is_completed && isRoleAllowed
 
-  const PLACEHOLDER = /^colou?rs?$/i
+  // Skip template placeholders / attribute labels imported as bogus variants
   const colourVariants = (merchandisingData?.colour_variants || []).filter(
-    v => !PLACEHOLDER.test((v.colourTag || '').trim())
+    v => !isPlaceholderVariant(v)
   )
 
   // Key by styleName, not colourTag — two designs can share a colour (e.g. two

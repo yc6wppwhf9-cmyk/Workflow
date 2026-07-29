@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Palette, ChevronLeft, ChevronRight, X, Trash2, Loader2, Check } from 'lucide-react'
 import { getColorHex } from '@/lib/color-maps'
-import type { ColourVariant, ProductFile, Profile } from '@/lib/types'
+import { isPlaceholderVariant, type ColourVariant, type ProductFile, type Profile } from '@/lib/types'
 
 interface ColourVariantsTabProps {
   variants: ColourVariant[]
@@ -196,15 +196,10 @@ export function ColourVariantsTab({ variants, files, profile }: ColourVariantsTa
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)
 
-  // Strip ATTRIBUTES template placeholders — bare "Colour" tags, and attribute
-  // labels that leaked in as style names from blank template columns.
-  const PLACEHOLDER = /^colou?rs?$/i
-  const ATTR_LABEL = /^(pocket|main|laptop)\s*compartments?$|^weight|^height|^dimen|^number of zip|^rain cover|^bottle slot|^back padded|^season|^unique purpose|^main material|^materials?$|^character$|^theme$|^designer name$/i
-  const isJunk = (v: { colourTag?: string; styleName?: string }) => {
-    const tag = (v.colourTag || '').trim()
-    const style = (v.styleName || '').trim()
-    return PLACEHOLDER.test(tag) || ATTR_LABEL.test(tag) || ATTR_LABEL.test(style)
-  }
+  const isJunk = isPlaceholderVariant
+  // Keep junk variants visible (flagged) rather than hiding them — their images
+  // are still in the DB and this is where you delete them.
+  const junkVariants = variants.filter(isJunk)
   const realVariants = variants.filter(v => !isJunk(v))
   const displayVariants = realVariants.length > 0 ? realVariants : variants
 
@@ -227,7 +222,7 @@ export function ColourVariantsTab({ variants, files, profile }: ColourVariantsTa
 
   // All image ids currently shown in the colour cards (deduped), for "Select all".
   const allShownIds = Array.from(
-    new Set(displayVariants.flatMap(v => imagesForVariant(v).map(f => f.id))),
+    new Set([...displayVariants, ...junkVariants].flatMap(v => imagesForVariant(v).map(f => f.id))),
   )
 
   function toggle(id: string) {
@@ -345,6 +340,34 @@ export function ColourVariantsTab({ variants, files, profile }: ColourVariantsTa
           />
         ))}
       </div>
+
+      {/* Bad imports from template columns — flagged so their images can be removed */}
+      {junkVariants.length > 0 && (
+        <div className="pt-2">
+          <div className="flex items-center gap-2 mb-2">
+            <p className="text-xs font-semibold text-amber-700">
+              Unrecognised import{junkVariants.length !== 1 ? 's' : ''} ({junkVariants.length})
+            </p>
+            <span className="text-xs text-amber-600">
+              — came from a blank template column, not a real design.
+              {isAdmin ? ' Use “Delete Images” above to remove their photos.' : ''}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {junkVariants.map((variant, i) => (
+              <div key={`junk-${i}`} className="ring-2 ring-amber-300 rounded-xl">
+                <ColorCard
+                  variant={variant}
+                  deleteMode={isAdmin && deleteMode}
+                  selected={selected}
+                  onToggle={toggle}
+                  images={imagesForVariant(variant)}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {untaggedImages.length > 0 && (
         <div className="text-xs text-gray-400 text-center pt-2">

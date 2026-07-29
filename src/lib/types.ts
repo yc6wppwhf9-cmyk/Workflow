@@ -158,6 +158,8 @@ export interface ColourVariant {
   styleName: string
   colourTag: string
   color: string
+  /** Finished-goods INV code for THIS design — each colourway is its own SKU. */
+  fgInvCode?: string
   weight: string
   dimensions: { length?: string; width?: string; height?: string; unit?: string }
   materials: string[]

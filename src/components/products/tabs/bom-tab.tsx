@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Loader2, Lock, Save, Download, Tag, CheckCircle2, UserCheck, Send, XCircle } from 'lucide-react'
@@ -153,17 +153,18 @@ export function BomTab({ product, profile, data, merchandisingData, bomUsers = [
         ['Brand',        product.brand     || '—'],
         ['Exported',     new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })],
         [],
-        ['Colour', 'Items in BOM'],
-        ...colourVariants.map((v: ColourVariant) => [v.styleName || v.colourTag, (v.bomItems || []).length]),
+        ['Design', 'FG INV Code', 'Items in BOM'],
+        ...colourVariants.map((v: ColourVariant) => [v.styleName || v.colourTag, v.fgInvCode || '', (v.bomItems || []).length]),
       ]
       const summaryWs = utils.aoa_to_sheet(summaryRows)
-      summaryWs['!cols'] = [{ wch: 20 }, { wch: 30 }]
+      summaryWs['!cols'] = [{ wch: 44 }, { wch: 18 }, { wch: 14 }]
       utils.book_append_sheet(wb, summaryWs, 'Summary')
 
       // ── One sheet per colour ─────────────────────────────────────────
       for (const variant of colourVariants) {
         const items = variant.bomItems || []
         const headerRow = ['#', 'Item Name', 'INV Code', 'Consumption', 'Unit']
+        const titleRows = [[variant.styleName || variant.colourTag], ['FG INV Code', variant.fgInvCode || ''], []]
         const dataRows  = items.map((item, i) => [
           i + 1,
           item.inv_name    || '',
@@ -171,7 +172,7 @@ export function BomTab({ product, profile, data, merchandisingData, bomUsers = [
           item.consumption || '',
           item.unit        || '',
         ])
-        const ws = utils.aoa_to_sheet([headerRow, ...dataRows])
+        const ws = utils.aoa_to_sheet([...titleRows, headerRow, ...dataRows])
         ws['!cols'] = [{ wch: 4 }, { wch: 32 }, { wch: 18 }, { wch: 14 }, { wch: 10 }]
         // Safe sheet name: max 31 chars, no special chars
         // Sheet names must be unique — two designs can share a colour, so prefix
@@ -192,6 +193,39 @@ export function BomTab({ product, profile, data, merchandisingData, bomUsers = [
 
   const fgSaved = !!data?.fg_inv_code
   const activeVariant = colourVariants.find((v, i) => variantKey(v, i) === activeColour) || colourVariants[0] || null
+
+  // Per-design finished-goods INV code — each colourway is its own SKU.
+  const [variantInv, setVariantInv] = useState(activeVariant?.fgInvCode || '')
+  const [savingVariantInv, setSavingVariantInv] = useState(false)
+  // Reload the field when a different design tab is selected
+  useEffect(() => {
+    setVariantInv(activeVariant?.fgInvCode || '')
+  }, [activeColour, activeVariant?.fgInvCode])
+
+  async function saveVariantInv() {
+    if (!activeVariant) return
+    const next = variantInv.trim()
+    if (next === (activeVariant.fgInvCode || '').trim()) return   // unchanged
+    setSavingVariantInv(true)
+    try {
+      const res = await fetch('/api/set-variant-inv', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_id: product.id,
+          style_name: activeVariant.styleName || activeVariant.colourTag,
+          fg_inv_code: next,
+        }),
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed')
+      toast.success('FG INV code saved')
+      router.refresh()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not save INV code')
+    } finally {
+      setSavingVariantInv(false)
+    }
+  }
 
   async function saveFgInvCode() {
     if (!fgInvCode.trim()) return
@@ -441,7 +475,10 @@ export function BomTab({ product, profile, data, merchandisingData, bomUsers = [
           {/* FG INV Code */}
           <div className="flex items-end gap-3 pb-4 border-b border-gray-100">
             <div className="space-y-1.5 w-72">
-              <Label className="text-xs">Finished Goods INV Code</Label>
+              <Label className="text-xs">
+                Product-level FG INV Code
+                <span className="font-normal text-gray-400 ml-1">(optional — each design has its own below)</span>
+              </Label>
               <Input
                 placeholder="ERP INV code for this product"
                 value={fgInvCode}
@@ -482,8 +519,22 @@ export function BomTab({ product, profile, data, merchandisingData, bomUsers = [
 
               {activeVariant && (
                 <div className="rounded-lg border border-gray-200 overflow-hidden">
-                  <div className="bg-gray-50 px-3 py-2 border-b border-gray-200">
+                  <div className="bg-gray-50 px-3 py-2 border-b border-gray-200 flex items-center justify-between gap-3 flex-wrap">
                     <p className="text-xs font-semibold text-gray-700">{activeVariant.styleName || activeVariant.colourTag} — components from merchandising Excel</p>
+                    {/* Each colourway is its own finished good, so the INV code is per design */}
+                    <div className="flex items-center gap-1.5">
+                      <Label className="text-[11px] text-gray-500 shrink-0">FG INV Code</Label>
+                      <Input
+                        value={variantInv}
+                        onChange={e => setVariantInv(e.target.value)}
+                        onBlur={saveVariantInv}
+                        onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                        disabled={!canEdit || savingVariantInv}
+                        placeholder="ERP code for this design"
+                        className="h-7 text-xs font-mono w-52"
+                      />
+                      {savingVariantInv && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />}
+                    </div>
                   </div>
                   <table className="w-full text-sm">
                     <thead>

@@ -2,10 +2,11 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Check, X, ShieldAlert } from 'lucide-react'
+import { Loader2, Check, X, ShieldAlert, Search } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { createClient } from '@/lib/supabase/client'
 import { ROLE_LABELS, ROLE_COLORS, STAGE_LABELS, type UserRole, type WorkflowStage } from '@/lib/types'
@@ -40,6 +41,13 @@ export function UsersTable({ users: initialUsers, unlockRequests: initialRequest
   const [users, setUsers] = useState(initialUsers)
   const [requests, setRequests] = useState(initialRequests)
   const [loading, setLoading] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+
+  const filteredUsers = users.filter(u => {
+    const q = search.trim().toLowerCase()
+    if (!q) return true
+    return [u.full_name, u.email, ROLE_LABELS[u.role]].join(' ').toLowerCase().includes(q)
+  })
 
   async function updateRole(userId: string, role: UserRole) {
     setLoading(userId)
@@ -123,8 +131,19 @@ export function UsersTable({ users: initialUsers, unlockRequests: initialRequest
 
       {/* Users table */}
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Team Members ({users.length})</CardTitle>
+        <CardHeader className="pb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <CardTitle className="text-base">
+            Team Members ({search.trim() ? `${filteredUsers.length} of ${users.length}` : users.length})
+          </CardTitle>
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input
+              placeholder="Search by name, email, role…"
+              className="pl-9 h-9"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           <table className="w-full text-sm">
@@ -138,7 +157,10 @@ export function UsersTable({ users: initialUsers, unlockRequests: initialRequest
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {users.map((user) => (
+              {filteredUsers.length === 0 && (
+                <tr><td colSpan={5} className="px-6 py-8 text-center text-sm text-gray-400">No users match &quot;{search}&quot;</td></tr>
+              )}
+              {filteredUsers.map((user) => (
                 <tr key={user.id} className="hover:bg-gray-50">
                   <td className="px-6 py-3.5">
                     <div className="flex items-center gap-3">

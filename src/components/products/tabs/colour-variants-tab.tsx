@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Palette, Weight, Ruler, Package, ChevronLeft, ChevronRight, X, Trash2, Loader2 } from 'lucide-react'
+import { Palette, Weight, Ruler, Package, ChevronLeft, ChevronRight, X, Trash2, Loader2, Check } from 'lucide-react'
 import { getColorHex } from '@/lib/color-maps'
 import type { ColourVariant, ProductFile, Profile } from '@/lib/types'
 
@@ -17,35 +17,17 @@ function ColorCard({
   variant,
   images,
   deleteMode,
+  selected,
+  onToggle,
 }: {
   variant: ColourVariant
   images: ProductFile[]
   deleteMode: boolean
+  selected: Set<string>
+  onToggle: (id: string) => void
 }) {
-  const router = useRouter()
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
   const hex = getColorHex(variant.colourTag)
-
-  async function deleteImage(img: ProductFile) {
-    if (!window.confirm(`Delete this image (${img.name})? This cannot be undone.`)) return
-    setDeletingId(img.id)
-    try {
-      const res = await fetch('/api/delete-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ file_url: img.file_url, file_id: img.id }),
-      })
-      if (!res.ok) throw new Error('Failed')
-      toast.success('Image deleted')
-      setLightboxIndex(null)
-      router.refresh()
-    } catch {
-      toast.error('Could not delete image')
-    } finally {
-      setDeletingId(null)
-    }
-  }
 
   const hasSpecs = variant.weight || variant.dimensions?.length || variant.materials?.length
 
@@ -100,36 +82,48 @@ function ColorCard({
         {/* Image thumbnails */}
         {images.length > 0 && (
           <div className="px-4 py-3 border-t border-gray-100">
-            <div className="grid grid-cols-4 gap-1.5">
-              {images.slice(0, 7).map((img, i) => (
-                <div
-                  key={img.id}
-                  className="aspect-square rounded overflow-hidden bg-gray-100 cursor-pointer relative group"
-                  onClick={() => setLightboxIndex(i)}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={img.file_url} alt={img.name} className={`w-full h-full object-cover transition-opacity ${deleteMode ? 'opacity-70' : 'group-hover:opacity-90'}`} />
-                  {deleteMode && (
+            {deleteMode ? (
+              /* Delete mode: show ALL images, click to (de)select */
+              <div className="grid grid-cols-4 gap-1.5">
+                {images.map(img => {
+                  const isSel = selected.has(img.id)
+                  return (
                     <button
-                      onClick={e => { e.stopPropagation(); deleteImage(img) }}
-                      disabled={deletingId === img.id}
-                      title="Delete this image"
-                      className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-red-600/40 text-white"
+                      key={img.id}
+                      onClick={() => onToggle(img.id)}
+                      className={`aspect-square rounded overflow-hidden bg-gray-100 relative focus:outline-none ring-2 ${isSel ? 'ring-red-500' : 'ring-transparent'}`}
                     >
-                      {deletingId === img.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <Trash2 className="h-5 w-5" />}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={img.file_url} alt={img.name} className={`w-full h-full object-cover transition-opacity ${isSel ? 'opacity-60' : 'opacity-80'}`} />
+                      <span className={`absolute top-1 right-1 h-5 w-5 rounded-full flex items-center justify-center border ${isSel ? 'bg-red-600 border-red-600 text-white' : 'bg-white/80 border-gray-300 text-transparent'}`}>
+                        <Check className="h-3 w-3" />
+                      </span>
                     </button>
-                  )}
-                </div>
-              ))}
-              {images.length > 7 && (
-                <div
-                  className="aspect-square rounded bg-gray-100 flex items-center justify-center cursor-pointer hover:bg-gray-200 transition-colors"
-                  onClick={() => setLightboxIndex(7)}
-                >
-                  <span className="text-xs font-medium text-gray-600">+{images.length - 7}</span>
-                </div>
-              )}
-            </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="grid grid-cols-4 gap-1.5">
+                {images.slice(0, 7).map((img, i) => (
+                  <div
+                    key={img.id}
+                    className="aspect-square rounded overflow-hidden bg-gray-100 cursor-pointer relative group"
+                    onClick={() => setLightboxIndex(i)}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={img.file_url} alt={img.name} className="w-full h-full object-cover group-hover:opacity-90 transition-opacity" />
+                  </div>
+                ))}
+                {images.length > 7 && (
+                  <div
+                    className="aspect-square rounded bg-gray-100 flex items-center justify-center cursor-pointer hover:bg-gray-200 transition-colors"
+                    onClick={() => setLightboxIndex(7)}
+                  >
+                    <span className="text-xs font-medium text-gray-600">+{images.length - 7}</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -141,8 +135,8 @@ function ColorCard({
 
       </div>
 
-      {/* Lightbox */}
-      {lightboxIndex !== null && images[lightboxIndex!] && (
+      {/* Lightbox (view only — disabled in delete mode) */}
+      {!deleteMode && lightboxIndex !== null && images[lightboxIndex!] && (
         <div
           className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
           onClick={() => setLightboxIndex(null)}
@@ -153,17 +147,6 @@ function ColorCard({
           >
             <X className="h-5 w-5" />
           </button>
-          {deleteMode && (
-            <button
-              onClick={e => { e.stopPropagation(); deleteImage(images[lightboxIndex!]) }}
-              disabled={deletingId === images[lightboxIndex!]?.id}
-              title="Delete image"
-              className="absolute top-4 right-16 h-10 px-3 rounded-full bg-red-600/90 hover:bg-red-600 flex items-center gap-1.5 text-white text-sm"
-            >
-              {deletingId === images[lightboxIndex!]?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-              Delete
-            </button>
-          )}
           {images.length > 1 && (
             <>
               <button
@@ -199,24 +182,16 @@ function ColorCard({
 }
 
 export function ColourVariantsTab({ variants, files, profile }: ColourVariantsTabProps) {
+  const router = useRouter()
   const isAdmin = profile.role === 'admin'
   const [deleteMode, setDeleteMode] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [deleting, setDeleting] = useState(false)
+
   // Strip ATTRIBUTES template placeholder tags like "Color" / "Colour"
   const PLACEHOLDER = /^colou?rs?$/i
   const realVariants = variants.filter(v => !PLACEHOLDER.test((v.colourTag || '').trim()))
   const displayVariants = realVariants.length > 0 ? realVariants : variants
-
-  if (displayVariants.length === 0) {
-    return (
-      <div className="max-w-3xl">
-        <div className="text-center py-16 border-2 border-dashed border-gray-200 rounded-xl">
-          <Palette className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-          <p className="text-sm font-medium text-gray-500">No colour variants yet</p>
-          <p className="text-xs text-gray-400 mt-1">Upload the merchandising Excel to populate colour variants</p>
-        </div>
-      </div>
-    )
-  }
 
   // Group files by colour_tag
   const filesByColor = new Map<string, ProductFile[]>()
@@ -230,6 +205,58 @@ export function ColourVariantsTab({ variants, files, profile }: ColourVariantsTa
         untaggedImages.push(f)
       }
     }
+  }
+
+  const imagesForVariant = (v: ColourVariant): ProductFile[] =>
+    filesByColor.get(v.styleName) || filesByColor.get(v.colourTag) || []
+
+  // All image ids currently shown in the colour cards (deduped), for "Select all".
+  const allShownIds = Array.from(
+    new Set(displayVariants.flatMap(v => imagesForVariant(v).map(f => f.id))),
+  )
+
+  function toggle(id: string) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function deleteSelected() {
+    if (selected.size === 0) return
+    if (!window.confirm(`Delete ${selected.size} image(s)? This cannot be undone.`)) return
+    setDeleting(true)
+    try {
+      const res = await fetch('/api/delete-images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selected) }),
+      })
+      const json = await res.json() as { ok?: boolean; deleted?: number; error?: string }
+      if (!res.ok || !json.ok) throw new Error(json.error || 'Failed')
+      toast.success(`${json.deleted ?? selected.size} image(s) deleted`)
+      setSelected(new Set())
+      setDeleteMode(false)
+      router.refresh()
+    } catch {
+      toast.error('Could not delete images')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  if (displayVariants.length === 0) {
+    return (
+      <div className="max-w-3xl">
+        <div className="text-center py-16 border-2 border-dashed border-gray-200 rounded-xl">
+          <Palette className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+          <p className="text-sm font-medium text-gray-500">No colour variants yet</p>
+          <p className="text-xs text-gray-400 mt-1">Upload the merchandising Excel to populate colour variants</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -248,23 +275,46 @@ export function ColourVariantsTab({ variants, files, profile }: ColourVariantsTa
         )}
         {isAdmin && (
           <button
-            onClick={() => setDeleteMode(d => !d)}
+            onClick={() => { setDeleteMode(d => !d); setSelected(new Set()) }}
             className={`ml-auto inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${
               deleteMode
-                ? 'bg-red-600 text-white border-red-600 hover:bg-red-700'
+                ? 'bg-gray-800 text-white border-gray-800 hover:bg-gray-900'
                 : 'text-red-600 border-red-200 hover:bg-red-50'
             }`}
           >
             <Trash2 className="h-3.5 w-3.5" />
-            {deleteMode ? 'Done' : 'Delete Images'}
+            {deleteMode ? 'Cancel' : 'Delete Images'}
           </button>
         )}
       </div>
 
+      {/* Bulk action bar */}
       {deleteMode && (
-        <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-          Delete mode on — click any image to remove it. This can&apos;t be undone. Click &quot;Done&quot; when finished.
-        </p>
+        <div className="flex items-center gap-3 flex-wrap bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          <span className="text-sm font-medium text-red-700">{selected.size} selected</span>
+          <button
+            onClick={() => setSelected(new Set(allShownIds))}
+            className="text-xs font-medium text-gray-700 border border-gray-300 rounded px-2 py-1 hover:bg-white"
+          >
+            Select all ({allShownIds.length})
+          </button>
+          {selected.size > 0 && (
+            <button
+              onClick={() => setSelected(new Set())}
+              className="text-xs font-medium text-gray-700 border border-gray-300 rounded px-2 py-1 hover:bg-white"
+            >
+              Clear
+            </button>
+          )}
+          <button
+            onClick={deleteSelected}
+            disabled={selected.size === 0 || deleting}
+            className="ml-auto inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded px-3 py-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+            Delete selected{selected.size > 0 ? ` (${selected.size})` : ''}
+          </button>
+        </div>
       )}
 
       {/* Variant cards grid */}
@@ -274,14 +324,9 @@ export function ColourVariantsTab({ variants, files, profile }: ColourVariantsTa
             key={`${variant.styleName || variant.colourTag}-${i}`}
             variant={variant}
             deleteMode={isAdmin && deleteMode}
-            images={
-              // Match by styleName first (new uploads tag images with the full style name
-              // to avoid cross-design bleed when two designs share the same colour code).
-              // Fall back to colourTag for images uploaded before this change.
-              filesByColor.get(variant.styleName) ||
-              filesByColor.get(variant.colourTag) ||
-              []
-            }
+            selected={selected}
+            onToggle={toggle}
+            images={imagesForVariant(variant)}
           />
         ))}
       </div>
@@ -293,11 +338,4 @@ export function ColourVariantsTab({ variants, files, profile }: ColourVariantsTa
       )}
     </div>
   )
-}
-
-function isLightColor(hex: string): boolean {
-  const r = parseInt(hex.slice(1, 3), 16)
-  const g = parseInt(hex.slice(3, 5), 16)
-  const b = parseInt(hex.slice(5, 7), 16)
-  return (r * 299 + g * 587 + b * 114) / 1000 > 160
 }

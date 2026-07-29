@@ -2,14 +2,13 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Download, Loader2, Lock, Save, Plus, X, Upload, FileSpreadsheet, CheckCircle2, AlertCircle, UserCheck, Send, Printer } from 'lucide-react'
+import { Download, Loader2, Lock, Upload, FileSpreadsheet, CheckCircle2, AlertCircle, UserCheck, Send, Printer } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createClient } from '@/lib/supabase/client'
-import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { parseMerchExcel, filterSkusForProduct, aggregateMerchFields, buildColourVariants, extractProductBaseName } from '@/lib/parse-merch-excel'
 import { ColourVariantsTab } from './colour-variants-tab'
 import type { Product, Profile, MerchandisingData, DesignData, ProductFile } from '@/lib/types'
@@ -75,7 +74,6 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
   const isHead = ['admin', 'merchandising_head'].includes(profile.role)
   const isAssigned = data?.assigned_to === profile.id
   const isSubmitted = !!data?.attribute_sheet_handed_over
-  const isAtMerchStage = product.workflow_stage === 'merchandising_completed'
   // Upload is available as long as the data isn't locked/completed:
   // head can always upload; assigned team member can re-upload at any time (even after submitting)
   const canUploadExcel = !data?.is_locked && !data?.is_completed && (
@@ -87,9 +85,9 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
   const canEditFormFields = !data?.is_locked && !data?.is_completed && (
     isHead || (isTeamMember && isAssigned)
   )
-  const showActions = !data?.is_locked && isHead && isAtMerchStage
-  // Attribute form visible to head and assigned team member (read-only for team)
-  const showAttributeForm = isHead || (isTeamMember && isAssigned) || !!data?.is_completed
+  // Head/admin can always act — previously this also required the product to be
+  // sitting at the merchandising stage, which hid the Submit to BOM button entirely.
+  const showActions = !data?.is_locked && isHead
 
   const [activeVersion, setActiveVersion] = useState<'attribute' | 'production'>('attribute')
   const [attrForm, setAttrForm] = useState<FormState>(() => initForm(data))
@@ -111,11 +109,9 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
 
   const form = activeVersion === 'attribute' ? attrForm : prodForm
   const setForm = activeVersion === 'attribute' ? setAttrForm : setProdForm
-  const [newMaterial, setNewMaterial] = useState('')
   const [saving, setSaving] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [confirmProductName, setConfirmProductName] = useState(product.display_name || product.name || '')
-  const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [assignedTo, setAssignedTo] = useState(data?.assigned_to || '')
   const [savingAssign, setSavingAssign] = useState(false)
@@ -131,45 +127,6 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
     version_saved?: 'attribute' | 'production'
     sheet_names?: string[]
   } | null>(null)
-
-  function set(field: keyof FormState, value: unknown) {
-    setForm(f => ({ ...f, [field]: value }))
-  }
-
-  async function handleSave() {
-    setSaving(true)
-    setSaveError('')
-    const supabase = createClient()
-    let versionLabel: 'attribute' | 'production'
-
-    if (activeVersion === 'production') {
-      const { error } = await supabase.from('merchandising_data').update({ production_fields: form, updated_by: profile.id }).eq('product_id', product.id)
-      if (error) { setSaveError(error.message); setSaving(false); return }
-      setProdForm({ ...form })
-      setHasProd(true)
-      versionLabel = 'production'
-    } else {
-      const { error } = await supabase.from('merchandising_data').update({ ...attrForm, updated_by: profile.id }).eq('product_id', product.id)
-      if (error) { setSaveError(error.message); setSaving(false); return }
-      versionLabel = 'attribute'
-      // First manual edit on attribute: also create production as a copy, then switch to it
-      if (!hasProd) {
-        await supabase.from('merchandising_data').update({ production_fields: attrForm, updated_by: profile.id }).eq('product_id', product.id)
-        setProdForm({ ...attrForm })
-        setHasProd(true)
-        setActiveVersion('production')
-        versionLabel = 'production'
-      }
-    }
-
-    await supabase.from('activity_logs').insert({
-      product_id: product.id, user_id: profile.id,
-      action: `updated merchandising data (${versionLabel})`, department: 'merchandising',
-    })
-    setSaving(false)
-    setSaved(true)
-    setTimeout(() => { setSaved(false); router.refresh() }, 2000)
-  }
 
   async function handleExcelUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -356,21 +313,37 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
 
       // Upload images via the server-side API (Cloudinary) — direct Supabase Storage
       // client uploads are blocked by bucket RLS for the merchandising role.
-      for (let i = 0; i < imagesToUpload.length; i++) {
-        const img = imagesToUpload[i]
-        setUploadProgress(`Uploading images (${i + 1}/${imagesToUpload.length})...`)
-        const fd = new FormData()
-        fd.append('file', new Blob([img.bytes as BlobPart], { type: img.mimeType }), img.name)
-        fd.append('folder', product.id)
-        const res = await fetch('/api/upload-file', { method: 'POST', body: fd })
-        if (!res.ok) { errors.push(`Image failed: ${img.name}`); continue }
-        const { url } = await res.json()
-        fileRecords.push({
-          product_id: product.id, name: img.name, file_url: url,
-          file_type: img.mimeType, file_size: img.bytes.length,
-          department: 'merchandising', uploaded_by: profile.id, colour_tag: img.colourTag,
-        })
-        images_uploaded++
+      // Upload in parallel batches — sheets carry 40+ photos and one-at-a-time
+      // uploads were the main cause of the long wait. The server compresses each
+      // image to WebP, so the stored/delivered files are much smaller too.
+      const BATCH = 6
+      let done = 0
+      for (let i = 0; i < imagesToUpload.length; i += BATCH) {
+        const batch = imagesToUpload.slice(i, i + BATCH)
+        const results = await Promise.all(batch.map(async img => {
+          const fd = new FormData()
+          fd.append('file', new Blob([img.bytes as BlobPart], { type: img.mimeType }), img.name)
+          fd.append('folder', product.id)
+          try {
+            const res = await fetch('/api/upload-image', { method: 'POST', body: fd })
+            if (!res.ok) return { img, url: null as string | null }
+            const { url } = await res.json()
+            return { img, url: url as string }
+          } catch {
+            return { img, url: null as string | null }
+          }
+        }))
+        for (const { img, url } of results) {
+          if (!url) { errors.push(`Image failed: ${img.name}`); continue }
+          fileRecords.push({
+            product_id: product.id, name: img.name, file_url: url,
+            file_type: img.mimeType, file_size: img.bytes.length,
+            department: 'merchandising', uploaded_by: profile.id, colour_tag: img.colourTag,
+          })
+          images_uploaded++
+        }
+        done += batch.length
+        setUploadProgress(`Uploading images (${Math.min(done, imagesToUpload.length)}/${imagesToUpload.length})...`)
       }
 
       setUploadProgress('Saving records...')
@@ -531,23 +504,6 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
     router.refresh()
   }
 
-  const F = ({ label, field, placeholder, half }: { label: string; field: keyof FormState; placeholder?: string; half?: boolean }) => (
-    <div className={`space-y-1.5 ${half ? '' : ''}`}>
-      <Label className="text-xs">{label}</Label>
-      <Input
-        placeholder={placeholder || ''}
-        value={(form[field] as string) || ''}
-        onChange={e => set(field, e.target.value)}
-        disabled={!canEditFormFields}
-        className="h-8 text-sm"
-      />
-    </div>
-  )
-
-  const designVariants: any[] = (designData?.variants || []).filter(
-    (v: any) => v && (v.sample_color || v.farma || v.style_name || (Array.isArray(v.color_skus) && v.color_skus.length > 0))
-  )
-
   return (
     <div className="max-w-3xl space-y-4">
 
@@ -564,14 +520,6 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
         </Button>
       </div>
 
-      {/* Colour-wise attribute sheets — each design with its name, specs & images.
-          Replaces the separate Colours tab. */}
-      {data?.colour_variants && data.colour_variants.length > 0 && (
-        <div>
-          <h3 className="text-sm font-semibold text-gray-800 mb-2">Colour-wise Attribute Sheets</h3>
-          <ColourVariantsTab variants={data.colour_variants} files={files} profile={profile} />
-        </div>
-      )}
 
       {/* Head: Assignment Card */}
       {isHead && (
@@ -661,14 +609,6 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
         )
       )}
 
-      {/* Placeholder for other roles before completion */}
-      {!showAttributeForm && !isTeamMember && (
-        <Card>
-          <CardContent className="py-8 text-center">
-            <p className="text-sm text-gray-400">Attribute sheet will be visible here once the merchandising head marks it complete.</p>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Excel Upload Card — team member (before submit) and head */}
       {canUploadExcel && (
@@ -742,28 +682,14 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
         </Card>
       )}
 
-      {showAttributeForm && <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-0">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setActiveVersion('attribute')}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeVersion === 'attribute' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:text-gray-700'}`}
-            >
-              Attribute
-            </button>
-            <button
-              onClick={() => hasProd && setActiveVersion('production')}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${!hasProd ? 'text-gray-300 cursor-not-allowed' : activeVersion === 'production' ? 'bg-amber-100 text-amber-700' : 'text-gray-500 hover:text-gray-700'}`}
-              title={!hasProd ? 'No production version yet — re-upload the Excel to create one' : undefined}
-            >
-              Production
-            </button>
-          </div>
-          <div className="flex items-center gap-2">
+      {/* Actions — export + hand off to BOM */}
+      {showActions && (
+        <Card>
+          <CardContent className="py-3 flex items-center gap-3 flex-wrap">
             <a
               href={`/api/export-merchandising-techpack?product_id=${product.id}`}
               download
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 border border-blue-200 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 border border-blue-200 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg transition-colors"
             >
               <Download className="h-3.5 w-3.5" />
               Export Excel
@@ -773,152 +699,37 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
                 <Lock className="h-3 w-3" /> Stage Locked
               </span>
             )}
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-5">
+            {saveError && (
+              <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{saveError}</p>
+            )}
+            {!data?.is_completed && (
+              <Button
+                className="ml-auto bg-green-600 hover:bg-green-700"
+                onClick={() => setConfirmOpen(true)}
+                disabled={saving || !(data?.colour_variants && data.colour_variants.length > 0)}
+                title={!(data?.colour_variants && data.colour_variants.length > 0) ? 'Upload the attribute Excel first' : 'Submit to the BOM team'}
+              >
+                <Send className="h-4 w-4" />
+                Submit to BOM
+              </Button>
+            )}
+            {data?.is_completed && (
+              <span className="ml-auto inline-flex items-center gap-1.5 text-xs font-medium text-green-700">
+                <CheckCircle2 className="h-4 w-4" /> Submitted to BOM
+              </span>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
-          {/* Product Info */}
-          <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Product Info</p>
-            <div className="grid grid-cols-2 gap-3">
-              {F({ label: "Season + Year", field: "season_year", placeholder: "e.g. BTS - 2026" })}
-              {F({ label: "Color Code", field: "color_code", placeholder: "e.g. NBL" })}
-            </div>
-          </div>
-
-          {/* Dimensions & Weight */}
-          <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Dimensions & Weight</p>
-            <div className="grid grid-cols-4 gap-2 mb-3">
-              {(['length', 'width', 'height'] as const).map((dim) => (
-                <div key={dim} className="space-y-1">
-                  <p className="text-xs text-gray-500">{dim === 'length' ? 'L (in)' : dim === 'width' ? 'W (in)' : 'D (in)'}</p>
-                  <Input
-                    placeholder="0"
-                    value={(form.dimensions as Record<string, string>)[dim] || ''}
-                    onChange={e => set('dimensions', { ...form.dimensions, [dim]: e.target.value })}
-                    disabled={!canEditFormFields}
-                    className="h-8 text-sm"
-                  />
-                </div>
-              ))}
-              <div className="space-y-1">
-                <p className="text-xs text-gray-500">Unit</p>
-                <Input
-                  placeholder="inches"
-                  value={form.dimensions?.unit || ''}
-                  onChange={e => set('dimensions', { ...form.dimensions, unit: e.target.value })}
-                  disabled={!canEditFormFields}
-                  className="h-8 text-sm"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              {F({ label: "Weight (gm)", field: "weight", placeholder: "e.g. 880" })}
-              {F({ label: "Volume", field: "volume", placeholder: "e.g. 28L" })}
-            </div>
-          </div>
-
-          {/* Compartments */}
-          <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Compartments & Zips</p>
-            <div className="grid grid-cols-3 gap-3">
-              {F({ label: "Main Compartments", field: "main_compartments", placeholder: "e.g. 2" })}
-              {F({ label: "Pocket Compartments", field: "pocket_compartments", placeholder: "e.g. 3" })}
-              {F({ label: "Number of Zips", field: "number_of_zips", placeholder: "e.g. 5" })}
-              {F({ label: "Laptop Compartment", field: "laptop_compartment", placeholder: "YES / NO" })}
-              {F({ label: "Bottle Slots", field: "bottle_slot", placeholder: "e.g. 2" })}
-              {F({ label: "Rain Cover", field: "rain_cover", placeholder: "YES / NO" })}
-            </div>
-          </div>
-
-          {/* Construction */}
-          <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Construction & Features</p>
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              {F({ label: "Back Padded", field: "back_padded", placeholder: "YES / NO" })}
-              {F({ label: "Unique Purpose", field: "unique_purpose", placeholder: "e.g. EXTENSION" })}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              {F({ label: "Character", field: "character_name", placeholder: "e.g. NA" })}
-              {F({ label: "Theme", field: "theme", placeholder: "e.g. NA" })}
-            </div>
-          </div>
-
-          {/* Materials */}
-          <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Materials</p>
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              {F({ label: "Main Material", field: "main_material", placeholder: "e.g. PVC POLYSTER" })}
-              {F({ label: "Material Spec", field: "material_spec", placeholder: "e.g. 1680" })}
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Additional Materials</Label>
-              <div className="flex flex-wrap gap-2 mb-2">
-                {form.materials.map((m, i) => (
-                  <span key={i} className="flex items-center gap-1 bg-blue-50 text-blue-700 text-xs px-2.5 py-1 rounded-full">
-                    {m}
-                    {canEditFormFields && (
-                      <button onClick={() => set('materials', form.materials.filter((_, j) => j !== i))}>
-                        <X className="h-3 w-3 hover:text-red-500" />
-                      </button>
-                    )}
-                  </span>
-                ))}
-              </div>
-              {canEditFormFields && (
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Add material..."
-                    value={newMaterial}
-                    onChange={e => setNewMaterial(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' && newMaterial.trim()) {
-                        set('materials', [...form.materials, newMaterial.trim()])
-                        setNewMaterial('')
-                      }
-                    }}
-                    className="h-8 text-sm"
-                  />
-                  <Button type="button" variant="outline" size="icon" className="h-8 w-8"
-                    onClick={() => { if (newMaterial.trim()) { set('materials', [...form.materials, newMaterial.trim()]); setNewMaterial('') } }}
-                  >
-                    <Plus className="h-3 w-3" />
-                  </Button>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {saveError && (
-            <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{saveError}</p>
-          )}
-          {saved && (
-            <p className="text-sm text-green-600 bg-green-50 border border-green-200 rounded-lg px-3 py-2">Changes saved.</p>
-          )}
-          {showActions && (
-            <div className="flex items-center gap-3 pt-2 border-t border-gray-100">
-              {canEditFormFields && (
-                <Button onClick={handleSave} disabled={saving}>
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  Save Changes
-                </Button>
-              )}
-              {!data?.is_completed && (
-                <Button
-                  onClick={() => setConfirmOpen(true)}
-                  disabled={saving || !(data?.weight || (data?.colour_variants && data.colour_variants.length > 0))}
-                  className="bg-green-600 hover:bg-green-700"
-                  title={!(data?.weight || (data?.colour_variants && data.colour_variants.length > 0)) ? 'Upload the attribute Excel first' : 'Submit to the BOM team'}
-                >
-                  <Send className="h-4 w-4" />
-                  Submit to BOM
-                </Button>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>}
+      {/* Colour-wise attribute sheets — each design with its name, specs & images.
+          Replaces the separate Colours tab. */}
+      {data?.colour_variants && data.colour_variants.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-gray-800 mb-2">Colour-wise Attribute Sheets</h3>
+          <ColourVariantsTab variants={data.colour_variants} files={files} profile={profile} />
+        </div>
+      )}
       {/* Custom confirm with compulsory product name */}
       {confirmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">

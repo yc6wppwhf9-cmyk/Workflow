@@ -28,12 +28,34 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'File must be under 20 MB' }, { status: 400 })
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer())
+  let buffer = Buffer.from(await file.arrayBuffer())
   const isPdf = file.type === 'application/pdf'
+  let outFile = file
+
+  // Compress images to WebP before storing — merch sheets carry 40+ photos and
+  // the raw JPEG/PNG bytes make uploads slow. WebP is typically 25-60% smaller.
+  if (!isPdf) {
+    try {
+      const sharp = (await import('sharp')).default
+      const webp = await sharp(buffer)
+        .rotate()                                  // honour EXIF orientation
+        .resize({ width: 2000, withoutEnlargement: true })
+        .webp({ quality: 80 })
+        .toBuffer()
+      // Only take it if it actually helps
+      if (webp.length > 0 && webp.length < buffer.length) {
+        buffer = Buffer.from(webp)
+        const webpName = file.name.replace(/\.[^.]+$/, '') + '.webp'
+        outFile = new File([new Uint8Array(buffer)], webpName, { type: 'image/webp' })
+      }
+    } catch {
+      // sharp unavailable or unsupported input — fall back to the original bytes
+    }
+  }
 
   // PDFs and fallback (no Cloudinary) → store in Supabase Storage
   if (isPdf || !cloudinaryConfigured()) {
-    const { url, public_id } = await uploadToSupabaseStorage(buffer, file, safeFolder(folder))
+    const { url, public_id } = await uploadToSupabaseStorage(buffer, outFile, safeFolder(folder))
     return NextResponse.json({ url, public_id })
   }
 

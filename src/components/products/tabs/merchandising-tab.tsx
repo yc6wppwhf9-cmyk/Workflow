@@ -89,6 +89,11 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
   // Head/admin can always act — previously this also required the product to be
   // sitting at the merchandising stage, which hid the Submit to BOM button entirely.
   const showActions = !data?.is_locked && isHead
+  // "Submitted" must reflect the real workflow stage, not merchandising_data's
+  // is_completed flag — an earlier submit could set the flag while the stage
+  // advance was skipped, leaving no way to actually hand off to BOM.
+  const handedOffToBom = ['bom_finalized', 'costing_naming', 'marketing_ready', 'sales_priced', 'product_live']
+    .includes(product.workflow_stage)
 
   const [activeVersion, setActiveVersion] = useState<'attribute' | 'production'>('attribute')
   const [attrForm, setAttrForm] = useState<FormState>(() => initForm(data))
@@ -485,7 +490,6 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
   }
 
   async function markComplete() {
-    const becomingComplete = !data?.is_completed
     setSaving(true)
     const supabase = createClient()
 
@@ -501,13 +505,13 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
     }
 
     await supabase.from('merchandising_data').update({
-      ...attrForm, is_completed: becomingComplete, updated_by: profile.id,
+      ...attrForm, is_completed: true, updated_by: profile.id,
     }).eq('product_id', product.id)
 
-    // Hand off to BOM regardless of the current stage — this was gated on the
-    // product already sitting at merchandising_completed, so submitting from an
-    // earlier stage silently skipped both the advance and the BOM email.
-    if (becomingComplete) {
+    // Always hand off — this used to be gated on is_completed flipping false→true
+    // and on the product already sitting at merchandising_completed, so a retry
+    // (or a submit from an earlier stage) silently skipped the advance + email.
+    {
       await supabase.rpc('advance_product_stage', {
         p_product_id: product.id,
         p_next_stage: 'bom_finalized',
@@ -727,7 +731,7 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
             {saveError && (
               <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{saveError}</p>
             )}
-            {!data?.is_completed && (
+            {!handedOffToBom && (
               <Button
                 className="ml-auto bg-green-600 hover:bg-green-700"
                 onClick={() => setConfirmOpen(true)}
@@ -735,10 +739,10 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
                 title={!(data?.colour_variants && data.colour_variants.length > 0) ? 'Upload the attribute Excel first' : 'Submit to the BOM team'}
               >
                 <Send className="h-4 w-4" />
-                Submit to BOM
+                {data?.is_completed ? 'Submit to BOM (retry)' : 'Submit to BOM'}
               </Button>
             )}
-            {data?.is_completed && (
+            {handedOffToBom && (
               <div className="ml-auto flex items-center gap-2">
                 <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700">
                   <CheckCircle2 className="h-4 w-4" /> Submitted to BOM

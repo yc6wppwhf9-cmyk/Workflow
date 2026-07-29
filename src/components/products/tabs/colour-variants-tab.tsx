@@ -11,6 +11,7 @@ interface ColourVariantsTabProps {
   variants: ColourVariant[]
   files: ProductFile[]
   profile: Profile
+  productId?: string
 }
 
 function ColorCard({
@@ -208,9 +209,40 @@ function ColorCard({
   )
 }
 
-export function ColourVariantsTab({ variants, files, profile }: ColourVariantsTabProps) {
+export function ColourVariantsTab({ variants, files, profile, productId }: ColourVariantsTabProps) {
   const router = useRouter()
   const isAdmin = profile.role === 'admin'
+  const canRemoveVariant = ['admin', 'merchandising_head'].includes(profile.role)
+  const [removing, setRemoving] = useState<string | null>(null)
+
+  // Remove a bogus variant entry (and optionally its images) without re-uploading.
+  async function removeVariant(v: ColourVariant, imgs: ProductFile[]) {
+    if (!productId) return
+    const label = v.styleName || v.colourTag
+    if (!window.confirm(`Remove "${label}" and its ${imgs.length} image(s)? This cannot be undone.`)) return
+    setRemoving(label)
+    try {
+      if (imgs.length > 0) {
+        await fetch('/api/delete-images', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: imgs.map(i => i.id) }),
+        })
+      }
+      const res = await fetch('/api/remove-colour-variant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: productId, style_name: v.styleName, colour_tag: v.colourTag }),
+      })
+      if (!res.ok) throw new Error('Failed')
+      toast.success(`Removed "${label}"`)
+      router.refresh()
+    } catch {
+      toast.error('Could not remove variant')
+    } finally {
+      setRemoving(null)
+    }
+  }
   const [deleteMode, setDeleteMode] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)
@@ -382,18 +414,32 @@ export function ColourVariantsTab({ variants, files, profile }: ColourVariantsTa
             </span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {junkVariants.map((variant, i) => (
-              <div key={`junk-${i}`} className="ring-2 ring-amber-300 rounded-xl">
-                <ColorCard
-                  variant={variant}
-                  deleteMode={isAdmin && deleteMode}
-                  selected={selected}
-                  onToggle={toggle}
-                  onSelectMany={selectMany}
-                  images={imagesForVariant(variant)}
-                />
-              </div>
-            ))}
+            {junkVariants.map((variant, i) => {
+              const imgs = imagesForVariant(variant)
+              const label = variant.styleName || variant.colourTag
+              return (
+                <div key={`junk-${i}`} className="ring-2 ring-amber-300 rounded-xl relative">
+                  <ColorCard
+                    variant={variant}
+                    deleteMode={isAdmin && deleteMode}
+                    selected={selected}
+                    onToggle={toggle}
+                    onSelectMany={selectMany}
+                    images={imgs}
+                  />
+                  {canRemoveVariant && productId && (
+                    <button
+                      onClick={() => removeVariant(variant, imgs)}
+                      disabled={removing === label}
+                      className="absolute top-2 right-2 inline-flex items-center gap-1 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded px-2 py-1 disabled:opacity-60"
+                    >
+                      {removing === label ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                      Remove
+                    </button>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

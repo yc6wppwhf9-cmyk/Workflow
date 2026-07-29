@@ -727,7 +727,7 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
       {data?.colour_variants && data.colour_variants.length > 0 && (
         <div>
           <h3 className="text-sm font-semibold text-gray-800 mb-2">Colour-wise Attribute Sheets</h3>
-          <ColourVariantsTab variants={data.colour_variants} files={files} profile={profile} />
+          <ColourVariantsTab variants={data.colour_variants} files={files} profile={profile} productId={product.id} />
         </div>
       )}
       {/* Custom confirm with compulsory product name */}

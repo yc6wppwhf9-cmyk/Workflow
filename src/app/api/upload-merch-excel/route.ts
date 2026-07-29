@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { matchConsumptionToBom } from '@/lib/parse-cutting-sheet'
+import { isPlaceholderVariant } from '@/lib/types'
 
 // This route receives pre-parsed JSON from the browser.
 // The browser handles: Excel parsing, image extraction, Supabase Storage uploads.
@@ -102,8 +103,12 @@ export async function POST(req: NextRequest) {
   if (enrichedVariants.length > 0) {
     const { data: existingMD } = await adminSupabase
       .from('merchandising_data').select('colour_variants').eq('product_id', product_id).single()
+    // Drop previously-imported placeholder/label variants (e.g. "POCKET
+    // COMPARTMENT" from a blank template column) so a re-upload cleans them out
+    // instead of preserving them forever.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const existing: any[] = ((existingMD?.colour_variants as any[]) || [])
+      .filter(v => !isPlaceholderVariant(v))
     const keyOf = (v: { styleName?: string; colourTag?: string }) =>
       String(v.styleName || v.colourTag || '').toLowerCase().trim()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

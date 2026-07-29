@@ -8,12 +8,14 @@ import { type WorkflowStage, type UserRole } from '@/lib/types'
 import type { Profile } from '@/lib/types'
 import { KpiCard } from './_shared'
 
-const DEPT_CONFIG: Record<string, { stage: WorkflowStage; dataTable: string; label: string; tab: string; color: string }> = {
-  sampling:           { stage: 'design_completed',        dataTable: 'sampling_data',      label: 'Sampling',      tab: 'sampling',      color: 'bg-cyan-50 [&>svg]:text-cyan-600' },
-  merchandising:      { stage: 'merchandising_completed', dataTable: 'merchandising_data', label: 'Merchandising', tab: 'merchandising', color: 'bg-blue-50 [&>svg]:text-blue-600' },
-  merchandising_head: { stage: 'sampling_completed',      dataTable: 'merchandising_data', label: 'Merchandising', tab: 'merchandising', color: 'bg-teal-50 [&>svg]:text-teal-600' },
-  bom:                { stage: 'bom_finalized',           dataTable: 'bom_data',           label: 'BOM',           tab: 'bom',           color: 'bg-orange-50 [&>svg]:text-orange-600' },
-  marketing:          { stage: 'marketing_ready',         dataTable: 'marketing_data',     label: 'Marketing',     tab: 'marketing',     color: 'bg-yellow-50 [&>svg]:text-yellow-600' },
+// `stages` — a department can own more than one stage (BOM also owns the
+// Costing & Naming gate, so those products must stay on their dashboard).
+const DEPT_CONFIG: Record<string, { stages: WorkflowStage[]; dataTable: string; label: string; tab: string; color: string }> = {
+  sampling:           { stages: ['design_completed'],                    dataTable: 'sampling_data',      label: 'Sampling',      tab: 'sampling',      color: 'bg-cyan-50 [&>svg]:text-cyan-600' },
+  merchandising:      { stages: ['merchandising_completed'],             dataTable: 'merchandising_data', label: 'Merchandising', tab: 'merchandising', color: 'bg-blue-50 [&>svg]:text-blue-600' },
+  merchandising_head: { stages: ['sampling_completed'],                  dataTable: 'merchandising_data', label: 'Merchandising', tab: 'merchandising', color: 'bg-teal-50 [&>svg]:text-teal-600' },
+  bom:                { stages: ['bom_finalized', 'costing_naming'],     dataTable: 'bom_data',           label: 'BOM',           tab: 'bom',           color: 'bg-orange-50 [&>svg]:text-orange-600' },
+  marketing:          { stages: ['marketing_ready'],                     dataTable: 'marketing_data',     label: 'Marketing',     tab: 'marketing',     color: 'bg-yellow-50 [&>svg]:text-yellow-600' },
 }
 
 export async function DepartmentDashboard({ profile, filter }: { profile: Profile; filter?: string }) {
@@ -37,7 +39,7 @@ export async function DepartmentDashboard({ profile, filter }: { profile: Profil
     supabase.from('products')
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .select(`id, name, sku, workflow_stage, created_at, dept_data:${cfg.dataTable}(is_completed, updated_at), sales_data(deadline_date), design_data(color_skus)` as any)
-      .eq('workflow_stage', cfg.stage)
+      .in('workflow_stage', cfg.stages)
       .order('created_at', { ascending: false }),
     supabase.from('activity_logs')
       .select('*, user:profiles(full_name), product:products(name)')

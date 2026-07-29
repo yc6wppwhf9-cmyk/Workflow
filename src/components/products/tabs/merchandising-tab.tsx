@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Download, Loader2, Lock, Save, Plus, X, Upload, FileSpreadsheet, CheckCircle2, AlertCircle, UserCheck, Send, Printer } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -96,6 +96,18 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
     data?.production_fields ? initForm(data.production_fields as unknown as Parameters<typeof initForm>[0]) : initForm(null)
   )
   const [hasProd, setHasProd] = useState(!!data?.production_fields)
+
+  // Re-sync the form when the saved record actually changes (e.g. after an Excel
+  // upload + router.refresh). Without this the useState seed stays stale and the
+  // tab looks blank right after uploading. Keyed on updated_at so it doesn't
+  // clobber in-progress edits (which don't change updated_at until saved).
+  useEffect(() => {
+    setAttrForm(initForm(data))
+    setProdForm(data?.production_fields ? initForm(data.production_fields as unknown as Parameters<typeof initForm>[0]) : initForm(null))
+    setHasProd(!!data?.production_fields)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.updated_at])
+
   const form = activeVersion === 'attribute' ? attrForm : prodForm
   const setForm = activeVersion === 'attribute' ? setAttrForm : setProdForm
   const [newMaterial, setNewMaterial] = useState('')

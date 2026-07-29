@@ -194,6 +194,33 @@ export function BomTab({ product, profile, data, merchandisingData, bomUsers = [
   const fgSaved = !!data?.fg_inv_code
   const activeVariant = colourVariants.find((v, i) => variantKey(v, i) === activeColour) || colourVariants[0] || null
 
+  // Correcting a component's name in the ERP item master (BOM team only)
+  const canEditMaster = isRoleAllowed
+  const [editingItem, setEditingItem] = useState<string | null>(null)
+  const [itemNameDraft, setItemNameDraft] = useState('')
+  const [savingItem, setSavingItem] = useState(false)
+
+  async function saveItemName(invCode: string) {
+    const name = itemNameDraft.trim()
+    if (!name) return
+    setSavingItem(true)
+    try {
+      const res = await fetch('/api/update-item-master', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inv_code: invCode, item_name: name, product_id: product.id }),
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed')
+      toast.success('Item master updated — re-upload the sheet to refresh this BOM')
+      setEditingItem(null)
+      router.refresh()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not update item master')
+    } finally {
+      setSavingItem(false)
+    }
+  }
+
   // Per-design finished-goods INV code — each colourway is its own SKU.
   const [variantInv, setVariantInv] = useState(activeVariant?.fgInvCode || '')
   const [savingVariantInv, setSavingVariantInv] = useState(false)
@@ -517,6 +544,14 @@ export function BomTab({ product, profile, data, merchandisingData, bomUsers = [
                 })}
               </div>
 
+              {activeVariant && (activeVariant.bomItems || []).some(i => i.excel_name) && (
+                <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  <strong>{(activeVariant.bomItems || []).filter(i => i.excel_name).length} item(s)</strong> have a name in the
+                  merchandising Excel that doesn&apos;t match the item master. The master name is shown — check the INV code is
+                  right, or correct the master name using the tag icon.
+                </div>
+              )}
+
               {activeVariant && (
                 <div className="rounded-lg border border-gray-200 overflow-hidden">
                   <div className="bg-gray-50 px-3 py-2 border-b border-gray-200 flex items-center justify-between gap-3 flex-wrap">
@@ -550,7 +585,50 @@ export function BomTab({ product, profile, data, merchandisingData, bomUsers = [
                       {(activeVariant.bomItems || []).map((item, i) => (
                         <tr key={i}>
                           <td className="px-3 py-2 text-xs text-gray-400">{i + 1}</td>
-                          <td className="px-3 py-2 text-sm text-gray-800">{item.inv_name}</td>
+                          <td className="px-3 py-2 text-sm text-gray-800">
+                            {editingItem === item.inv_code ? (
+                              <div className="flex items-center gap-1.5">
+                                <Input
+                                  value={itemNameDraft}
+                                  onChange={e => setItemNameDraft(e.target.value)}
+                                  className="h-7 text-sm"
+                                  autoFocus
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') saveItemName(item.inv_code)
+                                    if (e.key === 'Escape') setEditingItem(null)
+                                  }}
+                                />
+                                <button onClick={() => saveItemName(item.inv_code)}
+                                  className="text-green-600 p-1 rounded hover:bg-green-50">
+                                  {savingItem ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                                </button>
+                                <button onClick={() => setEditingItem(null)}
+                                  className="text-gray-400 p-1 rounded hover:bg-gray-100">
+                                  <XCircle className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="group/it flex items-start gap-1.5">
+                                <div className="min-w-0">
+                                  <span>{item.inv_name}</span>
+                                  {item.excel_name && (
+                                    <span className="block text-[11px] text-amber-700 mt-0.5">
+                                      ⚠ Excel says “{item.excel_name}” — differs from the item master
+                                    </span>
+                                  )}
+                                </div>
+                                {canEditMaster && item.inv_code && (
+                                  <button
+                                    onClick={() => { setEditingItem(item.inv_code); setItemNameDraft(item.inv_name) }}
+                                    title="Edit name in item master"
+                                    className="opacity-0 group-hover/it:opacity-100 transition-opacity text-gray-400 hover:text-blue-600 p-0.5 rounded shrink-0"
+                                  >
+                                    <Tag className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </td>
                           <td className="px-3 py-2 text-sm font-mono text-gray-600">{item.inv_code || <span className="text-gray-300">—</span>}</td>
                           <td className="px-3 py-2 text-sm text-gray-600">{item.consumption || <span className="text-gray-300">—</span>}</td>
                           <td className="px-3 py-2 text-sm text-gray-600">{item.unit || <span className="text-gray-300">—</span>}</td>

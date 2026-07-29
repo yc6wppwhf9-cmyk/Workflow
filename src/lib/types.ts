@@ -243,6 +243,10 @@ export interface BomItem {
   inv_name: string
   consumption: string
   unit: string
+  /** The name as written in the merchandising Excel, kept only when it differs
+   *  from the item_master name — so the mismatch can be flagged instead of
+   *  being silently overwritten by the master lookup. */
+  excel_name?: string
 }
 
 export interface BomData {

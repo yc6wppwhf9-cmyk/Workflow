@@ -79,9 +79,18 @@ export async function POST(req: NextRequest) {
       ...v,
       bomItems: (v.bomItems || []).map((item: { inv_name: string; inv_code: string; consumption: string; unit: string }) => {
         if (item.inv_code && codeMap.has(item.inv_code)) {
-          // MAPPING sheet path: have inv_code, need name + unit from master
+          // MAPPING sheet path: have inv_code, need name + unit from master.
+          // Keep the Excel's own name when it disagrees with the master so the
+          // conflict can be flagged rather than silently overwritten.
           const master = codeMap.get(item.inv_code)!
-          return { ...item, inv_name: master.inv_name || item.inv_name, unit: master.uom || item.unit }
+          const norm = (s: string) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ')
+          const differs = !!master.inv_name && !!item.inv_name && norm(master.inv_name) !== norm(item.inv_name)
+          return {
+            ...item,
+            inv_name: master.inv_name || item.inv_name,
+            unit: master.uom || item.unit,
+            ...(differs ? { excel_name: item.inv_name } : {}),
+          }
         }
         if (item.inv_name) {
           // INV SHEET path: have name, need inv_code + unit from master

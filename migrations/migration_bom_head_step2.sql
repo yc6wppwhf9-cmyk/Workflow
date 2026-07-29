@@ -5,6 +5,7 @@
 -- members (Hemant) fill the BOM and submit it for approval.
 -- Run on production DB (project unuggtqicilzzzxxtizd).
 
+
 -- Assignment + approval tracking on the BOM record
 ALTER TABLE bom_data ADD COLUMN IF NOT EXISTS assigned_to            UUID REFERENCES profiles(id);
 ALTER TABLE bom_data ADD COLUMN IF NOT EXISTS submitted_for_approval BOOLEAN NOT NULL DEFAULT FALSE;

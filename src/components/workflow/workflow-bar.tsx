@@ -43,9 +43,8 @@ export function WorkflowBar({
     { label: 'Design',           doneAfter: 0, tab: 'design'        },
     { label: 'Merchandising',    doneAfter: 1, tab: 'merchandising' },
     { label: 'BOM',              doneAfter: 3, tab: 'bom'           },
-    { label: 'Costing & Naming', doneAfter: 4, tab: 'bom'           },
-    { label: 'Marketing',        doneAfter: 5, tab: 'marketing'     },
-    { label: 'Sales Priced',     doneAfter: 6, tab: 'sales'         },
+    { label: 'Marketing',        doneAfter: 4, tab: 'marketing'     },
+    { label: 'Sales Priced',     doneAfter: 5, tab: 'sales'         },
   ]
 
   const isCurrentStageComplete = () => {

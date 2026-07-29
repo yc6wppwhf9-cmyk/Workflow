@@ -28,3 +28,4 @@ order below (all are idempotent — `IF NOT EXISTS` / `ADD VALUE IF NOT EXISTS`)
 | `migration_remove_draft_stage.sql` | migrates draft products to Design; changes the default |
 | `migration_bom_head_step1_role.sql` | **run alone first** — adds the `bom_head` role |
 | `migration_bom_head_step2.sql` | bom_data assign/approval columns; promotes Tejashree to BOM head |
+| `migration_retire_costing_naming.sql` | moves any product off the retired Costing & Naming stage |

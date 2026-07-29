@@ -348,6 +348,8 @@ export const STAGE_LABELS: Record<WorkflowStage, string> = {
   sampling_completed: 'Sampling',
   merchandising_completed: 'Merchandising',
   bom_finalized: 'BOM',
+  // Retired: BOM approval now advances straight to Marketing. Kept so legacy
+  // rows at this stage still render.
   costing_naming: 'Costing & Naming',
   marketing_ready: 'Marketing',
   sales_priced: 'Sales Priced',

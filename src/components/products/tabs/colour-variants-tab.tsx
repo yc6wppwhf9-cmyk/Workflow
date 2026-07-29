@@ -19,12 +19,14 @@ function ColorCard({
   deleteMode,
   selected,
   onToggle,
+  onSelectMany,
 }: {
   variant: ColourVariant
   images: ProductFile[]
   deleteMode: boolean
   selected: Set<string>
   onToggle: (id: string) => void
+  onSelectMany: (ids: string[], select: boolean) => void
 }) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const hex = getColorHex(variant.colourTag)
@@ -92,6 +94,22 @@ function ColorCard({
           <div className="px-4 py-3 border-t border-gray-100">
             {deleteMode ? (
               /* Delete mode: show ALL images, click to (de)select */
+              <>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-gray-500">{images.length} image{images.length !== 1 ? 's' : ''}</span>
+                {(() => {
+                  const ids = images.map(i => i.id)
+                  const allSel = ids.every(id => selected.has(id))
+                  return (
+                    <button
+                      onClick={() => onSelectMany(ids, !allSel)}
+                      className="text-xs font-medium text-red-600 border border-red-200 rounded px-2 py-0.5 hover:bg-red-50"
+                    >
+                      {allSel ? 'Unselect all' : `Select all ${images.length}`}
+                    </button>
+                  )
+                })()}
+              </div>
               <div className="grid grid-cols-4 gap-1.5">
                 {images.map(img => {
                   const isSel = selected.has(img.id)
@@ -110,6 +128,7 @@ function ColorCard({
                   )
                 })}
               </div>
+              </>
             ) : (
               <div className="grid grid-cols-4 gap-1.5">
                 {images.slice(0, 7).map((img, i) => (
@@ -225,6 +244,14 @@ export function ColourVariantsTab({ variants, files, profile }: ColourVariantsTa
     new Set([...displayVariants, ...junkVariants].flatMap(v => imagesForVariant(v).map(f => f.id))),
   )
 
+  function selectMany(ids: string[], select: boolean) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      for (const id of ids) { if (select) next.add(id); else next.delete(id) }
+      return next
+    })
+  }
+
   function toggle(id: string) {
     setSelected(prev => {
       const next = new Set(prev)
@@ -336,6 +363,7 @@ export function ColourVariantsTab({ variants, files, profile }: ColourVariantsTa
             deleteMode={isAdmin && deleteMode}
             selected={selected}
             onToggle={toggle}
+            onSelectMany={selectMany}
             images={imagesForVariant(variant)}
           />
         ))}
@@ -361,6 +389,7 @@ export function ColourVariantsTab({ variants, files, profile }: ColourVariantsTa
                   deleteMode={isAdmin && deleteMode}
                   selected={selected}
                   onToggle={toggle}
+                  onSelectMany={selectMany}
                   images={imagesForVariant(variant)}
                 />
               </div>

@@ -24,3 +24,7 @@ order below (all are idempotent — `IF NOT EXISTS` / `ADD VALUE IF NOT EXISTS`)
 | `migration_costing_naming.sql` | `costing_naming` stage + `products.product_range` / `md_costing_approved` |
 | `migration_design_merch_remark.sql` | `design_data.merch_remarks` (per-design merch-head remarks) |
 | `migration_addition_work.sql` | `addition_work` table (merch head → BOM Excel + INV reply) |
+| `migration_display_name.sql` | `products.display_name` (Short Name alias) |
+| `migration_remove_draft_stage.sql` | migrates draft products to Design; changes the default |
+| `migration_bom_head_step1_role.sql` | **run alone first** — adds the `bom_head` role |
+| `migration_bom_head_step2.sql` | bom_data assign/approval columns; promotes Tejashree to BOM head |

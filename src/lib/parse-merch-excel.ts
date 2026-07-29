@@ -335,6 +335,19 @@ export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): Pars
   return { skus, bomItems, bomByStyle, bomByColour, cuttingItems, images }
 }
 
+// Strip the trailing design serial so a product named from one sheet (e.g.
+// "CUPCAKE 03", the common prefix of 032–035) still matches later designs in
+// other sheets (040–045). Without this, every design outside the first sheet's
+// numeric prefix was silently dropped as "belongs to another product".
+function familyStem(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[\s-]*\d+\s*$/, '')   // drop a trailing number ("cupcake 03" → "cupcake")
+    .trim()
+}
+
 export function filterSkusForProduct(skus: ParsedSKU[], productName: string): ParsedSKU[] {
   const pn = productName.toLowerCase().replace(/\s+/g, ' ').trim()
   const pnCompact = pn.replace(/\s/g, '')
@@ -344,7 +357,17 @@ export function filterSkusForProduct(skus: ParsedSKU[], productName: string): Pa
     return sn === pn || sn.startsWith(pn) || pn.startsWith(sn) ||
       snCompact === pnCompact || snCompact.startsWith(pnCompact) || pnCompact.startsWith(snCompact)
   })
-  return matched.length > 0 ? matched : skus
+  if (matched.length > 0) {
+    // Also pull in same-family designs whose serial falls outside the product's
+    // prefix (CUPCAKE 040 when the product is "CUPCAKE 03").
+    const stem = familyStem(pn)
+    if (stem.length >= 3) {
+      const byFamily = skus.filter(s => familyStem(normaliseStyleName(s.styleName)).startsWith(stem))
+      if (byFamily.length > matched.length) return byFamily
+    }
+    return matched
+  }
+  return skus
 }
 
 export function extractColorTag(styleName: string, productBaseName: string): string {

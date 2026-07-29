@@ -15,6 +15,7 @@ const DEPT_CONFIG: Record<string, { stages: WorkflowStage[]; dataTable: string; 
   merchandising:      { stages: ['merchandising_completed'],             dataTable: 'merchandising_data', label: 'Merchandising', tab: 'merchandising', color: 'bg-blue-50 [&>svg]:text-blue-600' },
   merchandising_head: { stages: ['sampling_completed'],                  dataTable: 'merchandising_data', label: 'Merchandising', tab: 'merchandising', color: 'bg-teal-50 [&>svg]:text-teal-600' },
   bom:                { stages: ['bom_finalized', 'costing_naming'],     dataTable: 'bom_data',           label: 'BOM',           tab: 'bom',           color: 'bg-orange-50 [&>svg]:text-orange-600' },
+  bom_head:           { stages: ['bom_finalized', 'costing_naming'],     dataTable: 'bom_data',           label: 'BOM',           tab: 'bom',           color: 'bg-orange-50 [&>svg]:text-orange-600' },
   marketing:          { stages: ['marketing_ready'],                     dataTable: 'marketing_data',     label: 'Marketing',     tab: 'marketing',     color: 'bg-yellow-50 [&>svg]:text-yellow-600' },
 }
 

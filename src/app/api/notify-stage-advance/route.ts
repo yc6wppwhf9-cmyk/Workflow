@@ -15,7 +15,7 @@ const NEXT_STAGE_ROLES: Partial<Record<WorkflowStage, UserRole[]>> = {
   design_completed:         ['design_head'],
   sampling_completed:       ['merchandising_head'],
   merchandising_completed:  ['merchandising'],
-  bom_finalized:            ['bom'],
+  bom_finalized:            ['bom', 'bom_head'],
   marketing_ready:          ['marketing_head'],
   sales_priced:             ['admin'],
   product_live:             ['admin'],

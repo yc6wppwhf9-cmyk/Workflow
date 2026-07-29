@@ -115,7 +115,7 @@ export function Sidebar({ profile }: SidebarProps) {
           </>
         )}
 
-        {profile.role === 'bom' && (
+        {['bom', 'bom_head'].includes(profile.role) && (
           <>
             <p className="px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-5 mb-2">My Work</p>
             {navLink('/addition-work', 'Addition Work', FileSpreadsheet)}

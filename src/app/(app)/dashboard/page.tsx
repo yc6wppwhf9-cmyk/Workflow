@@ -6,7 +6,7 @@ import { DesignHeadDashboard } from './_design-head-dashboard'
 import { DepartmentDashboard } from './_department-dashboard'
 import { AdminDashboard }      from './_admin-dashboard'
 
-const DEPT_ROLES = new Set(['sampling', 'merchandising', 'merchandising_head', 'bom', 'marketing'])
+const DEPT_ROLES = new Set(['sampling', 'merchandising', 'merchandising_head', 'bom', 'bom_head', 'marketing'])
 
 export default async function DashboardPage({
   searchParams,

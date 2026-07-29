@@ -5,7 +5,7 @@ import { AdditionWorkClient, type AdditionWorkItem } from './_client'
 
 export default async function AdditionWorkPage() {
   const profile = await getCurrentProfile()
-  if (!profile || !['merchandising_head', 'bom', 'admin'].includes(profile.role)) {
+  if (!profile || !['merchandising_head', 'bom', 'bom_head', 'admin'].includes(profile.role)) {
     redirect('/dashboard')
   }
 
@@ -18,7 +18,7 @@ export default async function AdditionWorkPage() {
     .order('created_at', { ascending: false })
 
   const canUpload  = ['merchandising_head', 'admin'].includes(profile.role)
-  const canRespond = ['bom', 'admin'].includes(profile.role)
+  const canRespond = ['bom', 'bom_head', 'admin'].includes(profile.role)
 
   return (
     <div>

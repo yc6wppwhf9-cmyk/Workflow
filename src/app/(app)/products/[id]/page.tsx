@@ -40,6 +40,7 @@ export default async function ProductPage({
     { data: designers },
     { data: merchandisingUsers },
     { data: samplingUsers },
+    { data: bomUsers },
     { data: activeAssignments },
     { data: comments },
     { data: samplingRounds },
@@ -56,6 +57,7 @@ export default async function ProductPage({
     supabase.from('profiles').select('id, full_name, email').eq('role', 'design').eq('is_active', true).order('full_name'),
     supabase.from('profiles').select('id, full_name, email').eq('role', 'merchandising').eq('is_active', true).order('full_name'),
     supabase.from('profiles').select('id, full_name').eq('role', 'sampling').eq('is_active', true).order('full_name'),
+    supabase.from('profiles').select('id, full_name').eq('role', 'bom').eq('is_active', true).order('full_name'),
     supabase.from('design_data').select('assigned_to').not('assigned_to', 'is', null).neq('is_completed', true),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any).from('product_comments').select('id, message, created_at, user_id, author_name, author_role').eq('product_id', id).order('created_at', { ascending: true }).limit(200),
@@ -122,6 +124,7 @@ export default async function ProductPage({
         designerWorkloads={designerWorkloads}
         merchandisingUsers={merchandisingUsers || []}
         samplingUsers={samplingUsers || []}
+        bomUsers={bomUsers || []}
         samplingRounds={(samplingRounds as unknown as SamplingRound[]) || []}
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         comments={(comments as any) || []}

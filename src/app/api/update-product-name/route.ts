@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
 
     // Renaming the actual product name is restricted (it drives naming/rangewise);
     // the short-name alias is cosmetic and open to any signed-in user.
-    if (wantsName && !['admin', 'marketing', 'marketing_head', 'bom'].includes(profile?.role ?? '')) {
+    if (wantsName && !['admin', 'marketing', 'marketing_head', 'bom', 'bom_head'].includes(profile?.role ?? '')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 

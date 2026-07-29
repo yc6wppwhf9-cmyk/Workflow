@@ -38,7 +38,7 @@ export function OverviewTab({ product, profile, designData, bomData, salesData, 
   const [savingName, setSavingName]   = useState(false)
 
   // Rename the actual product name — same roles the update-product-name API allows.
-  const canRename = ['admin', 'marketing', 'marketing_head', 'bom'].includes(profile.role)
+  const canRename = ['admin', 'marketing', 'marketing_head', 'bom', 'bom_head'].includes(profile.role)
   const [editingProductName, setEditingProductName] = useState(false)
   const [productName, setProductName] = useState(product.name || '')
   const [savingProductName, setSavingProductName] = useState(false)

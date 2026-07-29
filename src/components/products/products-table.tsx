@@ -45,7 +45,7 @@ export function ProductsTable({ products, profile }: ProductsTableProps) {
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
 
   // Inline rename (same roles the update-product-name API allows)
-  const canRename = ['admin', 'marketing', 'marketing_head', 'bom'].includes(profile.role)
+  const canRename = ['admin', 'marketing', 'marketing_head', 'bom', 'bom_head'].includes(profile.role)
   const [renamed, setRenamed] = useState<Record<string, string>>({})
   const [editingId, setEditingId] = useState<string | null>(null)
   const [nameDraft, setNameDraft] = useState('')

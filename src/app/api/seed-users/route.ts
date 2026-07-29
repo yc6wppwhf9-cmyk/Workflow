@@ -17,7 +17,7 @@ const TEAM_MEMBERS = [
   { email: 'sagar.tupe@hscvpl.com',           full_name: 'Sagar Tupe',           role: 'merchandising' },
   { email: 'prasanna.adsule@hscvpl.com',      full_name: 'Prasanna Adsule',      role: 'merchandising' },
   { email: 'vijay.laxmi@hscvpl.com',          full_name: 'Vijay Laxmi',          role: 'merchandising' },
-  { email: 'tejashree.kalsulkar@hscvpl.com',  full_name: 'Tejashree Kalsulkar',  role: 'bom' },
+  { email: 'tejashree.kalsulkar@hscvpl.com',  full_name: 'Tejashree Kalsulkar',  role: 'bom_head' },
   // New sampling team members (specialties: Lokesh = Fitting, Ajeet = Digital Print).
   { email: 'lokesh.bachhav@hscvpl.com',       full_name: 'Lokesh Bachhav',       role: 'sampling' },
   { email: 'ajeet.jaiswar@hscvpl.com',        full_name: 'Ajeet Jaiswar',        role: 'sampling' },

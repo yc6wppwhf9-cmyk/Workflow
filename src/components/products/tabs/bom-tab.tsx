@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Lock, Save, Download, Tag, CheckCircle2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { Loader2, Lock, Save, Download, Tag, CheckCircle2, UserCheck, Send, XCircle } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,12 +17,50 @@ interface BomTabProps {
   profile: Profile
   data: BomData | null
   merchandisingData: MerchandisingData | null
+  bomUsers?: Pick<Profile, 'id' | 'full_name'>[]
 }
 
-export function BomTab({ product, profile, data, merchandisingData }: BomTabProps) {
+export function BomTab({ product, profile, data, merchandisingData, bomUsers = [] }: BomTabProps) {
   const router = useRouter()
-  const isRoleAllowed = ['admin', 'bom'].includes(profile.role)
-  const canEdit = !data?.is_locked && !data?.is_completed && isRoleAllowed
+  const isBomHead = ['admin', 'bom_head'].includes(profile.role)
+  const isBomMember = profile.role === 'bom'
+  const isRoleAllowed = isBomHead || isBomMember
+  const isAssignedToMe = data?.assigned_to === profile.id
+  const isSubmitted = !!data?.submitted_for_approval
+  // Head can always edit; a member only their own assigned BOM, until submitted.
+  const canEdit = !data?.is_locked && !data?.is_completed && (
+    isBomHead || (isBomMember && isAssignedToMe && !isSubmitted)
+  )
+
+  const [assignTo, setAssignTo] = useState(data?.assigned_to || '')
+  const [bomBusy, setBomBusy] = useState(false)
+  const [rejectFeedback, setRejectFeedback] = useState('')
+  const [showReject, setShowReject] = useState(false)
+
+  async function bomAction(action: 'assign' | 'submit' | 'approve' | 'reject', extra?: Record<string, unknown>) {
+    setBomBusy(true)
+    try {
+      const res = await fetch('/api/bom-approval', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: product.id, action, ...extra }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'Failed')
+      const msg = action === 'assign' ? 'BOM assigned'
+        : action === 'submit' ? 'Submitted for approval'
+        : action === 'approve' ? 'BOM approved — moved to Marketing'
+        : 'Sent back for changes'
+      toast.success(msg)
+      setShowReject(false)
+      setRejectFeedback('')
+      router.refresh()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Action failed')
+    } finally {
+      setBomBusy(false)
+    }
+  }
 
   // Skip template placeholders / attribute labels imported as bogus variants
   const colourVariants = (merchandisingData?.colour_variants || []).filter(
@@ -200,6 +239,94 @@ export function BomTab({ product, profile, data, merchandisingData }: BomTabProp
 
   return (
     <div className="max-w-5xl space-y-4">
+
+      {/* ── BOM team workflow: head assigns → member submits → head approves ── */}
+      {isRoleAllowed && !data?.is_completed && (
+        <Card className={isSubmitted ? 'border-amber-300' : 'border-orange-200'}>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <UserCheck className="h-4 w-4 text-orange-600" /> BOM Task
+              {isSubmitted && (
+                <span className="ml-auto text-xs font-medium text-amber-700 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full">
+                  Awaiting approval
+                </span>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+
+            {/* Head: assign to a team member */}
+            {isBomHead && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <Label className="text-sm text-gray-600 shrink-0">Assign to</Label>
+                <select
+                  value={assignTo}
+                  onChange={e => setAssignTo(e.target.value)}
+                  className="h-8 text-sm border border-gray-200 rounded-md px-2 bg-white min-w-[12rem]"
+                >
+                  <option value="">— Unassigned —</option>
+                  {bomUsers.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                </select>
+                <Button size="sm" variant="outline" disabled={bomBusy}
+                  onClick={() => bomAction('assign', { assignee_id: assignTo || null })}>
+                  {bomBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserCheck className="h-3.5 w-3.5" />}
+                  Assign
+                </Button>
+              </div>
+            )}
+            {!isBomHead && data?.assigned_to && (
+              <p className="text-xs text-gray-500">
+                Assigned to: <span className="font-medium text-gray-800">
+                  {bomUsers.find(u => u.id === data.assigned_to)?.full_name ?? (isAssignedToMe ? 'you' : '—')}
+                </span>
+              </p>
+            )}
+
+            {/* Member: submit for approval */}
+            {isBomMember && isAssignedToMe && !isSubmitted && (
+              <div>
+                <p className="text-xs text-gray-500 mb-2">Fill in the BOM below, then send it to the BOM head for approval.</p>
+                <Button size="sm" disabled={bomBusy} onClick={() => bomAction('submit')}>
+                  {bomBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  Submit for Approval
+                </Button>
+              </div>
+            )}
+            {isBomMember && isSubmitted && (
+              <p className="text-sm text-amber-700">Submitted — waiting for the BOM head to approve.</p>
+            )}
+
+            {/* Head: approve or send back */}
+            {isBomHead && isSubmitted && (
+              <div className="pt-2 border-t border-gray-100 space-y-2">
+                <div className="flex gap-2 flex-wrap">
+                  <Button size="sm" className="bg-green-600 hover:bg-green-700" disabled={bomBusy}
+                    onClick={() => bomAction('approve')}>
+                    {bomBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                    Approve &amp; Send to Marketing
+                  </Button>
+                  <Button size="sm" variant="outline" className="text-red-600 border-red-200"
+                    disabled={bomBusy} onClick={() => setShowReject(v => !v)}>
+                    <XCircle className="h-4 w-4" /> Send Back
+                  </Button>
+                </div>
+                {showReject && (
+                  <div className="space-y-2">
+                    <Input placeholder="What needs changing?" value={rejectFeedback}
+                      onChange={e => setRejectFeedback(e.target.value)} className="h-8 text-sm" />
+                    <Button size="sm" variant="outline" className="text-red-600 border-red-200"
+                      disabled={bomBusy || !rejectFeedback.trim()}
+                      onClick={() => bomAction('reject', { feedback: rejectFeedback.trim() })}>
+                      Confirm Send Back
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
 
       {/* ── Costing & Naming gate (Naam Karan + MD costing approval) ──── */}
       {isCostingNamingStage && (

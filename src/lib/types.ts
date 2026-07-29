@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'management' | 'design' | 'design_head' | 'sampling' | 'merchandising' | 'merchandising_head' | 'bom' | 'marketing' | 'marketing_head' | 'sales' | 'viewer' | 'purchase_head'
+export type UserRole = 'admin' | 'management' | 'design' | 'design_head' | 'sampling' | 'merchandising' | 'merchandising_head' | 'bom' | 'bom_head' | 'marketing' | 'marketing_head' | 'sales' | 'viewer' | 'purchase_head'
 
 // The single designated sample approver (replaces management sample approval).
 // Approval rights = admin OR this account.
@@ -246,6 +246,11 @@ export interface BomItem {
 export interface BomData {
   id: string
   product_id: string
+  assigned_to: string | null
+  submitted_for_approval: boolean
+  submitted_at: string | null
+  approved_by: string | null
+  approved_at: string | null
   items: BomItem[] | null
   fg_inv_code: string | null
   cost_given: boolean
@@ -369,6 +374,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   merchandising: 'Merchandising',
   merchandising_head: 'Merchandising Head',
   bom: 'BOM',
+  bom_head: 'BOM Head',
   marketing: 'Marketing',
   marketing_head: 'Marketing Head',
   sales: 'Sales',
@@ -385,6 +391,7 @@ export const ROLE_COLORS: Record<UserRole, string> = {
   merchandising: 'bg-blue-100 text-blue-700',
   merchandising_head: 'bg-teal-200 text-teal-800',
   bom: 'bg-orange-100 text-orange-700',
+  bom_head: 'bg-orange-200 text-orange-800',
   marketing: 'bg-yellow-100 text-yellow-700',
   marketing_head: 'bg-amber-200 text-amber-800',
   sales: 'bg-green-100 text-green-700',

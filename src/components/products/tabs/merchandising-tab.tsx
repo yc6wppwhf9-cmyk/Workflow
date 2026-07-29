@@ -390,28 +390,8 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
 
       if (fileRecords.length > 0) await supabase.from('product_files').insert(fileRecords)
 
-      setUploadProgress('Saving colour variants...')
-      if (colourVariants.length > 0) {
-        // Merge with existing variants using styleName as the unique key.
-        // Design 1 BLK ("CONNECT 001 BLACK") and Design 2 BLK ("CONNECT 002 BLACK") are
-        // different entries — same colourTag, different styleName. Merging by colourTag alone
-        // would wrongly overwrite Design 1's data when Design 2 is uploaded.
-        const { data: existingMD } = await supabase
-          .from('merchandising_data').select('colour_variants').eq('product_id', product.id).single()
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const existing: any[] = (existingMD?.colour_variants as any[]) || []
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const newMap = new Map(colourVariants.map((v: any) => [String(v.styleName || '').toLowerCase().trim(), v]))
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const merged = existing.map((v: any) => newMap.has(String(v.styleName || '').toLowerCase().trim()) ? newMap.get(String(v.styleName || '').toLowerCase().trim()) : v)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        for (const [style, v] of newMap) { if (!existing.some((e: any) => String(e.styleName || '').toLowerCase().trim() === style)) merged.push(v) }
-        await supabase.from('merchandising_data').update({
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          colour_variants: merged as any,
-          updated_by: profile.id,
-        }).eq('product_id', product.id)
-      }
+      // Colour variants are merged server-side (by unique style name) in the
+      // upload API, so every uploaded sheet adds/updates its own designs.
 
       setUploadProgress('Updating product data...')
       const primarySku = relevantSkus[0]

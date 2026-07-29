@@ -28,7 +28,12 @@ export function BomTab({ product, profile, data, merchandisingData }: BomTabProp
     v => !PLACEHOLDER.test((v.colourTag || '').trim())
   )
 
-  const [activeColour, setActiveColour] = useState<string>(colourVariants[0]?.colourTag || '')
+  // Key by styleName, not colourTag — two designs can share a colour (e.g. two
+  // LIGHT PINK), and keying by colour made the second design's BOM unreachable.
+  const variantKey = (v: ColourVariant, i: number) => v.styleName || v.colourTag || `variant-${i}`
+  const [activeColour, setActiveColour] = useState<string>(
+    colourVariants[0] ? (colourVariants[0].styleName || colourVariants[0].colourTag || 'variant-0') : ''
+  )
   const [fgInvCode, setFgInvCode] = useState(data?.fg_inv_code || '')
   const [costGiven, setCostGiven] = useState(data?.cost_given || false)
   const [saving, setSaving] = useState(false)
@@ -107,7 +112,7 @@ export function BomTab({ product, profile, data, merchandisingData }: BomTabProp
         ['Exported',     new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })],
         [],
         ['Colour', 'Items in BOM'],
-        ...colourVariants.map((v: ColourVariant) => [v.colourTag, (v.bomItems || []).length]),
+        ...colourVariants.map((v: ColourVariant) => [v.styleName || v.colourTag, (v.bomItems || []).length]),
       ]
       const summaryWs = utils.aoa_to_sheet(summaryRows)
       summaryWs['!cols'] = [{ wch: 20 }, { wch: 30 }]
@@ -127,8 +132,12 @@ export function BomTab({ product, profile, data, merchandisingData }: BomTabProp
         const ws = utils.aoa_to_sheet([headerRow, ...dataRows])
         ws['!cols'] = [{ wch: 4 }, { wch: 32 }, { wch: 18 }, { wch: 14 }, { wch: 10 }]
         // Safe sheet name: max 31 chars, no special chars
-        const sheetName = variant.colourTag.replace(/[\\/*?[\]:]/g, '').slice(0, 31)
-        utils.book_append_sheet(wb, ws, sheetName || `Colour ${colourVariants.indexOf(variant) + 1}`)
+        // Sheet names must be unique — two designs can share a colour, so prefix
+        // the index and prefer the (unique) style name.
+        const idx = colourVariants.indexOf(variant) + 1
+        const base = (variant.styleName || variant.colourTag || '').replace(/[\\/*?[\]:]/g, '').trim()
+        const sheetName = `${idx}. ${base}`.slice(0, 31)
+        utils.book_append_sheet(wb, ws, base ? sheetName : `Colour ${idx}`)
       }
 
       const safeName = product.name.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40)
@@ -140,7 +149,7 @@ export function BomTab({ product, profile, data, merchandisingData }: BomTabProp
   }
 
   const fgSaved = !!data?.fg_inv_code
-  const activeVariant = colourVariants.find(v => v.colourTag === activeColour) || colourVariants[0] || null
+  const activeVariant = colourVariants.find((v, i) => variantKey(v, i) === activeColour) || colourVariants[0] || null
 
   async function saveFgInvCode() {
     if (!fgInvCode.trim()) return
@@ -316,21 +325,25 @@ export function BomTab({ product, profile, data, merchandisingData }: BomTabProp
           {colourVariants.length > 0 ? (
             <>
               <div className="flex items-center gap-1 border-b border-gray-100 pb-3 flex-wrap">
-                {colourVariants.map(v => (
-                  <button
-                    key={v.colourTag}
-                    onClick={() => setActiveColour(v.colourTag)}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${activeColour === v.colourTag ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`}
-                  >
-                    {v.colourTag}
-                  </button>
-                ))}
+                {colourVariants.map((v, i) => {
+                  const key = variantKey(v, i)
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => setActiveColour(key)}
+                      title={v.styleName || v.colourTag}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${activeColour === key ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`}
+                    >
+                      {v.styleName || v.colourTag}
+                    </button>
+                  )
+                })}
               </div>
 
               {activeVariant && (
                 <div className="rounded-lg border border-gray-200 overflow-hidden">
                   <div className="bg-gray-50 px-3 py-2 border-b border-gray-200">
-                    <p className="text-xs font-semibold text-gray-700">{activeVariant.colourTag} — components from merchandising Excel</p>
+                    <p className="text-xs font-semibold text-gray-700">{activeVariant.styleName || activeVariant.colourTag} — components from merchandising Excel</p>
                   </div>
                   <table className="w-full text-sm">
                     <thead>

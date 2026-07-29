@@ -93,32 +93,57 @@ export async function POST(req: NextRequest) {
     }))
   }
 
+  // Merge the uploaded variants into the stored colour_variants, keyed by the
+  // UNIQUE style name. Teams upload several sheets for one product (and two
+  // designs can share a colour), so every upload must add/update its own designs
+  // rather than replace the set — previously a re-upload only wrote
+  // production_fields, so later sheets never showed up.
+  let mergedVariants: typeof enrichedVariants = enrichedVariants
+  if (enrichedVariants.length > 0) {
+    const { data: existingMD } = await adminSupabase
+      .from('merchandising_data').select('colour_variants').eq('product_id', product_id).single()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const existing: any[] = ((existingMD?.colour_variants as any[]) || [])
+    const keyOf = (v: { styleName?: string; colourTag?: string }) =>
+      String(v.styleName || v.colourTag || '').toLowerCase().trim()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const incoming = new Map<string, any>(enrichedVariants.map((v: any) => [keyOf(v), v]))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mergedVariants = existing.map((v: any) => incoming.get(keyOf(v)) ?? v)
+    for (const [k, v] of incoming) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (!existing.some((e: any) => keyOf(e) === k)) mergedVariants.push(v)
+    }
+  }
+
   if (merch_fields) {
     if (isReupload) {
-      // Save revised data as production version, keep attribute untouched
+      // Keep the original attribute snapshot, store revised specs as the
+      // production version — but still merge the variant list.
       updates.push(
         supabase.from('merchandising_data').update({
           production_fields: { ...merch_fields, colour_variants: enrichedVariants },
+          ...(mergedVariants.length > 0 ? { colour_variants: mergedVariants } : {}),
           updated_by: user.id,
         }).eq('product_id', product_id)
       )
-      fields_updated.push('production_fields')
+      fields_updated.push('production_fields', 'colour_variants')
     } else {
       // First upload — save as attribute version
       updates.push(
         supabase.from('merchandising_data').update({
           ...merch_fields,
-          colour_variants: enrichedVariants,
+          colour_variants: mergedVariants,
           updated_by: user.id,
         }).eq('product_id', product_id)
       )
       fields_updated.push('dimensions', 'compartments', 'materials', 'weight', 'colour_variants')
     }
-  } else if (enrichedVariants.length > 0 && !isReupload) {
+  } else if (mergedVariants.length > 0) {
     // No SKU fields matched, but we still have colour variants — save them separately
     updates.push(
       supabase.from('merchandising_data').update({
-        colour_variants: enrichedVariants,
+        colour_variants: mergedVariants,
         updated_by: user.id,
       }).eq('product_id', product_id)
     )

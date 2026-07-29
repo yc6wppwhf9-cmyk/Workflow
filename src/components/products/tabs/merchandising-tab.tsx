@@ -505,29 +505,32 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
     }
 
     await supabase.from('merchandising_data').update({
-      ...attrForm, is_completed: true, updated_by: profile.id,
+      ...attrForm, updated_by: profile.id,
     }).eq('product_id', product.id)
 
-    // Always hand off — this used to be gated on is_completed flipping false→true
-    // and on the product already sitting at merchandising_completed, so a retry
-    // (or a submit from an earlier stage) silently skipped the advance + email.
-    {
-      await supabase.rpc('advance_product_stage', {
-        p_product_id: product.id,
-        p_next_stage: 'bom_finalized',
-        p_user_id: profile.id,
-        p_action: 'submitted merchandising to BOM',
-        p_department: 'merchandising',
-      })
-      const notified = await fetch('/api/notify-stage-advance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product_id: product.id, product_name: product.name, next_stage: 'bom_finalized' }),
-      }).then(r => r.ok).catch(() => false)
-      toast[notified ? 'success' : 'error'](
-        notified ? 'Submitted to BOM — team notified by email' : 'Submitted to BOM, but the email failed to send',
-      )
+    // Hand off server-side so RLS / RPC failures surface instead of being
+    // swallowed, which previously left the product stuck at its old stage.
+    const handoff = await fetch('/api/submit-to-bom', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_id: product.id }),
+    }).then(async r => ({ ok: r.ok, body: await r.json().catch(() => ({})) }))
+      .catch(() => ({ ok: false, body: { error: 'Network error' } as { error?: string } }))
+
+    if (!handoff.ok) {
+      toast.error(`Could not submit to BOM: ${(handoff.body as { error?: string }).error || 'unknown error'}`)
+      setSaving(false)
+      return
     }
+
+    const notified = await fetch('/api/notify-stage-advance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_id: product.id, product_name: product.name, next_stage: 'bom_finalized' }),
+    }).then(r => r.ok).catch(() => false)
+    toast[notified ? 'success' : 'error'](
+      notified ? 'Submitted to BOM — team notified by email' : 'Submitted to BOM, but the email failed to send',
+    )
 
     setSaving(false)
     router.refresh()

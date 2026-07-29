@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { createClient } from '@/lib/supabase/client'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { parseMerchExcel, filterSkusForProduct, aggregateMerchFields, buildColourVariants, extractProductBaseName } from '@/lib/parse-merch-excel'
+import { ColourVariantsTab } from './colour-variants-tab'
 import type { Product, Profile, MerchandisingData, DesignData, ProductFile } from '@/lib/types'
 
 interface MerchandisingTabProps {
@@ -582,6 +583,15 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
           <Printer className="h-3.5 w-3.5" /> Print Tech Pack
         </Button>
       </div>
+
+      {/* Colour-wise attribute sheets — each design with its name, specs & images.
+          Replaces the separate Colours tab. */}
+      {data?.colour_variants && data.colour_variants.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-gray-800 mb-2">Colour-wise Attribute Sheets</h3>
+          <ColourVariantsTab variants={data.colour_variants} files={files} profile={profile} />
+        </div>
+      )}
 
       {/* Head: Assignment Card */}
       {isHead && (

@@ -16,7 +16,6 @@ import { MarketingTab } from '@/components/products/tabs/marketing-tab'
 import { SalesTab } from '@/components/products/tabs/sales-tab'
 import { TimelineTab } from '@/components/products/tabs/timeline-tab'
 import { CommentsTab } from '@/components/products/tabs/comments-tab'
-import { ColourVariantsTab } from '@/components/products/tabs/colour-variants-tab'
 import { cn } from '@/lib/utils'
 import type {
   Product, Profile, DesignData, SamplingData, MerchandisingData,
@@ -51,7 +50,6 @@ const TABS = [
   { value: 'design', label: 'Design' },
   { value: 'sampling', label: 'Sampling' },
   { value: 'merchandising', label: 'Merchandising' },
-  { value: 'colours', label: 'Colours' },
   { value: 'bom', label: 'BOM' },
   { value: 'marketing', label: 'Marketing' },
   { value: 'timeline',  label: 'Timeline'  },
@@ -186,13 +184,6 @@ export function ProductDetail({
               user switched tabs. Staying mounted (hidden) preserves it. */}
           <TabsPrimitive.Content value="merchandising" forceMount className="data-[state=inactive]:hidden">
             <MerchandisingTab product={product} profile={profile} data={merchandisingData} merchandisingUsers={merchandisingUsers} designData={designData} files={files} />
-          </TabsPrimitive.Content>
-          <TabsPrimitive.Content value="colours">
-            <ColourVariantsTab
-              variants={merchandisingData?.colour_variants || []}
-              files={files}
-              profile={profile}
-            />
           </TabsPrimitive.Content>
           <TabsPrimitive.Content value="bom">
             <BomTab product={product} profile={profile} data={bomData} merchandisingData={merchandisingData} />

@@ -470,6 +470,20 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
     router.refresh()
   }
 
+  // Re-send the BOM hand-off email after submitting (e.g. more sheets uploaded,
+  // or the first notification failed). Doesn't change the workflow stage.
+  const [resending, setResending] = useState(false)
+  async function resendToBom() {
+    setResending(true)
+    const ok = await fetch('/api/notify-stage-advance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_id: product.id, product_name: product.name, next_stage: 'bom_finalized' }),
+    }).then(r => r.ok).catch(() => false)
+    setResending(false)
+    toast[ok ? 'success' : 'error'](ok ? 'Email re-sent to the BOM team' : 'Could not send the email')
+  }
+
   async function markComplete() {
     const becomingComplete = !data?.is_completed
     setSaving(true)
@@ -725,9 +739,21 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
               </Button>
             )}
             {data?.is_completed && (
-              <span className="ml-auto inline-flex items-center gap-1.5 text-xs font-medium text-green-700">
-                <CheckCircle2 className="h-4 w-4" /> Submitted to BOM
-              </span>
+              <div className="ml-auto flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700">
+                  <CheckCircle2 className="h-4 w-4" /> Submitted to BOM
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={resendToBom}
+                  disabled={resending}
+                  title="Send the BOM team the hand-off email again"
+                >
+                  {resending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                  Resend to BOM
+                </Button>
+              </div>
             )}
           </CardContent>
         </Card>

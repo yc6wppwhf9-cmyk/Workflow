@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Search, Package, ChevronRight, Filter } from 'lucide-react'
+import { toast } from 'sonner'
+import { Search, Package, ChevronRight, Filter, Pencil, Check, X, Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { STAGE_LABELS, STAGE_COLORS, CATEGORY_LABELS, type WorkflowStage, type ProductCategory, type Profile } from '@/lib/types'
@@ -42,6 +43,39 @@ export function ProductsTable({ products, profile }: ProductsTableProps) {
   const [search, setSearch] = useState('')
   const [stageFilter, setStageFilter] = useState<string>('all')
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
+
+  // Inline rename (same roles the update-product-name API allows)
+  const canRename = ['admin', 'marketing', 'marketing_head', 'bom'].includes(profile.role)
+  const [renamed, setRenamed] = useState<Record<string, string>>({})
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [nameDraft, setNameDraft] = useState('')
+  const [savingId, setSavingId] = useState<string | null>(null)
+
+  function startRename(id: string, current: string) {
+    setEditingId(id)
+    setNameDraft(current)
+  }
+
+  async function saveRename(id: string) {
+    const next = nameDraft.trim()
+    if (!next) return
+    setSavingId(id)
+    try {
+      const res = await fetch('/api/update-product-name', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: id, name: next }),
+      })
+      if (!res.ok) throw new Error('Failed')
+      setRenamed(r => ({ ...r, [id]: next }))
+      setEditingId(null)
+      toast.success('Product renamed')
+    } catch {
+      toast.error('Could not rename product')
+    } finally {
+      setSavingId(null)
+    }
+  }
 
   const filtered = products.filter((p) => {
     const design = p.design_data
@@ -127,21 +161,59 @@ export function ProductsTable({ products, profile }: ProductsTableProps) {
             {filtered.map((p) => {
               const design = p.design_data
               const bom = p.bom_data
+              const displayName = renamed[p.id] ?? p.name
               return (
                 <tr key={p.id} className="hover:bg-gray-50 transition-colors group">
-                  {/* Product name + designer stacked */}
+                  {/* Product name (inline-editable) + SKU */}
                   <td className="px-5 py-3.5">
-                    <Link href={`/products/${p.id}`} className="flex items-center gap-3">
-                      <div className="h-8 w-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
-                        <Package className="h-4 w-4 text-blue-500" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-900 group-hover:text-blue-600">{p.name}</p>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          {p.sku && <span className="font-mono text-[10px] text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">{p.sku}</span>}
+                    {editingId === p.id ? (
+                      <div className="flex items-center gap-1.5">
+                        <div className="h-8 w-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                          <Package className="h-4 w-4 text-blue-500" />
                         </div>
+                        <Input
+                          value={nameDraft}
+                          onChange={e => setNameDraft(e.target.value)}
+                          disabled={savingId === p.id}
+                          autoFocus
+                          className="h-8 text-sm w-56"
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') saveRename(p.id)
+                            if (e.key === 'Escape') setEditingId(null)
+                          }}
+                        />
+                        <button onClick={() => saveRename(p.id)} disabled={savingId === p.id || !nameDraft.trim()}
+                          className="text-green-600 hover:bg-green-50 p-1 rounded disabled:opacity-40">
+                          {savingId === p.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                        </button>
+                        <button onClick={() => setEditingId(null)} className="text-gray-400 hover:bg-gray-100 p-1 rounded">
+                          <X className="h-4 w-4" />
+                        </button>
                       </div>
-                    </Link>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Link href={`/products/${p.id}`} className="flex items-center gap-3 min-w-0">
+                          <div className="h-8 w-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                            <Package className="h-4 w-4 text-blue-500" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-medium text-gray-900 group-hover:text-blue-600 truncate">{displayName}</p>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              {p.sku && <span className="font-mono text-[10px] text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">{p.sku}</span>}
+                            </div>
+                          </div>
+                        </Link>
+                        {canRename && (
+                          <button
+                            onClick={() => startRename(p.id, displayName)}
+                            title="Rename product"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-blue-600 p-1 rounded shrink-0"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </td>
 
                   {/* Assigned designer */}

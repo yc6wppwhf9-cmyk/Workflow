@@ -234,9 +234,14 @@ export function OverviewTab({ product, profile, designData, bomData, salesData, 
             <CardTitle className="text-base">Colour Variants</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            {Object.entries(colourGroups).map(([tag, imgs]) => (
+            {/* Sorted by design/colour name so variants group predictably */}
+            {Object.entries(colourGroups)
+              .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
+              .map(([tag, imgs]) => (
               <div key={tag}>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">{tag}</p>
+                <p className="text-xs font-semibold text-gray-700 uppercase tracking-widest mb-3 pb-1 border-b border-gray-100">
+                  {tag} <span className="font-normal text-gray-400 normal-case tracking-normal">· {imgs.length} image{imgs.length !== 1 ? 's' : ''}</span>
+                </p>
                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2">
                   {imgs.map((img, idx) => (
                     <button

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Palette, Weight, Ruler, Package, ChevronLeft, ChevronRight, X, Trash2, Loader2, Check } from 'lucide-react'
+import { Palette, ChevronLeft, ChevronRight, X, Trash2, Loader2, Check } from 'lucide-react'
 import { getColorHex } from '@/lib/color-maps'
 import type { ColourVariant, ProductFile, Profile } from '@/lib/types'
 
@@ -29,7 +29,25 @@ function ColorCard({
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const hex = getColorHex(variant.colourTag)
 
-  const hasSpecs = variant.weight || variant.dimensions?.length || variant.materials?.length
+  const dims = [variant.dimensions?.length, variant.dimensions?.width, variant.dimensions?.height]
+    .filter(Boolean).join(' × ')
+  // Full attribute sheet for this design — previously only weight/material/USP
+  // were rendered, so the rest of the sheet looked missing.
+  const rows: Array<[string, string]> = [
+    ['Colour Code', variant.color || variant.colourTag],
+    ['Weight', variant.weight ? `${variant.weight} g` : ''],
+    ['Dimensions', dims ? `${dims} ${variant.dimensions?.unit || 'in'}` : ''],
+    ['Season + Year', variant.seasonYear],
+    ['Main Compartment', variant.mainCompartment],
+    ['Pocket Compartment', variant.pocketCompartment],
+    ['Laptop Compartment', variant.laptopCompartment],
+    ['Bottle Slot', variant.bottleSlot],
+    ['Character', variant.character],
+    ['Theme', variant.theme],
+    ['Unique Purpose', variant.uniquePurpose],
+  ].filter(([, v]) => v && String(v).trim() && String(v).trim() !== '0') as Array<[string, string]>
+
+  const hasSpecs = rows.length > 0 || variant.materials?.length > 0
 
   return (
     <>
@@ -39,43 +57,33 @@ function ColorCard({
           <div className="h-8 w-8 rounded-full shrink-0 border border-black/10" style={{ backgroundColor: hex }} />
           <div className="min-w-0">
             <p className="text-sm font-semibold text-gray-900 truncate">{variant.colourTag}</p>
-            <p className="text-xs text-gray-500 truncate">{variant.styleName}</p>
+            <p className="text-xs text-gray-500 truncate" title={variant.styleName}>{variant.styleName}</p>
           </div>
         </div>
 
-        {/* Specs */}
+        {/* Specs — full attribute sheet */}
         {hasSpecs && (
-          <div className="px-4 py-3 border-t border-gray-100 space-y-2">
-            {variant.weight && (
-              <div className="flex items-center gap-2 text-xs">
-                <Weight className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                <span className="text-gray-500">Weight:</span>
-                <span className="font-medium text-gray-800">{variant.weight} g</span>
-              </div>
-            )}
-            {(variant.dimensions?.length || variant.dimensions?.width) && (
-              <div className="flex items-center gap-2 text-xs">
-                <Ruler className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                <span className="text-gray-500">Size:</span>
-                <span className="font-medium text-gray-800">
-                  {[variant.dimensions.length, variant.dimensions.width, variant.dimensions.height]
-                    .filter(Boolean).join(' × ')}{' '}
-                  {variant.dimensions.unit || 'in'}
-                </span>
-              </div>
-            )}
-            {variant.materials?.length > 0 && (
-              <div className="flex items-start gap-2 text-xs">
-                <Package className="h-3.5 w-3.5 text-gray-400 shrink-0 mt-0.5" />
-                <span className="text-gray-500 shrink-0">Material:</span>
-                <span className="font-medium text-gray-800">{variant.materials.join(', ')}</span>
-              </div>
-            )}
-            {variant.uniquePurpose && (
-              <div className="text-xs text-gray-500 bg-gray-50 rounded px-2 py-1.5">
-                {variant.uniquePurpose}
-              </div>
-            )}
+          <div className="px-4 py-3 border-t border-gray-100">
+            <div className="space-y-1">
+              {rows.map(([label, value]) => (
+                <div key={label} className="flex gap-2 text-xs py-0.5 border-b border-gray-50 last:border-0">
+                  <span className="text-gray-500 w-32 shrink-0">{label}</span>
+                  <span className="font-medium text-gray-800 flex-1 break-words">{value}</span>
+                </div>
+              ))}
+              {variant.materials?.length > 0 && (
+                <div className="flex gap-2 text-xs py-0.5">
+                  <span className="text-gray-500 w-32 shrink-0">Materials</span>
+                  <span className="font-medium text-gray-800 flex-1 break-words">{variant.materials.join(', ')}</span>
+                </div>
+              )}
+              {(variant.bomItems?.length ?? 0) > 0 && (
+                <div className="flex gap-2 text-xs py-0.5 pt-1.5 border-t border-gray-100">
+                  <span className="text-gray-500 w-32 shrink-0">BOM Items</span>
+                  <span className="font-medium text-gray-800">{variant.bomItems!.length}</span>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

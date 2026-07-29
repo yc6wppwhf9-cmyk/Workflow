@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import { Download, Loader2, Lock, Upload, FileSpreadsheet, CheckCircle2, AlertCircle, UserCheck, Send, Printer } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -474,30 +475,40 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
     setSaving(true)
     const supabase = createClient()
 
-    // Save confirmed product name to display_name
+    // Save confirmed product name as the short name (via API — direct writes to
+    // products are blocked by RLS).
     const finalName = confirmProductName.trim()
     if (finalName) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).from('products').update({ display_name: finalName }).eq('id', product.id)
+      await fetch('/api/update-product-name', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: product.id, display_name: finalName }),
+      }).catch(() => {})
     }
 
     await supabase.from('merchandising_data').update({
       ...attrForm, is_completed: becomingComplete, updated_by: profile.id,
     }).eq('product_id', product.id)
 
-    if (becomingComplete && product.workflow_stage === 'merchandising_completed') {
+    // Hand off to BOM regardless of the current stage — this was gated on the
+    // product already sitting at merchandising_completed, so submitting from an
+    // earlier stage silently skipped both the advance and the BOM email.
+    if (becomingComplete) {
       await supabase.rpc('advance_product_stage', {
         p_product_id: product.id,
         p_next_stage: 'bom_finalized',
         p_user_id: profile.id,
-        p_action: 'marked merchandising complete — stage advanced to BOM',
+        p_action: 'submitted merchandising to BOM',
         p_department: 'merchandising',
       })
-      fetch('/api/notify-stage-advance', {
+      const notified = await fetch('/api/notify-stage-advance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ product_id: product.id, product_name: product.name, next_stage: 'bom_finalized' }),
-      }).catch(() => {})
+      }).then(r => r.ok).catch(() => false)
+      toast[notified ? 'success' : 'error'](
+        notified ? 'Submitted to BOM — team notified by email' : 'Submitted to BOM, but the email failed to send',
+      )
     }
 
     setSaving(false)

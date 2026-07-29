@@ -141,7 +141,10 @@ export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): Pars
       for (let col = 0; col < numColumns; col++) {
         const baseCol = col * 3
         const styleName = String(rows[headerRow]?.[baseCol] || '').trim()
-        if (!styleName || styleName === '0' || /^\d+$/.test(styleName)) continue
+        // A style name is never an attribute label — blank template columns can
+        // leave a label like "POCKET COMPARTMENT" in the header row, which was
+        // then imported as a bogus colour variant.
+        if (!styleName || styleName === '0' || /^\d+$/.test(styleName) || isKnownLabel(styleName)) continue
         const sku: ParsedSKU = {
           styleName, weight: '', color: '', dimensions: '', height: '',
           numberOfZips: '', pocketCompartment: '', mainCompartment: '',

@@ -196,9 +196,16 @@ export function ColourVariantsTab({ variants, files, profile }: ColourVariantsTa
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)
 
-  // Strip ATTRIBUTES template placeholder tags like "Color" / "Colour"
+  // Strip ATTRIBUTES template placeholders — bare "Colour" tags, and attribute
+  // labels that leaked in as style names from blank template columns.
   const PLACEHOLDER = /^colou?rs?$/i
-  const realVariants = variants.filter(v => !PLACEHOLDER.test((v.colourTag || '').trim()))
+  const ATTR_LABEL = /^(pocket|main|laptop)\s*compartments?$|^weight|^height|^dimen|^number of zip|^rain cover|^bottle slot|^back padded|^season|^unique purpose|^main material|^materials?$|^character$|^theme$|^designer name$/i
+  const isJunk = (v: { colourTag?: string; styleName?: string }) => {
+    const tag = (v.colourTag || '').trim()
+    const style = (v.styleName || '').trim()
+    return PLACEHOLDER.test(tag) || ATTR_LABEL.test(tag) || ATTR_LABEL.test(style)
+  }
+  const realVariants = variants.filter(v => !isJunk(v))
   const displayVariants = realVariants.length > 0 ? realVariants : variants
 
   // Group files by colour_tag

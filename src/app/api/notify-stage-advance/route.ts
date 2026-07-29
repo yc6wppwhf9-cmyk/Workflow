@@ -15,7 +15,10 @@ const NEXT_STAGE_ROLES: Partial<Record<WorkflowStage, UserRole[]>> = {
   design_completed:         ['design_head'],
   sampling_completed:       ['merchandising_head'],
   merchandising_completed:  ['merchandising'],
-  bom_finalized:            ['bom', 'bom_head'],
+  // Only the BOM head is told when work arrives — she assigns it, and the
+  // assignee is emailed separately by /api/bom-approval. Notifying the whole
+  // BOM team here would spam members about work that isn't theirs.
+  bom_finalized:            ['bom_head'],
   marketing_ready:          ['marketing_head'],
   sales_priced:             ['admin'],
   product_live:             ['admin'],

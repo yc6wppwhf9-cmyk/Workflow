@@ -204,27 +204,43 @@ export function parseMerchExcel(buffer: ArrayBuffer, productName?: string): Pars
     if (headerRowIdx >= 0) {
       const headerRow = rows[headerRowIdx]
 
-      // Identify style columns — skip "CONSMP" and empty headers; each style's CONSMP is at col+1
-      const styleColumns: Array<{ col: number; styleKey: string; consmpCol: number }> = []
+      // Identify style columns and their sub-columns. Two layouts exist:
+      //   [STYLE | CONSMP]            → consumption at col+1
+      //   [STYLE | INV CODE | CONSMP] → inv code at col+1, consumption at col+2
+      // "INV CODE"/"CONSMP" headers are sub-columns, never styles.
+      const isConsmp  = (s: string) => { const u = s.toUpperCase().replace(/\s+/g, ' ').trim(); return u === 'CONSMP' || u.includes('CONSMP') || u.includes('CONSUMPTION') }
+      const isInvCode = (s: string) => s.toUpperCase().replace(/\s+/g, ' ').trim().includes('INV CODE')
+
+      const styleColumns: Array<{ col: number; styleKey: string; invCodeCol: number; consmpCol: number }> = []
       for (let c = 1; c < headerRow.length; c++) {
         const raw = String(headerRow[c] || '').trim()
-        if (!raw || raw === '0' || raw.toUpperCase() === 'CONSMP') continue
-        styleColumns.push({ col: c, styleKey: normaliseStyleName(raw), consmpCol: c + 1 })
+        if (!raw || raw === '0' || isConsmp(raw) || isInvCode(raw)) continue
+        const next  = String(headerRow[c + 1] || '').trim()
+        const next2 = String(headerRow[c + 2] || '').trim()
+        let invCodeCol = -1
+        let consmpCol = -1
+        if (isInvCode(next)) {
+          invCodeCol = c + 1
+          if (isConsmp(next2)) consmpCol = c + 2
+        } else if (isConsmp(next)) {
+          consmpCol = c + 1
+        }
+        styleColumns.push({ col: c, styleKey: normaliseStyleName(raw), invCodeCol, consmpCol })
       }
 
-      // Parse item rows: style col = inv name (e.g. 'FB PU 1000 D 270 BLK'), consmpCol = consumption
-      // inv_code is matched from the database at save time, not stored here
-      for (const { col, styleKey, consmpCol } of styleColumns) {
+      // Parse item rows: style col = inv name, invCodeCol = INV code, consmpCol = consumption.
+      for (const { col, styleKey, invCodeCol, consmpCol } of styleColumns) {
         const items: ParsedBOMItem[] = []
         for (let i = headerRowIdx + 1; i < rows.length; i++) {
           const invName = String(rows[i]?.[col] || '').trim()
           if (!invName || invName === '0' || invName.toUpperCase() === 'NA') continue
-          const rawConsump = rows[i]?.[consmpCol]
+          const invCode = invCodeCol >= 0 ? String(rows[i]?.[invCodeCol] || '').trim() : ''
+          const rawConsump = consmpCol >= 0 ? rows[i]?.[consmpCol] : undefined
           const numConsump = rawConsump !== null && rawConsump !== undefined ? parseFloat(String(rawConsump)) : NaN
           const consumption = !isNaN(numConsump) && numConsump !== 0
             ? parseFloat(numConsump.toFixed(4)).toString()
             : ''
-          items.push({ inv_code: '', inv_name: invName, consumption, unit: '' })
+          items.push({ inv_code: invCode && invCode !== '0' ? invCode : '', inv_name: invName, consumption, unit: '' })
         }
         if (items.length > 0) bomByStyle[styleKey] = items
       }

@@ -97,6 +97,18 @@ export async function POST(req: NextRequest) {
   // ── Approve → advance to Marketing ──────────────────────────────────────
   if (action === 'approve') {
     if (!isHead) return NextResponse.json({ error: 'Only the BOM head can approve' }, { status: 403 })
+
+    // MD costing approval is mandatory before the product can leave BOM.
+    // (Naming/range is deliberately NOT required — it can be done later.)
+    const { data: costing } = await adminSupabase
+      .from('products').select('md_costing_approved').eq('id', product_id).single()
+    if (!costing?.md_costing_approved) {
+      return NextResponse.json(
+        { error: 'MD costing approval is required before sending to Marketing.' },
+        { status: 400 },
+      )
+    }
+
     const now = new Date().toISOString()
     const { error: bomErr } = await adminSupabase.from('bom_data')
       .update({ is_completed: true, approved_by: user.id, approved_at: now, updated_by: user.id })

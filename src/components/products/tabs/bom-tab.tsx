@@ -81,10 +81,13 @@ export function BomTab({ product, profile, data, merchandisingData, bomUsers = [
   const [exporting, setExporting] = useState(false)
 
   // ── Costing & Naming gate (after BOM) ──────────────────────────────
+  // BOM approval now advances straight to Marketing, so the costing/naming card
+  // must be reachable while the product is still at BOM — not only at the
+  // (now bypassed) costing_naming stage.
   const isCostingNamingStage = product.workflow_stage === 'costing_naming'
+    || (isBomHead && product.workflow_stage === 'bom_finalized')
   const [rangeInput, setRangeInput] = useState(product.product_range || '')
   const [productName, setProductName] = useState(product.name)
-  const [rangeSaved, setRangeSaved] = useState(!!product.product_range)
   const [mdApproved, setMdApproved] = useState(product.md_costing_approved || false)
   const [namingSaving, setNamingSaving] = useState(false)
   const [gateAdvancing, setGateAdvancing] = useState(false)
@@ -101,7 +104,7 @@ export function BomTab({ product, profile, data, merchandisingData, bomUsers = [
       const json = await res.json() as { ok?: boolean; name?: string; error?: string }
       if (!res.ok || !json.ok) throw new Error(json.error || 'Failed')
       if (json.name) setProductName(json.name)
-      setRangeSaved(true)
+
     } finally {
       setNamingSaving(false)
     }
@@ -300,11 +303,18 @@ export function BomTab({ product, profile, data, merchandisingData, bomUsers = [
             {isBomHead && isSubmitted && (
               <div className="pt-2 border-t border-gray-100 space-y-2">
                 <div className="flex gap-2 flex-wrap">
-                  <Button size="sm" className="bg-green-600 hover:bg-green-700" disabled={bomBusy}
+                  <Button size="sm" className="bg-green-600 hover:bg-green-700"
+                    disabled={bomBusy || !mdApproved}
+                    title={!mdApproved ? 'Tick “Costing approved by MD” below first' : 'Approve and send to Marketing'}
                     onClick={() => bomAction('approve')}>
                     {bomBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                     Approve &amp; Send to Marketing
                   </Button>
+                  {!mdApproved && (
+                    <p className="text-xs text-amber-700 w-full">
+                      Waiting on MD costing approval — tick it in <strong>Costing &amp; Naming</strong> below. Naming can be done later.
+                    </p>
+                  )}
                   <Button size="sm" variant="outline" className="text-red-600 border-red-200"
                     disabled={bomBusy} onClick={() => setShowReject(v => !v)}>
                     <XCircle className="h-4 w-4" /> Send Back
@@ -381,20 +391,23 @@ export function BomTab({ product, profile, data, merchandisingData, bomUsers = [
             </div>
 
             {/* Advance to Marketing */}
-            {isRoleAllowed && (
+            {/* Only shown at the standalone costing_naming stage. When BOM approval
+                drives the hand-off, the Approve button above is the single exit —
+                gated on MD costing only, since naming can be done later. */}
+            {isRoleAllowed && product.workflow_stage === 'costing_naming' && (
               <div className="pt-2 border-t border-gray-100">
                 <Button
                   onClick={completeCostingNaming}
-                  disabled={gateAdvancing || !rangeSaved || !mdApproved}
+                  disabled={gateAdvancing || !mdApproved}
                   className="bg-pink-600 hover:bg-pink-700"
-                  title={!rangeSaved ? 'Generate the product name first' : !mdApproved ? 'Confirm MD costing approval first' : undefined}
+                  title={!mdApproved ? 'Confirm MD costing approval first' : undefined}
                 >
                   {gateAdvancing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                   Complete &amp; Send to Marketing
                 </Button>
-                {(!rangeSaved || !mdApproved) && (
+                {!mdApproved && (
                   <p className="text-xs text-gray-400 mt-1.5">
-                    Save the rangewise name and tick MD costing approval to continue.
+                    Tick MD costing approval to continue. The rangewise name is optional and can be added later.
                   </p>
                 )}
               </div>

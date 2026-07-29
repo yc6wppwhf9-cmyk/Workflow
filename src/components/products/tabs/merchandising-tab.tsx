@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Download, Loader2, Lock, Save, Plus, X, Upload, FileSpreadsheet, CheckCircle2, AlertCircle, UserCheck, Send, Printer, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Download, Loader2, Lock, Save, Plus, X, Upload, FileSpreadsheet, CheckCircle2, AlertCircle, UserCheck, Send, Printer } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -72,9 +72,6 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
   const router = useRouter()
   const isTeamMember = profile.role === 'merchandising'
   const isHead = ['admin', 'merchandising_head'].includes(profile.role)
-  const printFiles = files.filter(f => f.department === 'design' && f.colour_tag === 'print')
-  const printImageFiles = printFiles.filter(f => f.file_type?.startsWith('image/'))
-  const [printLightboxIdx, setPrintLightboxIdx] = useState<number | null>(null)
   const isAssigned = data?.assigned_to === profile.id
   const isSubmitted = !!data?.attribute_sheet_handed_over
   const isAtMerchStage = product.workflow_stage === 'merchandising_completed'
@@ -246,21 +243,34 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
             }
           }
 
-          const effectiveTags = colourTags.filter(t => t.toLowerCase() !== 'color' && t.toLowerCase() !== 'colour')
-          const tagsToMap = effectiveTags.length > 0 ? effectiveTags : colourTags
-          const tagsLower = tagsToMap.map(t => t.toLowerCase())
-          // Map colourTag → styleName so images are tagged with the full unique style name.
-          // Two different designs can share the same colourTag ("Black") but have different
-          // styleNames ("CONNECT 001 BLACK" vs "CONNECT 002 BLACK") — using styleName as the
-          // image key prevents cross-design image bleed in the Colours tab.
-          const tagToStyleName = new Map(
-            colourVariants.map(v => [v.colourTag.toLowerCase(), v.styleName])
-          )
-          const toStyleKey = (tag: string) => tagToStyleName.get(tag.toLowerCase()) ?? tag
+          // Images are keyed by each variant's UNIQUE styleName. colourTag can repeat
+          // across designs (two "LIGHT PINK" designs share "LPNK"), so keying by colour
+          // collides — one design would get all the images and the other none.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const list = (colourVariants as any[]).filter(v => {
+            const t = String(v.colourTag || '').toLowerCase()
+            return t !== 'color' && t !== 'colour'
+          })
+          const variantList = list.length > 0 ? list : colourVariants
 
-          // PRIMARY: read text cells in DETAILS PICS sheet — find rows that contain colour name labels.
-          // Each group of images sits directly below its colour label row.
-          const colourLabelRows: Array<{ row: number; colourTag: string }> = []
+          // Which variant does a DETAILS PICS label cell refer to? Match on the full
+          // style name first (unique), then the colour tag as a loose fallback.
+          const matchVariantStyle = (cellStr: string): string | null => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let vi = (variantList as any[]).findIndex(v => {
+              const sn = String(v.styleName || '').toLowerCase().trim()
+              return sn && (cellStr === sn || cellStr.includes(sn) || sn.includes(cellStr))
+            })
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            if (vi < 0) vi = (variantList as any[]).findIndex(v => {
+              const ct = String(v.colourTag || '').toLowerCase().trim()
+              return ct && (cellStr === ct || cellStr.includes(ct))
+            })
+            return vi >= 0 ? String(variantList[vi].styleName || '') : null
+          }
+
+          // PRIMARY: DETAILS PICS text rows label each image group by its style/colour name.
+          const styleLabelRows: Array<{ row: number; styleName: string }> = []
           if (detailsPicsIdx >= 0) {
             const detailsSheet = wb.Sheets[sheetNames[detailsPicsIdx]]
             if (detailsSheet) {
@@ -268,38 +278,39 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
               for (let r = 0; r < cellData.length; r++) {
                 for (const cell of cellData[r]) {
                   const cellStr = String(cell || '').trim().toLowerCase()
-                  if (!cellStr || cellStr.length > 60) continue
-                  const idx = tagsLower.findIndex(t => cellStr === t || cellStr.includes(t) || t.includes(cellStr))
-                  if (idx >= 0) { colourLabelRows.push({ row: r, colourTag: toStyleKey(tagsToMap[idx]) }); break }
+                  if (!cellStr || cellStr.length > 80) continue
+                  const sn = matchVariantStyle(cellStr)
+                  if (sn) { styleLabelRows.push({ row: r, styleName: sn }); break }
                 }
               }
             }
           }
 
-          if (colourLabelRows.length > 0) {
-            // Map each image to the nearest colour label that appears at or before its row
+          if (styleLabelRows.length > 0) {
+            // Each image → the nearest style label at or above its row.
             for (const pos of positions) {
               let bestRow = -1, matched = ''
-              for (const { row, colourTag } of colourLabelRows) {
-                if (row <= pos.row && row > bestRow) { bestRow = row; matched = colourTag }
+              for (const { row, styleName } of styleLabelRows) {
+                if (row <= pos.row && row > bestRow) { bestRow = row; matched = styleName }
               }
               if (matched) imageColourMap.set(pos.file, matched)
             }
           } else {
-            // Fallback: position-based (row count vs col count)
+            // Fallback: assign by position — index maps to the variant at that index,
+            // tagged with its unique styleName.
             const uniqueCols = [...new Set(positions.map(p => p.col))].sort((a, b) => a - b)
             const uniqueRows = [...new Set(positions.map(p => p.row))].sort((a, b) => a - b)
             if (uniqueRows.length >= uniqueCols.length) {
               for (const pos of positions) {
                 const idx = uniqueRows.indexOf(pos.row)
-                if (idx < tagsToMap.length) imageColourMap.set(pos.file, toStyleKey(tagsToMap[idx]))
+                if (idx < variantList.length) imageColourMap.set(pos.file, String(variantList[idx].styleName || ''))
               }
             } else {
-              const colsPerColour = Math.max(1, Math.round(uniqueCols.length / tagsToMap.length))
+              const colsPerColour = Math.max(1, Math.round(uniqueCols.length / variantList.length))
               for (const pos of positions) {
                 const colIdx = uniqueCols.indexOf(pos.col)
                 const colourIdx = Math.floor(colIdx / colsPerColour)
-                if (colourIdx < tagsToMap.length) imageColourMap.set(pos.file, toStyleKey(tagsToMap[colourIdx]))
+                if (colourIdx < variantList.length) imageColourMap.set(pos.file, String(variantList[colourIdx].styleName || ''))
               }
             }
           }
@@ -657,86 +668,6 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
         </Card>
       )}
 
-      {/* Print Files — uploaded by design team, read-only */}
-      {printFiles.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Print Files <span className="text-xs font-normal text-gray-400 ml-1">(uploaded by design team)</span></CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {printImageFiles.length > 0 && (
-              <div className="grid grid-cols-4 gap-2">
-                {printImageFiles.map((img, i) => (
-                  <div
-                    key={img.id}
-                    className="aspect-square rounded-lg overflow-hidden bg-gray-100 cursor-pointer hover:opacity-90 transition-opacity"
-                    onClick={() => setPrintLightboxIdx(i)}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={img.file_url} alt={img.name} className="w-full h-full object-cover" />
-                  </div>
-                ))}
-              </div>
-            )}
-            {printFiles.filter(f => !f.file_type?.startsWith('image/')).map(f => (
-              <a
-                key={f.id}
-                href={f.file_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 text-xs text-blue-600 hover:underline"
-              >
-                <Download className="h-3.5 w-3.5 shrink-0" />
-                {f.name}
-              </a>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Print Files Lightbox */}
-      {printLightboxIdx !== null && printImageFiles[printLightboxIdx] && (
-        <div
-          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
-          onClick={() => setPrintLightboxIdx(null)}
-        >
-          <button
-            className="absolute top-4 right-4 h-10 w-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white"
-            onClick={() => setPrintLightboxIdx(null)}
-          >
-            <X className="h-5 w-5" />
-          </button>
-          {printImageFiles.length > 1 && (
-            <>
-              <button
-                className="absolute left-4 h-10 w-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white"
-                onClick={e => { e.stopPropagation(); setPrintLightboxIdx(i => i !== null ? (i - 1 + printImageFiles.length) % printImageFiles.length : null) }}
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </button>
-              <button
-                className="absolute right-4 h-10 w-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white"
-                onClick={e => { e.stopPropagation(); setPrintLightboxIdx(i => i !== null ? (i + 1) % printImageFiles.length : null) }}
-              >
-                <ChevronRight className="h-5 w-5" />
-              </button>
-            </>
-          )}
-          <div className="flex flex-col items-center gap-3 max-w-5xl max-h-screen p-16" onClick={e => e.stopPropagation()}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={printImageFiles[printLightboxIdx].file_url}
-              alt={printImageFiles[printLightboxIdx].name}
-              className="max-h-[80vh] max-w-full object-contain rounded-lg"
-            />
-            <p className="text-white/70 text-sm">{printImageFiles[printLightboxIdx].name}</p>
-            {printImageFiles.length > 1 && (
-              <p className="text-white/40 text-xs">{printLightboxIdx + 1} / {printImageFiles.length}</p>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Excel Upload Card — team member (before submit) and head */}
       {canUploadExcel && (
         <Card className="border-green-200 bg-green-50">
@@ -973,13 +904,13 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
               )}
               {!data?.is_completed && (
                 <Button
-                  variant="outline"
                   onClick={() => setConfirmOpen(true)}
-                  disabled={saving || !data?.attribute_sheet_handed_over}
-                  className="text-green-600 border-green-200"
-                  title={!data?.attribute_sheet_handed_over ? 'Attribute sheet must be handed over first' : ''}
+                  disabled={saving || !(data?.weight || (data?.colour_variants && data.colour_variants.length > 0))}
+                  className="bg-green-600 hover:bg-green-700"
+                  title={!(data?.weight || (data?.colour_variants && data.colour_variants.length > 0)) ? 'Upload the attribute Excel first' : 'Submit to the BOM team'}
                 >
-                  Mark Complete
+                  <Send className="h-4 w-4" />
+                  Submit to BOM
                 </Button>
               )}
             </div>
@@ -994,8 +925,8 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
               <div className="h-12 w-12 rounded-full bg-green-50 flex items-center justify-center mb-2">
                 <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
               </div>
-              <h3 className="text-base font-semibold text-gray-900 text-center">Mark Merchandising Complete?</h3>
-              <p className="text-sm text-gray-500 text-center mt-1">This will advance the product to BOM and notify the BOM team.</p>
+              <h3 className="text-base font-semibold text-gray-900 text-center">Submit to BOM?</h3>
+              <p className="text-sm text-gray-500 text-center mt-1">This advances the product to BOM and emails the BOM team the attribute Excel.</p>
             </div>
             <div className="mb-4">
               <label className="block text-xs font-semibold text-gray-700 mb-1">
@@ -1024,7 +955,7 @@ export function MerchandisingTab({ product, profile, data, merchandisingUsers, d
                 disabled={saving || !confirmProductName.trim()}
                 className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {saving ? 'Saving…' : 'Yes, Mark Complete'}
+                {saving ? 'Saving…' : 'Yes, Submit to BOM'}
               </button>
             </div>
           </div>

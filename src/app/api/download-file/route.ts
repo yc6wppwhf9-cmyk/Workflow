@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdmin } from '@supabase/supabase-js'
-
-const PUBLIC_MARKER = '/storage/v1/object/public/'
+import { parseStorageUrl } from '@/lib/storage-path'
 
 // Streams a stored file back under its ORIGINAL filename.
 //
@@ -33,12 +32,9 @@ export async function GET(req: NextRequest) {
   // Signed URLs work whether or not the bucket is public (a public URL against a
   // private bucket 404s with "Bucket not found"), and the bytes never stream
   // through this function, so there's no response-size ceiling.
-  const markerAt = file.file_url.indexOf(PUBLIC_MARKER)
-  if (markerAt !== -1) {
-    const rest = decodeURIComponent(file.file_url.slice(markerAt + PUBLIC_MARKER.length).split('?')[0])
-    const slash = rest.indexOf('/')
-    const bucket = slash === -1 ? rest : rest.slice(0, slash)
-    const path = slash === -1 ? '' : rest.slice(slash + 1)
+  const loc = parseStorageUrl(file.file_url)
+  if (loc) {
+    const { bucket, path } = loc
 
     const admin = createAdmin(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,

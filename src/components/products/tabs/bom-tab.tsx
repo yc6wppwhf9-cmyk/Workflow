@@ -546,9 +546,10 @@ export function BomTab({ product, profile, data, merchandisingData, bomUsers = [
 
               {activeVariant && (activeVariant.bomItems || []).some(i => i.excel_name) && (
                 <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                  <strong>{(activeVariant.bomItems || []).filter(i => i.excel_name).length} item(s)</strong> have a name in the
-                  merchandising Excel that doesn&apos;t match the item master. The master name is shown — check the INV code is
-                  right, or correct the master name using the tag icon.
+                  <strong>{(activeVariant.bomItems || []).filter(i => i.excel_name).length} item(s)</strong> had a name in the
+                  merchandising Excel that didn&apos;t match the item master <em>at the last upload</em>. The master name is
+                  shown and is what the BOM uses. If the Excel or the master has been corrected since, re-upload the Excel to
+                  recheck — or fix the master name using the tag icon.
                 </div>
               )}
 
@@ -613,7 +614,7 @@ export function BomTab({ product, profile, data, merchandisingData, bomUsers = [
                                   <span>{item.inv_name}</span>
                                   {item.excel_name && (
                                     <span className="block text-[11px] text-amber-700 mt-0.5">
-                                      ⚠ Excel says “{item.excel_name}” — differs from the item master
+                                      ⚠ Excel said “{item.excel_name}” at the last upload — differs from the item master
                                     </span>
                                   )}
                                 </div>

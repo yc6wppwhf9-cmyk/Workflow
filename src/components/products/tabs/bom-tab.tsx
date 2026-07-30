@@ -86,25 +86,29 @@ export function BomTab({ product, profile, data, merchandisingData, bomUsers = [
   // (now bypassed) costing_naming stage.
   const isCostingNamingStage = product.workflow_stage === 'costing_naming'
     || (isBomHead && product.workflow_stage === 'bom_finalized')
-  const [rangeInput, setRangeInput] = useState(product.product_range || '')
+  const [nameInput, setNameInput] = useState(product.name || '')
   const [productName, setProductName] = useState(product.name)
   const [mdApproved, setMdApproved] = useState(product.md_costing_approved || false)
   const [namingSaving, setNamingSaving] = useState(false)
   const [gateAdvancing, setGateAdvancing] = useState(false)
 
-  async function saveRange() {
-    if (!rangeInput.trim()) return
+  async function saveName() {
+    const name = nameInput.trim()
+    if (!name) return
     setNamingSaving(true)
     try {
-      const res = await fetch('/api/set-product-range', {
+      const res = await fetch('/api/update-product-name', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product_id: product.id, range: rangeInput.trim() }),
+        body: JSON.stringify({ product_id: product.id, name }),
       })
-      const json = await res.json() as { ok?: boolean; name?: string; error?: string }
+      const json = await res.json() as { ok?: boolean; error?: string }
       if (!res.ok || !json.ok) throw new Error(json.error || 'Failed')
-      if (json.name) setProductName(json.name)
-
+      setProductName(name)
+      toast.success(`Product named "${name}"`)
+      router.refresh()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not save the product name')
     } finally {
       setNamingSaving(false)
     }
@@ -407,33 +411,37 @@ export function BomTab({ product, profile, data, merchandisingData, bomUsers = [
               <Tag className="h-4 w-4" /> Costing &amp; Naming
             </CardTitle>
             <p className="text-xs text-gray-500 mt-0.5">
-              Give the product its rangewise name, then confirm MD costing approval before it moves to Marketing.
+              Name the product, then confirm MD costing approval before it moves to Marketing. Naming can be done later —
+              only the costing approval gates the hand-off.
             </p>
           </CardHeader>
           <CardContent className="space-y-5">
 
-            {/* Naam Karan — rangewise naming */}
+            {/* Naam Karan — the product's own name, typed in full */}
             <div className="space-y-2">
-              <Label className="text-xs">Range (Naam Karan)</Label>
+              <Label className="text-xs">Product Name (Naam Karan)</Label>
               <div className="flex items-end gap-3 flex-wrap">
                 <Input
-                  placeholder="e.g. Summer Trekker"
-                  value={rangeInput}
-                  onChange={e => setRangeInput(e.target.value)}
+                  placeholder="e.g. CUPCAKE 032"
+                  value={nameInput}
+                  onChange={e => setNameInput(e.target.value)}
                   disabled={!isRoleAllowed || namingSaving}
                   className="h-8 text-sm w-64"
                 />
                 {isRoleAllowed && (
-                  <Button size="sm" onClick={saveRange} disabled={namingSaving || !rangeInput.trim()}>
+                  <Button
+                    size="sm"
+                    onClick={saveName}
+                    disabled={namingSaving || !nameInput.trim() || nameInput.trim() === productName}
+                  >
                     {namingSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Tag className="h-4 w-4" />}
-                    Generate Name
+                    Save Name
                   </Button>
                 )}
               </div>
               <p className="text-xs text-gray-500">
-                Product name:{' '}
+                Current name:{' '}
                 <span className="font-semibold text-gray-800">{productName}</span>
-                <span className="text-gray-400"> — auto-numbered within the range</span>
               </p>
             </div>
 

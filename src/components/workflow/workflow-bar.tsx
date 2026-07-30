@@ -53,7 +53,9 @@ export function WorkflowBar({
       case 'sampling_completed':     return !!samplingData?.is_completed && samplingData.sample_review_status === 'approved'
       case 'merchandising_completed': return merchandisingData?.is_completed || false
       case 'bom_finalized':          return bomData?.is_completed || false
-      case 'costing_naming':         return !!product.md_costing_approved && !!product.product_range
+      // Legacy stage, retired from WORKFLOW_STAGES but still set on old rows.
+      // Naming is optional, so only the MD costing approval marks it complete.
+      case 'costing_naming':         return !!product.md_costing_approved
       case 'marketing_ready':        return marketingData?.is_completed || false
       default:                       return true
     }

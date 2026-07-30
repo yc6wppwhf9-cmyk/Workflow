@@ -87,6 +87,9 @@ export interface Product {
   brand: Brand | null
   description: string | null
   family_name: string | null
+  /** Legacy. Naam Karan set a range and auto-numbered the name from it; it now
+   *  sets the product name directly, so nothing writes this any more. Kept
+   *  because existing rows still carry a value. */
   product_range: string | null
   md_costing_approved: boolean
   workflow_stage: WorkflowStage

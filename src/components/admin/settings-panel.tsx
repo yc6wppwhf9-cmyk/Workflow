@@ -29,7 +29,10 @@ export function SettingsPanel({ users, currentProfile, settings }: SettingsPanel
   const [imUploading, setImUploading] = useState(false)
   const [imProgress, setImProgress] = useState('')
   const [imResult, setImResult] = useState<{ count?: number; dupeCodes?: number; removed?: number; error?: string } | null>(null)
-  const [imPrune, setImPrune] = useState(false)
+  // Default to a true replace — the button says "Replace Item Master", and a
+  // master that accumulates every past upload is how stale names survive.
+  // Untick to merge instead, when the file is a partial ERP export.
+  const [imPrune, setImPrune] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<{ products?: number; renamed?: number; error?: string } | null>(null)
 
@@ -133,6 +136,19 @@ export function SettingsPanel({ users, currentProfile, settings }: SettingsPanel
       // does the last batch delete rows the import did not write — an ERP export
       // is often a partial report, and silently dropping codes it omits would
       // break BOMs that still reference them.
+      // Replacing deletes every code the file omits, so say how many that is
+      // before doing it — the count is only knowable once the file is parsed.
+      if (imPrune && imCount && imCount > items.length) {
+        const willDelete = imCount - items.length
+        const ok = window.confirm(
+          `This file has ${items.length.toLocaleString()} items, but the master currently holds ` +
+          `${imCount.toLocaleString()}.\n\nReplacing will delete roughly ${willDelete.toLocaleString()} ` +
+          `INV code(s) that are not in this file. Existing BOM lines keep their saved names, but those ` +
+          `codes will no longer be found on future imports.\n\nContinue?`
+        )
+        if (!ok) { setImUploading(false); setImProgress(''); if (itemMasterRef.current) itemMasterRef.current.value = ''; return }
+      }
+
       const importBatch = crypto.randomUUID()
       const BATCH = 1000
       let removed = 0
@@ -313,9 +329,9 @@ export function SettingsPanel({ users, currentProfile, settings }: SettingsPanel
             <span className="text-xs text-gray-500">
               <span className="font-medium text-gray-700">Remove items not in this file</span>
               <span className="block text-gray-400">
-                Leave off if the file is a partial export — it only adds and updates. Turn on only when the
-                file is the complete master; anything missing from it is deleted, and BOMs referencing those
-                codes lose their lookup.
+                On: the master ends up exactly matching the file — old codes it omits are deleted. Untick
+                only when the file is a partial export, in which case existing items are kept and the upload
+                just adds and updates.
               </span>
             </span>
           </label>

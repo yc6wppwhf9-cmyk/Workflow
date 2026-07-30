@@ -28,7 +28,10 @@ export function SettingsPanel({ users, currentProfile, settings }: SettingsPanel
   const [imCount, setImCount] = useState<number | null>(null)
   const [imUploading, setImUploading] = useState(false)
   const [imProgress, setImProgress] = useState('')
-  const [imResult, setImResult] = useState<{ count?: number; error?: string } | null>(null)
+  const [imResult, setImResult] = useState<{ count?: number; dupeCodes?: number; removed?: number; error?: string } | null>(null)
+  const [imPrune, setImPrune] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState<{ products?: number; renamed?: number; error?: string } | null>(null)
 
   useEffect(() => {
     fetch('/api/upload-item-master').then(r => r.json()).then(j => setImCount(j.count ?? null))
@@ -119,25 +122,41 @@ export function SettingsPanel({ users, currentProfile, settings }: SettingsPanel
         }))
         .filter(r => r.inv_code && r.item_name_norm)
 
-      // Deduplicate by item_name_norm — upsert fails if same key appears twice in one batch
-      const itemMap = new Map(rawItems.map(r => [r.item_name_norm, r]))
+      // Deduplicate by inv_code — that is the row identity, and a batch cannot
+      // carry the same key twice. Items that share a NAME are kept: they are
+      // distinct components with distinct codes.
+      const itemMap = new Map(rawItems.map(r => [r.inv_code, r]))
       const items = Array.from(itemMap.values())
+      const dupeCodes = rawItems.length - items.length
 
-      setImProgress(`Saving ${items.length.toLocaleString()} items...`)
-
-      // Write directly to Supabase from the browser (no server API hop)
-      const supabase = createClient()
+      // One id tags every batch of this import. Only when pruning is asked for
+      // does the last batch delete rows the import did not write — an ERP export
+      // is often a partial report, and silently dropping codes it omits would
+      // break BOMs that still reference them.
+      const importBatch = crypto.randomUUID()
       const BATCH = 1000
+      let removed = 0
+
       for (let i = 0; i < items.length; i += BATCH) {
-        const { error } = await supabase
-          .from('item_master')
-          .upsert(items.slice(i, i + BATCH), { onConflict: 'item_name_norm' })
-        if (error) { setImResult({ error: error.message }); setImUploading(false); return }
+        const isLast = i + BATCH >= items.length
         setImProgress(`Saving... ${Math.min(i + BATCH, items.length).toLocaleString()} / ${items.length.toLocaleString()}`)
+        const res = await fetch('/api/upload-item-master', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            items: items.slice(i, i + BATCH),
+            import_batch: importBatch,
+            prune: isLast && imPrune,
+          }),
+        })
+        const json = await res.json()
+        if (!res.ok) { setImResult({ error: json.error ?? 'Upload failed' }); setImUploading(false); return }
+        if (isLast) removed = json.removed ?? 0
       }
 
-      setImResult({ count: items.length })
-      setImCount(items.length)
+      setImResult({ count: items.length, dupeCodes, removed })
+      // Merging keeps codes the file omits, so re-read the real total.
+      fetch('/api/upload-item-master').then(r => r.json()).then(j => setImCount(j.count ?? items.length))
     } catch (err) {
       setImResult({ error: String(err) })
     }
@@ -145,6 +164,22 @@ export function SettingsPanel({ users, currentProfile, settings }: SettingsPanel
     setImProgress('')
     setImUploading(false)
     if (itemMasterRef.current) itemMasterRef.current.value = ''
+  }
+
+  // Re-point existing BOM lines at the master. Needed after a master upload:
+  // names were copied in at import time, so corrected codes stay stale until
+  // this runs.
+  async function resyncItemNames() {
+    setSyncing(true)
+    setSyncResult(null)
+    try {
+      const res = await fetch('/api/resync-item-names', { method: 'POST' })
+      const json = await res.json()
+      setSyncResult(res.ok ? { products: json.products, renamed: json.renamed } : { error: json.error ?? 'Re-sync failed' })
+    } catch (err) {
+      setSyncResult({ error: String(err) })
+    }
+    setSyncing(false)
   }
 
   async function resetUserPassword(userId: string, email: string) {
@@ -259,7 +294,51 @@ export function SettingsPanel({ users, currentProfile, settings }: SettingsPanel
                 : <span className="flex items-center gap-1 text-xs text-green-600"><CheckCircle2 className="h-3.5 w-3.5" />{imResult.count?.toLocaleString()} items loaded</span>
             )}
           </div>
-          <p className="text-xs text-gray-400 mt-2">Upload the <span className="font-mono">New_Item_Master_report.xlsx</span> file. INV codes are matched to BOM item names automatically on next merch Excel upload.</p>
+          {!imUploading && imResult && !imResult.error && (
+            <p className="text-xs text-gray-500 mt-2">
+              {(imResult.removed ?? 0) > 0 && <>{imResult.removed?.toLocaleString()} item(s) not in the file were removed. </>}
+              {(imResult.dupeCodes ?? 0) > 0 && <>{imResult.dupeCodes?.toLocaleString()} row(s) repeated an INV code and were skipped.</>}
+            </p>
+          )}
+          <p className="text-xs text-gray-400 mt-2">Upload the <span className="font-mono">New_Item_Master_report.xlsx</span> file. Items are keyed on INV code, so a renamed item updates in place instead of creating a second row.</p>
+
+          <label className="flex items-start gap-2 mt-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={imPrune}
+              onChange={e => setImPrune(e.target.checked)}
+              disabled={imUploading}
+              className="mt-0.5"
+            />
+            <span className="text-xs text-gray-500">
+              <span className="font-medium text-gray-700">Remove items not in this file</span>
+              <span className="block text-gray-400">
+                Leave off if the file is a partial export — it only adds and updates. Turn on only when the
+                file is the complete master; anything missing from it is deleted, and BOMs referencing those
+                codes lose their lookup.
+              </span>
+            </span>
+          </label>
+
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <div className="flex items-center gap-3 flex-wrap">
+              <Button size="sm" variant="outline" onClick={resyncItemNames} disabled={syncing}>
+                {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                {syncing ? 'Re-syncing...' : 'Fix Existing BOM Names'}
+              </Button>
+              {!syncing && syncResult && (
+                syncResult.error
+                  ? <p className="text-xs text-red-600">{syncResult.error}</p>
+                  : <span className="flex items-center gap-1 text-xs text-green-600">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      {syncResult.renamed?.toLocaleString()} line(s) corrected across {syncResult.products?.toLocaleString()} product(s)
+                    </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-400 mt-2">
+              Rewrites item names and units on already-imported BOMs from the current master, and clears mismatch flags that the corrected master resolves. Run this after replacing the master.
+            </p>
+          </div>
         </CardContent>
       </Card>
 

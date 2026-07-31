@@ -22,8 +22,8 @@ export default async function ProductsPage() {
   const query = supabase
     .from('products')
     .select(`
-      id, name, sku, category, sub_category, workflow_stage, created_at,
-      design_data(designer_name, color_skus, channel, farma, variants, designer:profiles!assigned_to(full_name)),
+      id, name, display_name, sku, category, sub_category, workflow_stage, created_at,
+      design_data(designer_name, color_skus, channel, farma, style_name, variants, designer:profiles!assigned_to(full_name)),
       bom_data(fg_inv_code)
     `)
     .order('created_at', { ascending: false })
@@ -42,6 +42,7 @@ export default async function ProductsPage() {
     const designer = Array.isArray(dd?.designer) ? dd?.designer[0] : dd?.designer
     // Farma lives on the flat column for legacy rows, otherwise in variant 0.
     const farma = (dd?.farma
+      || dd?.style_name
       || (Array.isArray(dd?.variants) && dd.variants.length ? dd.variants[0]?.farma : '')
       || null)
     return {

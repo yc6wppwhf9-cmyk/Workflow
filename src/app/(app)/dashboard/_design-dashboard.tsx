@@ -3,7 +3,7 @@ import { Header } from '@/components/layout/header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Clock, CheckCircle2, ArrowRight, XCircle, UserCheck, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
-import { one, isOverdue, formatShortDate } from '@/lib/utils'
+import { one, isOverdue, formatShortDate, getProductTitle } from '@/lib/utils'
 import type { Profile } from '@/lib/types'
 import { KpiCard } from './_shared'
 
@@ -13,7 +13,7 @@ export async function DesignDashboard({ profile, filter }: { profile: Profile; f
 
   const [{ data: myAssignments }, { data: mySubmissions }, { data: myFiles }] = await Promise.all([
     supabase.from('design_data')
-      .select('product_id, is_completed, product:products(id, name, workflow_stage, created_at, sales_data(deadline_date), sampling_data(sample_review_status, updated_at))')
+      .select('product_id, is_completed, farma, style_name, product:products(id, name, display_name, sku, workflow_stage, created_at, sales_data(deadline_date), sampling_data(sample_review_status, updated_at))')
       .eq('assigned_to', profile.id),
     supabase.from('design_submissions')
       .select('product_id, status, created_at, feedback, reviewed_at')
@@ -90,7 +90,7 @@ export async function DesignDashboard({ profile, filter }: { profile: Profile; f
                       const rejCount = allSubs.filter(s => s.product_id === a.product_id && s.status === 'rejected').length
                       return (
                         <tr key={a.product_id} className={`hover:bg-gray-50 ${isOverdue(a.deadline) ? 'bg-red-50' : ''}`}>
-                          <td className="px-6 py-3 font-medium text-gray-900">{a.product?.name || a.product_id}</td>
+                          <td className="px-6 py-3 font-medium text-gray-900">{getProductTitle({ farma: a.farma, ...a.product })}</td>
                           <td className="px-4 py-3 text-xs text-gray-500">
                             {a.deadline
                               ? <span className={isOverdue(a.deadline) ? 'text-red-600 font-semibold' : ''}>{formatShortDate(a.deadline)}{isOverdue(a.deadline) ? ' ⚠' : ''}</span>

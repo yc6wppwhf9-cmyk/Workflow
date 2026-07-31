@@ -410,15 +410,31 @@ export const ROLE_COLORS: Record<UserRole, string> = {
   purchase_head: 'bg-rose-100 text-rose-700',
 }
 
-// Which department owns each stage (does the work while the product is in that stage)
-export const STAGE_OWNER_ROLE: Partial<Record<WorkflowStage, UserRole>> = {
-  design_completed: 'design',
-  sampling_completed: 'sampling',
-  merchandising_completed: 'merchandising',
-  bom_finalized: 'bom',
-  costing_naming: 'bom',
-  marketing_ready: 'marketing',
+// Which roles own each stage (do the work while the product is in that stage).
+// Heads are listed alongside their team: naming only the member role locked
+// department heads out of their own stage — they could neither edit the tab nor
+// advance the product, despite being the ones notified that it had arrived.
+export const STAGE_OWNER_ROLES: Partial<Record<WorkflowStage, UserRole[]>> = {
+  design_completed:        ['design', 'design_head'],
+  sampling_completed:      ['sampling'],
+  merchandising_completed: ['merchandising', 'merchandising_head'],
+  bom_finalized:           ['bom', 'bom_head'],
+  costing_naming:          ['bom', 'bom_head'],
+  marketing_ready:         ['marketing', 'marketing_head'],
 }
+
+/** Can this role do the work of the given stage? Admins are handled separately
+ *  by callers, since they override rather than own. */
+export function ownsStage(role: UserRole, stage: WorkflowStage): boolean {
+  return (STAGE_OWNER_ROLES[stage] ?? []).includes(role)
+}
+
+// The primary owning department, for display. Derived so it cannot drift from
+// the list above.
+export const STAGE_OWNER_ROLE: Partial<Record<WorkflowStage, UserRole>> =
+  Object.fromEntries(
+    Object.entries(STAGE_OWNER_ROLES).map(([stage, roles]) => [stage, roles[0]]),
+  ) as Partial<Record<WorkflowStage, UserRole>>
 
 // ── Colour variant hygiene ────────────────────────────────────────────────
 // Merch ATTRIBUTES templates leave blank columns whose header is a field label

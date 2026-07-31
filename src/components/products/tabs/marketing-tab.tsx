@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import { Loader2, Lock, Save, Plus, X, Upload, FileText, ImageIcon, Trash2, ExternalLink } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -10,6 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { createClient } from '@/lib/supabase/client'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { ownsStage } from '@/lib/types'
 import type { Product, Profile, MarketingData, ProductFile, SocialLink } from '@/lib/types'
 
 interface MarketingTabProps {
@@ -21,7 +23,9 @@ interface MarketingTabProps {
 
 export function MarketingTab({ product, profile, data, files }: MarketingTabProps) {
   const router = useRouter()
-  const isRoleAllowed = ['admin', 'marketing'].includes(profile.role)
+  // The marketing head does the work at this stage too — she was notified the
+  // product had arrived and then found every control disabled.
+  const isRoleAllowed = profile.role === 'admin' || ownsStage(profile.role, 'marketing_ready')
   const canEditFields = !data?.is_locked && !data?.is_completed && isRoleAllowed
   const showActions = !data?.is_locked && isRoleAllowed
 
@@ -50,40 +54,48 @@ export function MarketingTab({ product, profile, data, files }: MarketingTabProp
 
   async function handleSave() {
     setSaving(true)
-    const supabase = createClient()
-    await supabase.from('marketing_data').update({ ...form, updated_by: profile.id }).eq('product_id', product.id)
-    await supabase.from('activity_logs').insert({ product_id: product.id, user_id: profile.id, action: 'updated marketing data', department: 'marketing' })
-    setSaving(false)
-    setSaved(true)
-    setTimeout(() => { setSaved(false); router.refresh() }, 2000)
+    try {
+      await saveMarketing({})
+      setSaved(true)
+      setTimeout(() => { setSaved(false); router.refresh() }, 2000)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not save')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Single server-side write. The browser used to update marketing_data directly
+  // and never look at the result, so anything RLS refused still reported success.
+  async function saveMarketing(extra: { mark_complete?: boolean }) {
+    const res = await fetch('/api/save-marketing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_id: product.id, fields: form, ...extra }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok || !json.ok) throw new Error(json.error || 'Save failed')
+    return json as { ok: true; advanced: boolean }
   }
 
   async function markComplete() {
-    const becomingComplete = !data?.is_completed
     setSaving(true)
-    const supabase = createClient()
-    await supabase.from('marketing_data').update({ ...form, is_completed: becomingComplete, updated_by: profile.id }).eq('product_id', product.id)
-    await supabase.from('activity_logs').insert({
-      product_id: product.id, user_id: profile.id,
-      action: becomingComplete ? 'marked marketing complete' : 'marked marketing as incomplete',
-      department: 'marketing',
-    })
-    if (becomingComplete && product.workflow_stage === 'marketing_ready') {
-      await supabase.rpc('advance_product_stage', {
-        p_product_id: product.id,
-        p_next_stage: 'sales_priced',
-        p_user_id: profile.id,
-        p_action: 'marked marketing complete — stage advanced to Sales Pricing',
-        p_department: profile.role,
-      })
-      fetch('/api/notify-stage-advance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product_id: product.id, product_name: product.name, next_stage: 'sales_priced' }),
-      }).catch(() => {})
+    try {
+      const { advanced } = await saveMarketing({ mark_complete: true })
+      if (advanced) {
+        toast.success('Marketing complete — moved to Sales Pricing')
+        fetch('/api/notify-stage-advance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ product_id: product.id, product_name: product.name, next_stage: 'sales_priced' }),
+        }).catch(() => {})
+      }
+      router.refresh()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not update')
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
-    router.refresh()
   }
 
   function addToList(field: 'product_features' | 'catalogs', value: string) {

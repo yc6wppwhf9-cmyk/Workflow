@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
-import { WORKFLOW_STAGES, STAGE_LABELS, STAGE_OWNER_ROLE, type WorkflowStage, type Product, type Profile, type DesignData, type SamplingData, type MerchandisingData, type BomData, type MarketingData } from '@/lib/types'
+import { WORKFLOW_STAGES, STAGE_LABELS, ownsStage, type WorkflowStage, type Product, type Profile, type DesignData, type SamplingData, type MerchandisingData, type BomData, type MarketingData } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 interface WorkflowBarProps {
@@ -73,10 +73,10 @@ export function WorkflowBar({
   const isTerminal = currentIndex >= WORKFLOW_STAGES.length - 1
   const hasNextStage = !isTerminal
 
-  const currentStageOwner = STAGE_OWNER_ROLE[product.workflow_stage as WorkflowStage]
-  const isDesignHead = profile.role === 'design_head'
-  const isOwner = profile.role === currentStageOwner
-    || (product.workflow_stage === 'design_completed' && isDesignHead)
+  // Heads own their department's stage alongside their team. This used to name
+  // the member role and special-case design_head only, which left the other
+  // heads unable to advance their own stage.
+  const isOwner = ownsStage(profile.role, product.workflow_stage as WorkflowStage)
   const canAdvance = (isAdmin || isOwner) && (currentStageCompleted || isAdmin)
 
   const prevStage = currentIndex > 0 ? WORKFLOW_STAGES[currentIndex - 1] : null

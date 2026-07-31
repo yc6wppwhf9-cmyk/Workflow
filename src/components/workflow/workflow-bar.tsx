@@ -39,12 +39,20 @@ export function WorkflowBar({
   const currentIndex = WORKFLOW_STAGES.indexOf(product.workflow_stage as WorkflowStage)
   const isAdmin = ['admin', 'management'].includes(profile.role)
 
-  const DISPLAY_STAGES = [
-    { label: 'Design',           doneAfter: 0, tab: 'design'        },
-    { label: 'Merchandising',    doneAfter: 1, tab: 'merchandising' },
-    { label: 'BOM',              doneAfter: 3, tab: 'bom'           },
-    { label: 'Marketing',        doneAfter: 4, tab: 'marketing'     },
-    { label: 'Sales Priced',     doneAfter: 5, tab: 'sales'         },
+  // Chips map to stage NAMES, never to positions. The hardcoded indices this
+  // replaces were written against an older WORKFLOW_STAGES and silently went
+  // stale when the list changed shape: "Marketing" pointed at costing_naming, so
+  // a product arriving at Marketing rendered as already past it, and the
+  // marketing head was told the work was done before she had started.
+  const DISPLAY_STAGES: { label: string; tab: string; stages: WorkflowStage[] }[] = [
+    { label: 'Design',        tab: 'design',        stages: ['design_completed'] },
+    { label: 'Sampling',      tab: 'sampling',      stages: ['sampling_completed'] },
+    { label: 'Merchandising', tab: 'merchandising', stages: ['merchandising_completed'] },
+    // costing_naming is retired but still set on older rows, and it was BOM's
+    // work — fold it into the BOM chip so those products still light one up.
+    { label: 'BOM',           tab: 'bom',           stages: ['bom_finalized', 'costing_naming'] },
+    { label: 'Marketing',     tab: 'marketing',     stages: ['marketing_ready'] },
+    { label: 'Sales Priced',  tab: 'sales',         stages: ['sales_priced'] },
   ]
 
   const isCurrentStageComplete = () => {
@@ -145,9 +153,12 @@ export function WorkflowBar({
         {/* Stage progress — scrollable on mobile */}
         <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0 sm:flex-wrap scrollbar-hide min-w-0">
           {DISPLAY_STAGES.map((stage, i) => {
-            const isDone = currentIndex > stage.doneAfter
-            const isCurrent = currentIndex === stage.doneAfter
-            const isFuture = currentIndex < stage.doneAfter
+            // A chip is current while the product sits on any stage it covers,
+            // and done only once the product is past the last of them.
+            const lastIndex = Math.max(...stage.stages.map(s => WORKFLOW_STAGES.indexOf(s)))
+            const isCurrent = stage.stages.includes(product.workflow_stage as WorkflowStage)
+            const isDone = !isCurrent && currentIndex > lastIndex
+            const isFuture = !isCurrent && !isDone
             const isClickable = (isDone || isCurrent) && !!onTabChange
 
             return (

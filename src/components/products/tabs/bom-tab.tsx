@@ -198,6 +198,12 @@ export function BomTab({ product, profile, data, merchandisingData, bomUsers = [
   const fgSaved = !!data?.fg_inv_code
   const activeVariant = colourVariants.find((v, i) => variantKey(v, i) === activeColour) || colourVariants[0] || null
 
+  // Designs with no ERP code yet. Deliberately a warning, not a gate: codes are
+  // often issued after Marketing has already started, so blocking the hand-off
+  // would stall the pipeline. Naming the designs makes the gap impossible to
+  // miss without making it someone's blocker.
+  const designsMissingInv = colourVariants.filter(v => !(v.fgInvCode || '').trim())
+
   // Correcting a component's name in the ERP item master (BOM team only)
   const canEditMaster = isRoleAllowed
   const [editingItem, setEditingItem] = useState<string | null>(null)
@@ -354,6 +360,17 @@ export function BomTab({ product, profile, data, merchandisingData, bomUsers = [
             {isBomMember && isAssignedToMe && !isSubmitted && (
               <div>
                 <p className="text-xs text-gray-500 mb-2">Fill in the BOM below, then send it to the BOM head for approval.</p>
+                {/* Flagged here as well as at approval: the assignee is the one
+                    who enters the codes, so this is where the gap is fixable. */}
+                {designsMissingInv.length > 0 && (
+                  <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    <strong>{designsMissingInv.length} of {colourVariants.length} design(s)</strong> have no FG INV code.
+                    Add them per design below if ERP has issued them.
+                    <p className="mt-1 text-amber-700">
+                      Missing: {designsMissingInv.map(v => v.styleName || v.colourTag).join(', ')}
+                    </p>
+                  </div>
+                )}
                 <Button size="sm" disabled={bomBusy} onClick={() => bomAction('submit')}>
                   {bomBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                   Submit for Approval
@@ -379,6 +396,18 @@ export function BomTab({ product, profile, data, merchandisingData, bomUsers = [
                     <p className="text-xs text-amber-700 w-full">
                       Waiting on MD costing approval — tick it in <strong>Costing &amp; Naming</strong> below. Naming can be done later.
                     </p>
+                  )}
+                  {designsMissingInv.length > 0 && (
+                    <div className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      <strong>
+                        {designsMissingInv.length} of {colourVariants.length} design(s)
+                      </strong>{' '}
+                      have no FG INV code yet. You can still approve — the code can be added after ERP issues it — but
+                      Marketing and the reports will show a blank until then.
+                      <p className="mt-1 text-amber-700">
+                        Missing: {designsMissingInv.map(v => v.styleName || v.colourTag).join(', ')}
+                      </p>
+                    </div>
                   )}
                   <Button size="sm" variant="outline" className="text-red-600 border-red-200"
                     disabled={bomBusy} onClick={() => setShowReject(v => !v)}>

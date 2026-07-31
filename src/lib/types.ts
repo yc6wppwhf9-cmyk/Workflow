@@ -352,6 +352,12 @@ export const WORKFLOW_STAGES: WorkflowStage[] = [
   'product_live',
 ]
 
+// The last stage of the live pipeline: a product is complete once Marketing
+// finishes. 'sales_priced' and 'product_live' are retired as workflow steps but
+// stay in WorkflowStage, WORKFLOW_STAGES and the labels below so products that
+// already reached them still resolve everywhere — reports, filters, dashboards.
+export const FINAL_STAGE: WorkflowStage = 'marketing_ready'
+
 export const STAGE_LABELS: Record<WorkflowStage, string> = {
   design_completed: 'Design',
   sampling_completed: 'Sampling',

@@ -65,23 +65,9 @@ export async function POST(req: NextRequest) {
       : becomingComplete ? 'marked marketing complete' : 'marked marketing as incomplete',
   })
 
-  // Advance to Sales only on the completing edge, and only from Marketing.
-  let advanced = false
-  if (becomingComplete) {
-    const { data: product } = await adminSupabase
-      .from('products').select('workflow_stage').eq('id', product_id).single()
-    if (product?.workflow_stage === 'marketing_ready') {
-      const { error: rpcErr } = await adminSupabase.rpc('advance_product_stage', {
-        p_product_id: product_id,
-        p_next_stage: 'sales_priced',
-        p_user_id: user.id,
-        p_action: 'marked marketing complete — stage advanced to Sales Pricing',
-        p_department: role,
-      })
-      if (rpcErr) return NextResponse.json({ error: `stage: ${rpcErr.message}` }, { status: 500 })
-      advanced = true
-    }
-  }
-
-  return NextResponse.json({ ok: true, advanced })
+  // Marketing is the end of the pipeline: completing it finishes the product
+  // rather than advancing to Sales Pricing. The stage stays at marketing_ready
+  // and is_completed is what marks the lifecycle done.
+  const completed = becomingComplete
+  return NextResponse.json({ ok: true, completed })
 }

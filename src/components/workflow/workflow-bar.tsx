@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
-import { WORKFLOW_STAGES, STAGE_LABELS, ownsStage, type WorkflowStage, type Product, type Profile, type DesignData, type SamplingData, type MerchandisingData, type BomData, type MarketingData } from '@/lib/types'
+import { WORKFLOW_STAGES, STAGE_LABELS, FINAL_STAGE, ownsStage, type WorkflowStage, type Product, type Profile, type DesignData, type SamplingData, type MerchandisingData, type BomData, type MarketingData } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 interface WorkflowBarProps {
@@ -51,8 +51,10 @@ export function WorkflowBar({
     // costing_naming is retired but still set on older rows, and it was BOM's
     // work — fold it into the BOM chip so those products still light one up.
     { label: 'BOM',           tab: 'bom',           stages: ['bom_finalized', 'costing_naming'] },
+    // Marketing ends the pipeline. Products that already reached the retired
+    // Sales Priced / Product Live stages are past this chip, so they read as
+    // done rather than falling off the end of the bar.
     { label: 'Marketing',     tab: 'marketing',     stages: ['marketing_ready'] },
-    { label: 'Sales Priced',  tab: 'sales',         stages: ['sales_priced'] },
   ]
 
   const isCurrentStageComplete = () => {
@@ -70,8 +72,11 @@ export function WorkflowBar({
   }
 
   const currentStageCompleted = isCurrentStageComplete()
-  const isTerminal = currentIndex >= WORKFLOW_STAGES.length - 1
+  // Terminal at Marketing, not at the end of the array — the array still holds
+  // the retired Sales Priced and Product Live stages for existing rows.
+  const isTerminal = currentIndex >= WORKFLOW_STAGES.indexOf(FINAL_STAGE)
   const hasNextStage = !isTerminal
+  const pipelineComplete = isTerminal && currentStageCompleted
 
   // Heads own their department's stage alongside their team. This used to name
   // the member role and special-case design_head only, which left the other
@@ -156,8 +161,10 @@ export function WorkflowBar({
             // A chip is current while the product sits on any stage it covers,
             // and done only once the product is past the last of them.
             const lastIndex = Math.max(...stage.stages.map(s => WORKFLOW_STAGES.indexOf(s)))
-            const isCurrent = stage.stages.includes(product.workflow_stage as WorkflowStage)
-            const isDone = !isCurrent && currentIndex > lastIndex
+            // Once Marketing signs off there is no further stage to move to, so
+            // every chip reads as done rather than leaving the last one blue.
+            const isCurrent = !pipelineComplete && stage.stages.includes(product.workflow_stage as WorkflowStage)
+            const isDone = pipelineComplete || (!isCurrent && currentIndex > lastIndex)
             const isFuture = !isCurrent && !isDone
             const isClickable = (isDone || isCurrent) && !!onTabChange
 
@@ -221,9 +228,9 @@ export function WorkflowBar({
                 Advance Stage
               </Button>
             )}
-            {isTerminal && currentStageCompleted && (
+            {pipelineComplete && (
               <span className="flex items-center gap-1.5 text-sm font-medium text-green-600">
-                <Check className="h-4 w-4" /> Pipeline Complete
+                <Check className="h-4 w-4" /> Product Lifecycle Complete
               </span>
             )}
           </div>

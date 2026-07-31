@@ -75,21 +75,16 @@ export function MarketingTab({ product, profile, data, files }: MarketingTabProp
     })
     const json = await res.json().catch(() => ({}))
     if (!res.ok || !json.ok) throw new Error(json.error || 'Save failed')
-    return json as { ok: true; advanced: boolean }
+    return json as { ok: true; completed: boolean }
   }
 
   async function markComplete() {
     setSaving(true)
     try {
-      const { advanced } = await saveMarketing({ mark_complete: true })
-      if (advanced) {
-        toast.success('Marketing complete — moved to Sales Pricing')
-        fetch('/api/notify-stage-advance', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ product_id: product.id, product_name: product.name, next_stage: 'sales_priced' }),
-        }).catch(() => {})
-      }
+      // Marketing is the last stage — completing it ends the lifecycle, so
+      // there is no next stage to advance to or notify.
+      const { completed } = await saveMarketing({ mark_complete: true })
+      toast.success(completed ? 'Marketing complete — product lifecycle complete' : 'Marketing reopened')
       router.refresh()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not update')

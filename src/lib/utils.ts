@@ -71,3 +71,20 @@ export function extractStoragePath(fileUrl: string, bucketName: string): string 
   if (idx === -1) return null
   return decodeURIComponent(fileUrl.slice(idx + marker.length).split('?')[0])
 }
+
+export function getProductTitle(product?: {
+  farma?: string | null
+  product_range?: string | null
+  display_name?: string | null
+  family_name?: string | null
+  name?: string | null
+  sku?: string | null
+} | null): string {
+  if (!product) return 'Untitled Product'
+  if (product.farma?.trim()) return product.farma.trim()
+  if (product.display_name?.trim()) return product.display_name.trim()
+  if (product.product_range?.trim()) return product.product_range.trim()
+  if (product.family_name?.trim()) return product.family_name.trim()
+  return product.name?.trim() || product.sku?.trim() || 'Untitled Product'
+}
+

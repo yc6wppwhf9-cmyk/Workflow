@@ -7,7 +7,7 @@ import { Search, Package, ChevronRight, Filter, Pencil, Check, X, Loader2 } from
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { STAGE_LABELS, STAGE_COLORS, CATEGORY_LABELS, type WorkflowStage, type ProductCategory, type Profile } from '@/lib/types'
-import { cn, formatDate } from '@/lib/utils'
+import { cn, formatDate, getProductTitle } from '@/lib/utils'
 
 const QUICK_FILTERS: { label: string; value: string }[] = [
   { label: 'All',           value: 'all' },
@@ -23,6 +23,9 @@ const QUICK_FILTERS: { label: string; value: string }[] = [
 interface ProductRow {
   id: string
   name: string
+  display_name?: string | null
+  product_range?: string | null
+  family_name?: string | null
   sku: string
   category: string
   sub_category: string | null
@@ -80,8 +83,13 @@ export function ProductsTable({ products, profile }: ProductsTableProps) {
   const filtered = products.filter((p) => {
     const design = p.design_data
     const bom = p.bom_data
+    const title = getProductTitle(p)
     const haystack = [
+      title,
       p.name,
+      p.display_name,
+      p.product_range,
+      p.family_name,
       p.sku,
       p.assigned_designer,
       p.farma,
@@ -161,7 +169,7 @@ export function ProductsTable({ products, profile }: ProductsTableProps) {
             {filtered.map((p) => {
               const design = p.design_data
               const bom = p.bom_data
-              const displayName = renamed[p.id] ?? p.name
+              const displayName = renamed[p.id] ?? getProductTitle(p)
               return (
                 <tr key={p.id} className="hover:bg-gray-50 transition-colors group">
                   {/* Product name (inline-editable) + SKU */}

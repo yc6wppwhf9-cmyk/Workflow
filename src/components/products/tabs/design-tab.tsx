@@ -17,7 +17,8 @@ import { createClient } from '@/lib/supabase/client'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { CATEGORY_LABELS, CATEGORY_SUBCATEGORIES, BRANDS, CHANNELS, type ProductCategory, type Brand } from '@/lib/types'
 import type { Product, Profile, DesignData, SamplingData, SalesData, ProductFile, DesignSubmission } from '@/lib/types'
-import { parseTechPackAllVariants, type TechPackVariant } from '@/lib/parse-techpack'
+import { parseTechPackWorkbook, type TechPackVariant } from '@/lib/parse-techpack'
+import { canAutoRename } from '@/lib/product-naming'
 import { cn } from '@/lib/utils'
 import { ImageLightbox, type LightboxImage } from '@/components/ui/image-lightbox'
 
@@ -729,19 +730,26 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
         const res = await fetch('/api/upload-file', { method: 'POST', body: fd })
         if (!res.ok) throw new Error('Upload failed')
         const { url } = await res.json()
-        const { error: pdfSaveErr } = await (supabase.from('design_data') as any).upsert(
-          { product_id: product.id, techpack_pdf_url: url, updated_by: profile.id },
-          { onConflict: 'product_id' }
-        )
-        if (pdfSaveErr) throw new Error(pdfSaveErr.message)
+        const pdfSaveRes = await fetch('/api/save-techpack-data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ product_id: product.id, techpack_pdf_url: url }),
+        })
+        if (!pdfSaveRes.ok) throw new Error((await pdfSaveRes.json().catch(() => ({}))).error || 'Save failed')
         setTechpackPdfUrl(url)
         const notifyFd = new FormData()
         notifyFd.append('file', file)
         notifyFd.append('product_id', product.id)
         notifyFd.append('product_name', product.name)
         fetch('/api/notify-techpack-uploaded', { method: 'POST', body: notifyFd }).catch(() => {})
-        setTechPackResult({ filled: ['PDF uploaded successfully.'], isPdf: true })
-        toast.success('Tech pack PDF uploaded')
+        // A PDF is stored as a reference only — there is no PDF parser, so no
+        // fields are filled. Saying just "uploaded" read as though the data had
+        // gone in, and the tech pack then showed up empty everywhere downstream.
+        setTechPackResult({
+          filled: ['PDF attached as a reference. Fields are NOT read from a PDF — fill the design details below by hand, or upload the Excel version to auto-fill them.'],
+          isPdf: true,
+        })
+        toast.success('Tech pack PDF attached — fields must be filled manually')
         router.refresh()
       } catch {
         toast.error('Failed to upload PDF')
@@ -757,9 +765,35 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
       const { read, utils } = await import('xlsx')
       const buffer = await file.arrayBuffer()
       const wb = read(buffer, { type: 'array' })
-      const ws = wb.Sheets[wb.SheetNames[0]]
-      const rows = utils.sheet_to_json<string[]>(ws, { header: 1, defval: '' }) as string[][]
-      const variants = parseTechPackAllVariants(rows)
+
+      // Score every sheet rather than assuming the tech pack is the first one —
+      // a workbook that leads with a cover or index tab used to parse to nothing
+      // and still report success.
+      const parsed = parseTechPackWorkbook(
+        wb.SheetNames.map(name => ({
+          name,
+          rows: utils.sheet_to_json<string[]>(wb.Sheets[name], { header: 1, defval: '' }) as string[][],
+        })),
+      )
+      const { variants } = parsed
+      const rows = parsed.sheetName
+        ? (utils.sheet_to_json<string[]>(wb.Sheets[parsed.sheetName], { header: 1, defval: '' }) as string[][])
+        : []
+
+      // Nothing matched on any sheet. Stop here: writing the all-empty variant the
+      // parser returns would overwrite real data and leave the tech pack blank
+      // everywhere it's displayed, while the toast claimed success.
+      if (parsed.filledCount === 0) {
+        const tried = parsed.sheetsTried.join(', ')
+        setTechPackResult({ filled: [] })
+        toast.error(
+          `Couldn't read any tech pack fields from "${file.name}". Sheets checked: ${tried}. Nothing was saved.`,
+          { duration: 9000 },
+        )
+        setParsing(false)
+        if (techPackRef.current) techPackRef.current.value = ''
+        return
+      }
 
       const fd = new FormData()
       fd.append('file', file)
@@ -773,11 +807,54 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
         const JSZip = (await import('jszip')).default
         const zip = await JSZip.loadAsync(buffer)
 
-        // Build rId → image file path from drawing relationships
+        // Find the drawing part belonging to the sheet we actually parsed.
+        //
+        // An xlsx has one drawing per worksheet, and drawing1.xml is simply the
+        // first sheet that has one — not necessarily the tech pack's sheet. This
+        // used to be hardcoded to drawing1, so images were matched against a
+        // different sheet's grid and most designs came back without one.
+        //
+        // Walk the OPC relationships properly:
+        //   workbook.xml (sheet name -> r:id)
+        //     -> _rels/workbook.xml.rels (r:id -> worksheets/sheetN.xml)
+        //       -> worksheets/_rels/sheetN.xml.rels (-> drawings/drawingK.xml)
+        const readText = async (path: string) => {
+          const f = zip.file(path)
+          return f ? await f.async('text') : null
+        }
+
+        async function resolveDrawingPath(sheetName: string): Promise<string | null> {
+          if (!sheetName) return null
+          const wbXml = await readText('xl/workbook.xml')
+          if (!wbXml) return null
+
+          // Attribute order varies between producers, so match per <sheet> tag.
+          const sheetTag = [...wbXml.matchAll(/<sheet\b[^>]*>/g)]
+            .map(m => m[0])
+            .find(tag => tag.match(/name="([^"]*)"/)?.[1] === sheetName)
+          const rid = sheetTag?.match(/r:id="(rId\d+)"/)?.[1]
+          if (!rid) return null
+
+          const wbRels = await readText('xl/_rels/workbook.xml.rels')
+          const sheetTarget = wbRels?.match(new RegExp(`Id="${rid}"[^>]*Target="([^"]+)"`))?.[1]
+          if (!sheetTarget) return null
+
+          const sheetFile = sheetTarget.split('/').pop()
+          const sheetRels = await readText(`xl/worksheets/_rels/${sheetFile}.rels`)
+          const drawTarget = sheetRels?.match(/Target="([^"]*drawings\/drawing\d+\.xml)"/)?.[1]
+          if (!drawTarget) return null
+
+          return 'xl/' + drawTarget.replace(/^\.\.\//, '')
+        }
+
+        // Fall back to drawing1 so single-sheet workbooks behave exactly as before.
+        const drawingPath = (await resolveDrawingPath(parsed.sheetName)) ?? 'xl/drawings/drawing1.xml'
+        const drawingName = drawingPath.split('/').pop()
+
+        // Build rId → image file path from that drawing's relationships
         const rIdToFile: Record<string, string> = {}
-        const relsFile = zip.file('xl/drawings/_rels/drawing1.xml.rels')
-        if (relsFile) {
-          const relsXml = await relsFile.async('text')
+        const relsXml = await readText(`xl/drawings/_rels/${drawingName}.rels`)
+        if (relsXml) {
           for (const [, rId, target] of [...relsXml.matchAll(/Id="(rId\d+)"[^>]+Target="([^"]+)"/g)]) {
             rIdToFile[rId] = 'xl/' + target.replace('../', '')
           }
@@ -788,7 +865,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
         // whose top-left anchor drifts into an adjacent block still map to the correct design.
         type AnchorEntry = { row: number; col: number; centerRow: number; centerCol: number; filePath: string }
         const anchored: AnchorEntry[] = []
-        const drawingFile = zip.file('xl/drawings/drawing1.xml')
+        const drawingFile = zip.file(drawingPath)
         if (drawingFile && Object.keys(rIdToFile).length > 0) {
           const xml = await drawingFile.async('text')
           const blockRe = /<xdr:(?:twoCellAnchor|oneCellAnchor)[^>]*>([\s\S]*?)<\/xdr:(?:twoCellAnchor|oneCellAnchor)>/g
@@ -892,37 +969,69 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
             ...defaultForm, ...updates,
             sample_color: v.colourName || '',
             color_skus: newColorSkus,
+            // Which sheet this variant came from. This is the merge key below —
+            // see there for why the colour name can't be used.
+            source_file: file.name,
             ...(variantImageUrls[i] ? { variant_image_url: variantImageUrls[i] } : {}),
           }
         })
         const existingReal = forms.filter(f => f.sample_color || f.farma || f.season_year || (f.color_skus && f.color_skus.length > 0))
-        // Merge: new variants from upload take priority; existing variants not in the new upload are kept
+        // Merge by SOURCE SHEET, not by colour name.
+        //
+        // The parser labels variants "Design 1 — LPNK", "Design 2 — RBL", … and the
+        // numbering restarts at 1 for every upload. Keying the merge on that label
+        // meant a second tech pack silently overwrote the first one's tabs — two
+        // different sheets both produced a "Design 1 — …" and the later won.
+        //
+        // Keyed on the filename instead: re-uploading the SAME sheet still corrects
+        // its variants in place, while a different sheet is appended as new tabs.
         const newColors = new Set(newVariantForms.map((f: any) => (f.sample_color || '').toLowerCase().trim()).filter(Boolean))
         const keptExisting = existingReal.filter((f: any) => {
+          // Variants saved before this change carry no source_file — fall back to
+          // the old colour match for those so re-uploading doesn't duplicate them.
+          if (f.source_file) return f.source_file !== file.name
           const c = (f.sample_color || '').toLowerCase().trim()
           return !c || !newColors.has(c)
         })
         const mergedForms = [...keptExisting, ...newVariantForms]
         setForms(mergedForms)
-        const [{ error: saveErr }] = await Promise.all([
-          (supabase.from('design_data') as any).upsert(
-            { product_id: product.id, variants: mergedForms, updated_by: profile.id },
-            { onConflict: 'product_id' }
-          ),
-          variants[0].styleName
+        const [variantsSaveRes] = await Promise.all([
+          fetch('/api/save-techpack-data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ product_id: product.id, variants: mergedForms }),
+          }),
+          // Only adopt the sheet's STYLE NAME while the product is still unnamed.
+          // STYLE NAME is a generic descriptor in these workbooks ("LAPTOP",
+          // "COLLEGE BACKPACK"), so letting it win unconditionally both collided
+          // across products and overwrote deliberately assigned rangewise names.
+          variants[0].styleName && canAutoRename(product)
             ? supabase.from('products').update({ name: variants[0].styleName, updated_by: profile.id }).eq('id', product.id)
             : Promise.resolve(),
         ])
+        const saveErr = variantsSaveRes.ok ? null : { message: (await variantsSaveRes.json().catch(() => ({}))).error || 'Save failed' }
         if (saveErr) {
           toast.error(`Tech pack parsed but failed to save: ${saveErr.message}`)
           setTechPackResult({ filled: [] })
         } else {
           const imgCount = variantImageUrls.filter(Boolean).length
-          const base = keptExisting.length > 0
-            ? `Updated ${newVariantForms.length} variant(s). Total: ${mergedForms.length} variants.`
-            : `Loaded ${mergedForms.length} variant(s).`
-          setTechPackResult({ filled: [base + (imgCount > 0 ? ` ${imgCount} variant image(s) extracted.` : '')] })
-          toast.success('Tech pack saved')
+          const added = mergedForms.length - existingReal.length
+          const base = existingReal.length === 0
+            ? `Saved ${mergedForms.length} design(s) from this sheet.`
+            : added > 0
+              ? `Saved — added ${added} new design(s) as separate tabs. Total: ${mergedForms.length}.`
+              : `Saved — updated ${newVariantForms.length} design(s) from this sheet. Total: ${mergedForms.length}.`
+          // Report images as "n of N designs" — a bare count hid the fact that
+          // most designs came back without one.
+          const imgNote = imgCount === 0
+            ? ' No variant images found in the sheet.'
+            : imgCount < variants.length
+              ? ` Variant images: ${imgCount} of ${variants.length} designs.`
+              : ` ${imgCount} variant image(s) extracted.`
+          setTechPackResult({ filled: [base + imgNote] })
+          toast.success(added > 0 && existingReal.length > 0
+            ? `Tech pack saved — ${added} new design tab(s) added`
+            : 'Tech pack saved')
           router.refresh()
         }
       }
@@ -1247,109 +1356,6 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
             ))}
           </div>
         </div>
-      )}
-
-      {/* ── Sampling Gate ─────────────────────────────────────────────────── */}
-      {(isAssignedToMe || isHead) && !data?.is_locked && !data?.is_completed && (
-        <Card className={cn(
-          'border-2',
-          samplingApproved  ? 'border-green-300 bg-green-50'  :
-          samplingRejected  ? 'border-red-300 bg-red-50'      :
-          samplingSent      ? 'border-yellow-200 bg-yellow-50' :
-          hasAnyApproved    ? 'border-violet-200 bg-violet-50' :
-          'border-gray-200 bg-gray-50',
-        )}>
-          <CardContent className="pt-4 pb-4">
-            {/* Not sent yet */}
-            {samplingStatus === 'not_started' && (
-              <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div>
-                  <p className="text-sm font-semibold text-gray-800">Send for Sampling</p>
-                  {!hasAnyApproved ? (
-                    <p className="text-xs text-gray-400 mt-0.5">Illustrations must be approved by the design head first.</p>
-                  ) : !hasTechPack ? (
-                    <p className="text-xs text-orange-600 mt-0.5">Upload the tech pack above before sending for sampling.</p>
-                  ) : (
-                    <p className="text-xs text-violet-700 mt-0.5">
-                      {designFiles.filter(f => f.review_status === 'approved').length} illustration(s) approved &amp; tech pack ready — click to send.
-                    </p>
-                  )}
-                </div>
-                {hasAnyApproved && hasTechPack && (
-                  <Button
-                    size="sm"
-                    onClick={sendForSampling}
-                    disabled={sendingSampling}
-                    className="bg-violet-600 hover:bg-violet-700 shrink-0"
-                  >
-                    {sendingSampling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                    Send for Sampling
-                  </Button>
-                )}
-              </div>
-            )}
-
-            {/* Sent — waiting for sampling team */}
-            {samplingSent && (
-              <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div className="flex items-center gap-3">
-                  <Clock className="h-5 w-5 text-yellow-600 shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold text-yellow-900">Sent to Sampling Team</p>
-                    <p className="text-xs text-yellow-700 mt-0.5">
-                      The sampling team is creating physical samples. If you have uploaded a new variant, you can send it too.
-                    </p>
-                  </div>
-                </div>
-                {hasAnyApproved && hasTechPack && (isAssignedToMe || isHead) && (
-                  <Button
-                    size="sm"
-                    onClick={sendForSampling}
-                    disabled={sendingSampling}
-                    variant="outline"
-                    className="border-yellow-400 text-yellow-800 hover:bg-yellow-50 shrink-0"
-                  >
-                    {sendingSampling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                    Send Another Variant
-                  </Button>
-                )}
-              </div>
-            )}
-
-            {/* Approved — design can be marked complete */}
-            {samplingApproved && (
-              <div className="flex items-center gap-3">
-                <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold text-green-800">Sample Approved</p>
-                  <p className="text-xs text-green-700 mt-0.5">
-                    Physical sample passed. You can now mark design as complete — product will advance directly to Merchandising.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Rejected — needs revision */}
-            {samplingRejected && (
-              <div className="flex items-start gap-3">
-                <XCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-semibold text-red-800">Sample Rejected</p>
-                  {samplingData?.designer_feedback && (
-                    <p className="text-xs text-red-700 mt-0.5 italic">&ldquo;{samplingData.designer_feedback}&rdquo;</p>
-                  )}
-                  <p className="text-xs text-red-600 mt-1">Review the feedback, update the design if needed, and send for sampling again.</p>
-                  {(isAssignedToMe || isHead) && (
-                    <Button size="sm" onClick={sendForSampling} disabled={sendingSampling} className="mt-2 bg-red-600 hover:bg-red-700 h-7 text-xs">
-                      {sendingSampling ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
-                      Resend for Sampling
-                    </Button>
-                  )}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
       )}
 
       {/* ── Design Head: Assignment + Review Queue (reviewer mode only) ── */}
@@ -1777,19 +1783,21 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
 
       {/* ── Batch hold indicator ──────────────────────────────────── */}
       {data?.is_completed && batchPending.length > 0 && (isAssignedToMe || isHead) && (
-        <Card className="border-blue-200 bg-blue-50">
+        /* Amber: this is a wait state. It read as blue "information" before,
+           which is the same weight as everything else on the tab. */
+        <Card className="border-amber-200 bg-amber-50">
           <CardContent className="pt-4 pb-4">
             <div className="flex items-start gap-3">
-              <Clock className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
+              <Clock className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-semibold text-blue-900">Design complete — waiting for batch</p>
-                <p className="text-xs text-blue-700 mt-0.5">
+                <p className="text-sm font-semibold text-amber-900">Design complete — waiting for batch</p>
+                <p className="text-xs text-amber-700 mt-0.5">
                   This product will advance to Sampling once the following {batchPending.length === 1 ? 'product is' : `${batchPending.length} products are`} also complete:
                 </p>
                 <ul className="mt-2 space-y-1">
                   {batchPending.map(s => (
-                    <li key={s.id} className="text-xs text-blue-800 font-medium flex items-center gap-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-blue-400 shrink-0" />
+                    <li key={s.id} className="text-xs text-amber-800 font-medium flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0" />
                       {s.name}
                     </li>
                   ))}
@@ -1802,10 +1810,13 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
 
       {/* ── Head Remarks visible to designers ─────────────────────── */}
       {isAssignedToMe && data?.head_notes && (
-        <Card className="border-violet-200 bg-violet-50">
+        /* Indigo, matching the merch-head remarks block above — the two were
+           violet and indigo for no reason, so "someone left you a remark" had
+           two different colours on the same tab. */
+        <Card className="border-indigo-200 bg-indigo-50">
           <CardContent className="pt-4 pb-4">
-            <p className="text-xs font-semibold text-violet-400 uppercase tracking-wide mb-1">Remarks from Design Head</p>
-            <p className="text-sm text-violet-900 whitespace-pre-wrap">{data.head_notes}</p>
+            <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide mb-1">Remarks from Design Head</p>
+            <p className="text-sm text-indigo-900 whitespace-pre-wrap">{data.head_notes}</p>
           </CardContent>
         </Card>
       )}
@@ -2027,7 +2038,13 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
 
       {/* ── Submit for Management Approval (design head creator mode) ── */}
       {isHeadCreatorMode && !data?.is_locked && !data?.is_completed && (
-        <Card className={imageApproved ? 'border-green-200 bg-green-50' : 'border-violet-200 bg-violet-50'}>
+        /* Green when done, amber while waiting on the reviewer, neutral when the
+           action is yours. */
+        <Card className={
+          imageApproved ? 'border-green-200 bg-green-50'
+            : designFiles.some(f => f.review_status === 'pending') ? 'border-amber-200 bg-amber-50'
+              : 'border-gray-200'
+        }>
           <CardContent className="pt-4 pb-4">
             {imageApproved ? (
               <div className="flex items-center gap-3 text-green-700">
@@ -2038,11 +2055,11 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
                 </div>
               </div>
             ) : designFiles.some(f => f.review_status === 'pending') ? (
-              <div className="flex items-center gap-3 text-violet-700">
+              <div className="flex items-center gap-3 text-amber-800">
                 <Clock className="h-5 w-5 shrink-0 animate-pulse" />
                 <div>
                   <p className="text-sm font-semibold">Submitted — awaiting management approval</p>
-                  <p className="text-xs text-violet-600 mt-0.5">You can add more illustrations while waiting.</p>
+                  <p className="text-xs text-amber-700 mt-0.5">You can add more illustrations while waiting.</p>
                 </div>
               </div>
             ) : (
@@ -2135,19 +2152,21 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
         </div>
       )}
       {(isAssignedToMe || isHead) && canEditFields && (
-        <Card className="border-purple-200 bg-purple-50">
+        /* Neutral by default: colour on this tab now means status (amber =
+           waiting, green = done, red = rejected), not decoration. */
+        <Card>
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-purple-100 flex items-center justify-center shrink-0">
-                  <FileSpreadsheet className="h-5 w-5 text-purple-600" />
+                <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
+                  <FileSpreadsheet className="h-5 w-5 text-gray-500" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-purple-900">Upload Tech Pack</p>
-                  <p className="text-xs text-purple-700">Excel auto-fills fields &amp; extracts variant images · PDF stored as reference</p>
+                  <p className="text-sm font-semibold text-gray-800">Upload Tech Pack</p>
+                  <p className="text-xs text-gray-500">Excel auto-fills fields &amp; extracts variant images · PDF stored as reference</p>
                 </div>
               </div>
-              <Button size="sm" onClick={() => techPackRef.current?.click()} disabled={parsingTechPack} className="bg-purple-600 hover:bg-purple-700 shrink-0">
+              <Button size="sm" onClick={() => techPackRef.current?.click()} disabled={parsingTechPack} className="shrink-0">
                 {parsingTechPack ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                 {parsingTechPack ? 'Uploading…' : 'Upload Tech Pack'}
               </Button>
@@ -2156,7 +2175,7 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
 
             {/* Uploaded PDF link */}
             {techpackPdfUrl && (
-              <div className="mt-3 pt-3 border-t border-purple-200 flex items-center gap-2">
+              <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-2">
                 <FileText className="h-4 w-4 text-red-500 shrink-0" />
                 <a
                   href={techpackPdfUrl}
@@ -2175,15 +2194,13 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
 
             {/* Upload result message */}
             {techPackResult && techPackVariants.length <= 1 && (
-              <div className="mt-3 pt-3 border-t border-purple-200">
+              <div className="mt-3 pt-3 border-t border-gray-100">
                 {techPackResult.filled.length > 0 ? (
-                  <div className="flex items-start gap-2 text-purple-800">
-                    <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0 text-purple-600" />
-                    <p className="text-xs">
-                      {techPackResult.isPdf
-                        ? techPackResult.filled[0]
-                        : `Filled: ${techPackResult.filled.join(', ')}. Review and save.`}
-                    </p>
+                  <div className="flex items-start gap-2 text-green-800">
+                    <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0 text-green-600" />
+                    {/* The Excel branch writes straight to design_data, so this is a
+                        confirmation of what was saved — not a prompt to save. */}
+                    <p className="text-xs">{techPackResult.filled.join(' ')}</p>
                   </div>
                 ) : (
                   <p className="text-xs text-red-600">Could not extract data — check the file format.</p>
@@ -2192,103 +2209,6 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
             )}
           </CardContent>
         </Card>
-      )}
-
-      {/* ── Print Files Upload ── */}
-      {(isAssignedToMe || isHead) && canEditFields && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <CardTitle className="text-base">Print Files</CardTitle>
-            <div className="flex items-center gap-2">
-              {printUploading && printProgress && (
-                <span className="text-xs text-blue-600 flex items-center gap-1.5">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  {printProgress.done}/{printProgress.total} uploading…
-                </span>
-              )}
-              <label className="cursor-pointer">
-                <input
-                  ref={printFileRef}
-                  type="file"
-                  accept="image/*,application/pdf"
-                  multiple
-                  className="hidden"
-                  disabled={printUploading}
-                  onChange={e => handlePrintUpload(Array.from(e.target.files || []))}
-                />
-                <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border ${printUploading ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 cursor-pointer'}`}>
-                  <Upload className="h-3 w-3" />
-                  Upload Files
-                </span>
-              </label>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-
-            {/* Uploaded print files grid */}
-            {printFiles.length > 0 && (
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
-                {printFiles.map((f, idx) => {
-                  const isPdf = f.file_type === 'application/pdf'
-                  return (
-                    <div key={f.id} className="group relative rounded-lg overflow-hidden border border-gray-200 bg-gray-50 aspect-square">
-                      {isPdf ? (
-                        <button
-                          onClick={() => window.open(f.file_url, '_blank')}
-                          className="w-full h-full flex flex-col items-center justify-center gap-1 hover:bg-gray-100 transition-colors"
-                        >
-                          <FileText className="h-8 w-8 text-red-400" />
-                          <p className="text-[10px] text-gray-500 px-1 truncate w-full text-center">{f.name}</p>
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => setPrintLightboxIdx(printImageFiles.findIndex(x => x.id === f.id))}
-                          className="w-full h-full focus:outline-none"
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={f.file_url} alt={f.name} className="w-full h-full object-cover" />
-                        </button>
-                      )}
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-end justify-between p-1.5 opacity-0 group-hover:opacity-100">
-                        {!isPdf && <span className="text-[10px] text-white truncate max-w-[55%]">{f.name}</span>}
-                        <span />
-                        <div className="flex items-center gap-1 shrink-0">
-                          {/* Same-origin proxy so the file keeps its original name */}
-                          <a
-                            href={`/api/download-file?id=${f.id}`}
-                            onClick={e => e.stopPropagation()}
-                            className="h-5 w-5 rounded-full bg-white flex items-center justify-center"
-                            title={`Download ${f.name}`}
-                          >
-                            <Download className="h-3 w-3 text-gray-700" />
-                          </a>
-                          <button
-                            onClick={e => { e.stopPropagation(); deleteFile(f) }}
-                            className="h-5 w-5 rounded-full bg-red-500 flex items-center justify-center"
-                          >
-                            <X className="h-3 w-3 text-white" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-
-            {printFiles.length === 0 && !printUploading && (
-              <p className="text-xs text-gray-400 text-center">No print files uploaded yet.</p>
-            )}
-          </CardContent>
-        </Card>
-      )}
-      {printLightboxIdx !== null && (
-        <ImageLightbox
-          images={printLightboxImages}
-          index={printLightboxIdx}
-          onClose={() => setPrintLightboxIdx(null)}
-          onNavigate={setPrintLightboxIdx}
-        />
       )}
 
       {/* Locked notice for team member before image approval */}
@@ -2654,6 +2574,206 @@ export function DesignTab({ product, profile, data, samplingData, salesData, fil
           )}
         </CardContent>
       </Card>}
+
+      {/* ── Print Files Upload ── */}
+      {(isAssignedToMe || isHead) && canEditFields && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardTitle className="text-base">Print Files</CardTitle>
+            <div className="flex items-center gap-2">
+              {printUploading && printProgress && (
+                <span className="text-xs text-blue-600 flex items-center gap-1.5">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  {printProgress.done}/{printProgress.total} uploading…
+                </span>
+              )}
+              <label className="cursor-pointer">
+                <input
+                  ref={printFileRef}
+                  type="file"
+                  accept="image/*,application/pdf"
+                  multiple
+                  className="hidden"
+                  disabled={printUploading}
+                  onChange={e => handlePrintUpload(Array.from(e.target.files || []))}
+                />
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border ${printUploading ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 cursor-pointer'}`}>
+                  <Upload className="h-3 w-3" />
+                  Upload Files
+                </span>
+              </label>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+
+            {/* Uploaded print files grid */}
+            {printFiles.length > 0 && (
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+                {printFiles.map((f, idx) => {
+                  const isPdf = f.file_type === 'application/pdf'
+                  return (
+                    <div key={f.id} className="group relative rounded-lg overflow-hidden border border-gray-200 bg-gray-50 aspect-square">
+                      {isPdf ? (
+                        <button
+                          onClick={() => window.open(f.file_url, '_blank')}
+                          className="w-full h-full flex flex-col items-center justify-center gap-1 hover:bg-gray-100 transition-colors"
+                        >
+                          <FileText className="h-8 w-8 text-red-400" />
+                          <p className="text-[10px] text-gray-500 px-1 truncate w-full text-center">{f.name}</p>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setPrintLightboxIdx(printImageFiles.findIndex(x => x.id === f.id))}
+                          className="w-full h-full focus:outline-none"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={f.file_url} alt={f.name} className="w-full h-full object-cover" />
+                        </button>
+                      )}
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-end justify-between p-1.5 opacity-0 group-hover:opacity-100">
+                        {!isPdf && <span className="text-[10px] text-white truncate max-w-[55%]">{f.name}</span>}
+                        <span />
+                        <div className="flex items-center gap-1 shrink-0">
+                          {/* Same-origin proxy so the file keeps its original name */}
+                          <a
+                            href={`/api/download-file?id=${f.id}`}
+                            onClick={e => e.stopPropagation()}
+                            className="h-5 w-5 rounded-full bg-white flex items-center justify-center"
+                            title={`Download ${f.name}`}
+                          >
+                            <Download className="h-3 w-3 text-gray-700" />
+                          </a>
+                          <button
+                            onClick={e => { e.stopPropagation(); deleteFile(f) }}
+                            className="h-5 w-5 rounded-full bg-red-500 flex items-center justify-center"
+                          >
+                            <X className="h-3 w-3 text-white" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {printFiles.length === 0 && !printUploading && (
+              <p className="text-xs text-gray-400 text-center">No print files uploaded yet.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+      {printLightboxIdx !== null && (
+        <ImageLightbox
+          images={printLightboxImages}
+          index={printLightboxIdx}
+          onClose={() => setPrintLightboxIdx(null)}
+          onNavigate={setPrintLightboxIdx}
+        />
+      )}
+
+      {/* ── Sampling Gate ─────────────────────────────────────────────────── */}
+      {(isAssignedToMe || isHead) && !data?.is_locked && !data?.is_completed && (
+        <Card className={cn(
+          'border-2',
+          samplingApproved  ? 'border-green-300 bg-green-50'  :
+          samplingRejected  ? 'border-red-300 bg-red-50'      :
+          samplingSent      ? 'border-yellow-200 bg-yellow-50' :
+          hasAnyApproved    ? 'border-violet-200 bg-violet-50' :
+          'border-gray-200 bg-gray-50',
+        )}>
+          <CardContent className="pt-4 pb-4">
+            {/* Not sent yet */}
+            {samplingStatus === 'not_started' && (
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">Send for Sampling</p>
+                  {!hasAnyApproved ? (
+                    <p className="text-xs text-gray-400 mt-0.5">Illustrations must be approved by the design head first.</p>
+                  ) : !hasTechPack ? (
+                    <p className="text-xs text-orange-600 mt-0.5">Upload the tech pack above before sending for sampling.</p>
+                  ) : (
+                    <p className="text-xs text-violet-700 mt-0.5">
+                      {designFiles.filter(f => f.review_status === 'approved').length} illustration(s) approved &amp; tech pack ready — click to send.
+                    </p>
+                  )}
+                </div>
+                {hasAnyApproved && hasTechPack && (
+                  <Button
+                    size="sm"
+                    onClick={sendForSampling}
+                    disabled={sendingSampling}
+                    className="bg-violet-600 hover:bg-violet-700 shrink-0"
+                  >
+                    {sendingSampling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    Send for Sampling
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {/* Sent — waiting for sampling team */}
+            {samplingSent && (
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <Clock className="h-5 w-5 text-yellow-600 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-yellow-900">Sent to Sampling Team</p>
+                    <p className="text-xs text-yellow-700 mt-0.5">
+                      The sampling team is creating physical samples. If you have uploaded a new variant, you can send it too.
+                    </p>
+                  </div>
+                </div>
+                {hasAnyApproved && hasTechPack && (isAssignedToMe || isHead) && (
+                  <Button
+                    size="sm"
+                    onClick={sendForSampling}
+                    disabled={sendingSampling}
+                    variant="outline"
+                    className="border-yellow-400 text-yellow-800 hover:bg-yellow-50 shrink-0"
+                  >
+                    {sendingSampling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    Send Another Variant
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {/* Approved — design can be marked complete */}
+            {samplingApproved && (
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-green-800">Sample Approved</p>
+                  <p className="text-xs text-green-700 mt-0.5">
+                    Physical sample passed. You can now mark design as complete — product will advance directly to Merchandising.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Rejected — needs revision */}
+            {samplingRejected && (
+              <div className="flex items-start gap-3">
+                <XCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-red-800">Sample Rejected</p>
+                  {samplingData?.designer_feedback && (
+                    <p className="text-xs text-red-700 mt-0.5 italic">&ldquo;{samplingData.designer_feedback}&rdquo;</p>
+                  )}
+                  <p className="text-xs text-red-600 mt-1">Review the feedback, update the design if needed, and send for sampling again.</p>
+                  {(isAssignedToMe || isHead) && (
+                    <Button size="sm" onClick={sendForSampling} disabled={sendingSampling} className="mt-2 bg-red-600 hover:bg-red-700 h-7 text-xs">
+                      {sendingSampling ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                      Resend for Sampling
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
 
       <ConfirmDialog

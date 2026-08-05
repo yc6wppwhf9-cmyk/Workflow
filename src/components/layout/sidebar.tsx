@@ -182,7 +182,9 @@ export function Sidebar({ profile }: SidebarProps) {
           </>
         )}
 
-        {['management'].includes(profile.role) && (
+        {/* Admin is allowed into this page by the route itself but had no way to
+            reach it — the only entry point was this link, and it was management-only. */}
+        {['management', 'admin'].includes(profile.role) && (
           <>{navLink('/illustration-review', 'Illustration Review', Eye)}</>
         )}
 

@@ -296,6 +296,53 @@ export function parseTechPackAllVariants(rows: string[][]): TechPackVariant[] {
   }))
 }
 
+// How many tech pack fields this variant actually carries. Used to tell a real
+// parse from one that matched nothing.
+export function countFilledFields(v: TechPackVariant): number {
+  const keys: (keyof TechPackFields)[] = [
+    'designerName', 'styleName', 'farma', 'seasonYear', 'fabric', 'lining', 'airMesh',
+    'zipper', 'puller', 'patta9mm', 'patta075', 'patta1', 'patta2', 'laderLock',
+    'branding', 'screenPrint', 'digitalPrint', 'bartech', 'reSamplingBy', 'remarks',
+    'addOn1', 'addOn2', 'addOn3', 'designerSign',
+  ]
+  let n = 0
+  for (const k of keys) if (String(v[k] ?? '').trim()) n++
+  if (v.colourSkus?.length) n++
+  return n
+}
+
+export interface SheetCandidate { name: string; rows: string[][] }
+
+export interface TechPackParseResult {
+  variants: TechPackVariant[]
+  /** Name of the sheet the variants came from — '' when nothing matched. */
+  sheetName: string
+  /** Total non-empty tech pack fields found. 0 means the layout wasn't recognised. */
+  filledCount: number
+  /** Every sheet that was tried, for reporting a failure back to the user. */
+  sheetsTried: string[]
+}
+
+// Parse a whole workbook and return the best sheet's variants.
+//
+// The caller used to hand us wb.SheetNames[0] only, so a workbook that led with a
+// cover or index tab parsed to nothing at all — and the upload still reported
+// success. Scoring every sheet and taking the richest one removes that failure
+// mode, and filledCount lets the caller refuse to save an empty parse.
+export function parseTechPackWorkbook(sheets: SheetCandidate[]): TechPackParseResult {
+  const sheetsTried = sheets.map(s => s.name)
+  let best: TechPackParseResult = { variants: [], sheetName: '', filledCount: 0, sheetsTried }
+
+  for (const sheet of sheets) {
+    const variants = parseTechPackAllVariants(sheet.rows)
+    const filledCount = variants.reduce((n, v) => n + countFilledFields(v), 0)
+    if (filledCount > best.filledCount) {
+      best = { variants, sheetName: sheet.name, filledCount, sheetsTried }
+    }
+  }
+  return best
+}
+
 export function parseTechPackRows(rows: string[][]): TechPackFields {
   // Season year: look for YYYY-YYYY pattern in first 3 rows
   let seasonYear = ''

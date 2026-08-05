@@ -14,7 +14,14 @@ export default async function IllustrationReviewPage() {
 
   // design_head reviews designer (role='design') uploads
   // management reviews design_head uploads
-  const uploaderRole = profile.role === 'management' ? 'design_head' : 'design'
+  //
+  // 'admin' is in both lists because an admin can stand in for either side. Matching
+  // a single role meant an illustration uploaded by an admin belonged to neither
+  // bucket and was filtered out of EVERY queue — the Design tab still reported
+  // "Submitted — awaiting management approval", but no reviewer could ever see it.
+  const uploaderRoles = profile.role === 'management'
+    ? ['design_head', 'admin']
+    : ['design', 'admin']
 
   // Fetch all pending design illustrations uploaded by the target role
   const { data: pendingFiles } = await supabase
@@ -34,7 +41,8 @@ export default async function IllustrationReviewPage() {
   // Filter by uploader role (Supabase doesn't support deep filter on joined column)
   const filtered = (pendingFiles ?? []).filter(f => {
     const uploader = Array.isArray(f.uploader) ? f.uploader[0] : f.uploader
-    return (uploader as { role?: string } | null)?.role === uploaderRole
+    const role = (uploader as { role?: string } | null)?.role
+    return !!role && uploaderRoles.includes(role)
   })
 
   // Group by product

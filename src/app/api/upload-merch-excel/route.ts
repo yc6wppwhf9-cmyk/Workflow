@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { matchConsumptionToBom } from '@/lib/parse-cutting-sheet'
 import { isPlaceholderVariant } from '@/lib/types'
+import { canAutoRename } from '@/lib/product-naming'
 
 // This route receives pre-parsed JSON from the browser.
 // The browser handles: Excel parsing, image extraction, Supabase Storage uploads.
@@ -164,13 +165,29 @@ export async function POST(req: NextRequest) {
     fields_updated.push('colour_variants')
   }
 
-  // Always update product name + display_name from Excel (every upload)
+  // Adopt the Excel's product name ONLY while nothing has deliberately named this
+  // product. This used to run on every upload, so a name assigned at the Costing &
+  // Naming gate was silently clobbered the next time merch re-uploaded a sheet.
+  // A product carrying a product_range has been named on purpose — leave it alone.
   if (extracted_product_name) {
-    updates.push(
+    const { data: current } = await adminSupabase
+      .from('products').select('name, display_name, product_range').eq('id', product_id).single()
+
+    const nameUpdate: Record<string, unknown> = { updated_by: user.id }
+    if (current && canAutoRename(current)) {
+      nameUpdate.name = extracted_product_name
+      fields_updated.push('product_name')
+    }
+    // display_name is the cosmetic short-name alias — fill it when blank, but
+    // never overwrite one somebody chose.
+    if (current && !String(current.display_name ?? '').trim()) {
+      nameUpdate.display_name = extracted_product_name
+      fields_updated.push('display_name')
+    }
+    if (Object.keys(nameUpdate).length > 1) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (supabase as any).from('products').update({ name: extracted_product_name, display_name: extracted_product_name, updated_by: user.id }).eq('id', product_id)
-    )
-    fields_updated.push('product_name')
+      updates.push((adminSupabase as any).from('products').update(nameUpdate).eq('id', product_id))
+    }
   }
 
   // Pre-populate BOM tab (attribute upload only)

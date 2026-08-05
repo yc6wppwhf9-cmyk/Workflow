@@ -87,10 +87,14 @@ export interface Product {
   brand: Brand | null
   description: string | null
   family_name: string | null
-  /** Legacy. Naam Karan set a range and auto-numbered the name from it; it now
-   *  sets the product name directly, so nothing writes this any more. Kept
-   *  because existing rows still carry a value. */
+  /** The collection this product belongs to, e.g. ROCK, CUPCAKE, NEW YORK.
+   *  Stored normalised (upper-case). Doubles as the "deliberately named" flag:
+   *  the tech pack and merch importers refuse to rename a product that has one.
+   *  See canAutoRename in @/lib/product-naming. */
   product_range: string | null
+  /** This product's number within product_range — the NNN in "ROCK 001".
+   *  Unique per range (enforced by index, see migration_rangewise_naming.sql). */
+  range_seq: number | null
   md_costing_approved: boolean
   workflow_stage: WorkflowStage
   is_locked: boolean

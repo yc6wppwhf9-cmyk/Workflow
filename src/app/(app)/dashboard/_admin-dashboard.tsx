@@ -33,8 +33,7 @@ export async function AdminDashboard({ profile, filter, page }: { profile: Profi
 
   const [
     { count: totalProducts },
-    { count: liveProducts },
-    { count: inProgressProducts },
+    { count: completedProducts },
     { data: recentProducts },
     { data: recentLogs },
     { data: managementProducts, count: activeCount },
@@ -50,8 +49,12 @@ export async function AdminDashboard({ profile, filter, page }: { profile: Profi
     { data: rawUnlockRequests },
   ] = await Promise.all([
     supabase.from('products').select('*', { count: 'exact', head: true }),
-    supabase.from('products').select('*', { count: 'exact', head: true }).eq('workflow_stage', 'product_live'),
-    supabase.from('products').select('*', { count: 'exact', head: true }).neq('workflow_stage', 'product_live'),
+    // A product is finished when Marketing signs off — the pipeline ends there.
+    // This used to count workflow_stage = 'product_live', a stage nothing
+    // reaches any more, so the card sat at zero however much work was completed.
+    supabase.from('products')
+      .select('id, marketing_data!inner(is_completed)', { count: 'exact', head: true })
+      .eq('marketing_data.is_completed', true),
     supabase.from('products').select('id, name, sku, workflow_stage, created_at, bom_data(fg_inv_code)').order('created_at', { ascending: false }).limit(6),
     supabase.from('activity_logs').select('*, user:profiles(full_name), product:products(name, sku)').order('created_at', { ascending: false }).limit(8),
     supabase.from('products')
@@ -86,6 +89,8 @@ export async function AdminDashboard({ profile, filter, page }: { profile: Profi
   ])
 
   const total    = totalProducts || 0
+  // Derived rather than queried, so the two cards always add up to the total.
+  const inProgressProducts = Math.max(0, total - (completedProducts || 0))
   const deptDone = (designComplete || 0) + (samplingComplete || 0) + (merchComplete || 0) + (bomComplete || 0) + (marketingComplete || 0) + (salesComplete || 0)
   const deptTotal = total * 6
   const deptRate  = deptTotal > 0 ? Math.round((deptDone / deptTotal) * 100) : 0
@@ -170,8 +175,8 @@ export async function AdminDashboard({ profile, filter, page }: { profile: Profi
       <div className="p-4 sm:p-6 space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard label="Total Products" value={total}                    icon={Package}      color="bg-blue-50 [&>svg]:text-blue-600" />
-          <KpiCard label="Live Products"  value={liveProducts || 0}        icon={CheckCircle2} color="bg-green-50 [&>svg]:text-green-600" />
-          <KpiCard label="In Progress"    value={inProgressProducts || 0}  sub="Active pipeline" icon={Clock} color="bg-amber-50 [&>svg]:text-amber-500" />
+          <KpiCard label="Completed"      value={completedProducts || 0}   sub="Marketing signed off" icon={CheckCircle2} color="bg-green-50 [&>svg]:text-green-600" />
+          <KpiCard label="In Progress"    value={inProgressProducts}       sub="Active pipeline" icon={Clock} color="bg-amber-50 [&>svg]:text-amber-500" />
           {pendingSampleApproval > 0 && (
             <KpiCard label="Sample Approval" value={pendingSampleApproval} sub="awaiting approval" icon={CheckCircle2} color="bg-cyan-50 [&>svg]:text-cyan-600" href="?f=sample-approval" active={filter === 'sample-approval'} />
           )}

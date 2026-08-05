@@ -114,6 +114,40 @@ export function BomTab({ product, profile, data, merchandisingData, bomUsers = [
     }
   }
 
+  // ── Rangewise naming ──────────────────────────────────────────────
+  // The name is derived from a range plus its number in that range (ROCK 001).
+  // The range defaults to the family the product was created under, so in the
+  // normal case this is one click.
+  const [rangeInput, setRangeInput] = useState(product.product_range || product.family_name || '')
+  const [assignedRange, setAssignedRange] = useState<string | null>(product.product_range ?? null)
+  const [rangeSeq, setRangeSeq] = useState<number | null>(product.range_seq ?? null)
+  const [assigningRange, setAssigningRange] = useState(false)
+
+  async function assignRangeName() {
+    const range = rangeInput.trim()
+    if (!range) return
+    setAssigningRange(true)
+    try {
+      const res = await fetch('/api/assign-range-name', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: product.id, range }),
+      })
+      const json = await res.json() as { ok?: boolean; error?: string; name?: string; range?: string; seq?: number; unchanged?: boolean }
+      if (!res.ok || !json.ok) throw new Error(json.error || 'Failed')
+      setProductName(json.name!)
+      setNameInput(json.name!)
+      setAssignedRange(json.range ?? range)
+      setRangeSeq(json.seq ?? null)
+      toast.success(json.unchanged ? `Already named "${json.name}"` : `Named "${json.name}"`)
+      router.refresh()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not assign the name')
+    } finally {
+      setAssigningRange(false)
+    }
+  }
+
   async function toggleMdApproved() {
     const next = !mdApproved
     setMdApproved(next)
@@ -446,32 +480,70 @@ export function BomTab({ product, profile, data, merchandisingData, bomUsers = [
           </CardHeader>
           <CardContent className="space-y-5">
 
-            {/* Naam Karan — the product's own name, typed in full */}
+            {/* Naam Karan — range + auto-numbered sequence */}
             <div className="space-y-2">
               <Label className="text-xs">Product Name (Naam Karan)</Label>
               <div className="flex items-end gap-3 flex-wrap">
-                <Input
-                  placeholder="e.g. CUPCAKE 032"
-                  value={nameInput}
-                  onChange={e => setNameInput(e.target.value)}
-                  disabled={!isRoleAllowed || namingSaving}
-                  className="h-8 text-sm w-64"
-                />
+                <div className="space-y-1">
+                  <span className="block text-[11px] text-gray-500">Range</span>
+                  <Input
+                    placeholder="e.g. CUPCAKE"
+                    value={rangeInput}
+                    onChange={e => setRangeInput(e.target.value)}
+                    disabled={!isRoleAllowed || assigningRange}
+                    className="h-8 text-sm w-48 uppercase"
+                  />
+                </div>
                 {isRoleAllowed && (
                   <Button
                     size="sm"
-                    onClick={saveName}
-                    disabled={namingSaving || !nameInput.trim() || nameInput.trim() === productName}
+                    onClick={assignRangeName}
+                    disabled={assigningRange || !rangeInput.trim()}
+                    className="bg-pink-600 hover:bg-pink-700"
                   >
-                    {namingSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Tag className="h-4 w-4" />}
-                    Save Name
+                    {assigningRange ? <Loader2 className="h-4 w-4 animate-spin" /> : <Tag className="h-4 w-4" />}
+                    Assign Name
                   </Button>
                 )}
               </div>
               <p className="text-xs text-gray-500">
                 Current name:{' '}
                 <span className="font-semibold text-gray-800">{productName}</span>
+                {assignedRange && rangeSeq != null && (
+                  <span className="ml-2 text-gray-400">· range {assignedRange}, no. {rangeSeq}</span>
+                )}
               </p>
+              <p className="text-[11px] text-gray-400">
+                The number is allocated automatically — the next free one in that range.
+                Once assigned, tech pack and merchandising uploads can no longer rename this product.
+              </p>
+
+              {/* Manual override, for names that don't follow the range convention */}
+              <details className="pt-1">
+                <summary className="text-[11px] text-gray-400 cursor-pointer hover:text-gray-600">
+                  Set a custom name instead
+                </summary>
+                <div className="flex items-end gap-3 flex-wrap mt-2">
+                  <Input
+                    placeholder="e.g. CUPCAKE 032"
+                    value={nameInput}
+                    onChange={e => setNameInput(e.target.value)}
+                    disabled={!isRoleAllowed || namingSaving}
+                    className="h-8 text-sm w-64"
+                  />
+                  {isRoleAllowed && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={saveName}
+                      disabled={namingSaving || !nameInput.trim() || nameInput.trim() === productName}
+                    >
+                      {namingSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Tag className="h-4 w-4" />}
+                      Save Name
+                    </Button>
+                  )}
+                </div>
+              </details>
             </div>
 
             {/* MD costing approval checkbox */}

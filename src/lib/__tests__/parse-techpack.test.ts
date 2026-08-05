@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { parseTechPackRows } from '../parse-techpack'
+import {
+  parseTechPackRows,
+  parseTechPackAllVariants,
+  parseTechPackWorkbook,
+  countFilledFields,
+} from '../parse-techpack'
 
 function makeRows(pairs: [string, string][], prefix: string[][] = []): string[][] {
   return [...prefix, ...pairs.map(([label, val]) => [label, val, '', ''])]
@@ -82,5 +87,60 @@ describe('parseTechPackRows', () => {
     ]
     const result = parseTechPackRows(rows)
     expect(result.seasonYear).toBe('2023-2024')
+  })
+})
+
+describe('countFilledFields', () => {
+  it('counts only non-empty fields', () => {
+    const variants = parseTechPackWorkbook([
+      { name: 'Sheet1', rows: makeRows([['FABRIC', '600D'], ['ZIPPER', 'YKK 5']]) },
+    ]).variants
+    expect(countFilledFields(variants[0])).toBe(2)
+  })
+
+  it('is zero for a variant parsed from unrecognised rows', () => {
+    const [variant] = parseTechPackAllVariants([['Some', 'unrelated'], ['content', 'here']])
+    expect(countFilledFields(variant)).toBe(0)
+  })
+})
+
+describe('parseTechPackWorkbook', () => {
+  it('picks the sheet that carries the tech pack, not just the first one', () => {
+    const result = parseTechPackWorkbook([
+      { name: 'Cover', rows: [['High Spirit'], ['Index']] },
+      { name: 'Notes', rows: [['internal notes only']] },
+      { name: 'TECHPACK', rows: makeRows([
+        ['DESIGNER NAME', 'Riya Sharma'],
+        ['FABRIC', '600D Polyester'],
+        ['ZIPPER', 'YKK 5'],
+      ]) },
+    ])
+    expect(result.sheetName).toBe('TECHPACK')
+    expect(result.filledCount).toBe(3)
+    expect(result.variants[0].fabric).toBe('600D Polyester')
+  })
+
+  it('reports filledCount 0 when no sheet matches, so the caller can refuse to save', () => {
+    const result = parseTechPackWorkbook([
+      { name: 'Cover', rows: [['High Spirit'], ['Index']] },
+      { name: 'Notes', rows: [['nothing', 'useful']] },
+    ])
+    expect(result.filledCount).toBe(0)
+    expect(result.sheetName).toBe('')
+  })
+
+  it('lists every sheet it tried, for the failure message', () => {
+    const result = parseTechPackWorkbook([
+      { name: 'Cover', rows: [['x']] },
+      { name: 'Data', rows: [['y']] },
+    ])
+    expect(result.sheetsTried).toEqual(['Cover', 'Data'])
+  })
+
+  it('handles a workbook with no sheets', () => {
+    const result = parseTechPackWorkbook([])
+    expect(result.filledCount).toBe(0)
+    expect(result.variants).toEqual([])
+    expect(result.sheetsTried).toEqual([])
   })
 })
